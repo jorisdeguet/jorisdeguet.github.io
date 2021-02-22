@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Arbre minimal</title>
+    <style>
+    body { margin: 0; text-align: center; font-family: sans-serif; }
+    canvas { border: 1px solid #ccc; position: relative; }
+    a, a:visited { color: #09f }
+    </style>
+</head>
+<body>
+
+<h2>Relier des endroits avec le moins de fils possible</h2>
+<h4>l'arbre couvrant minimal ou Minimum Spanning Tree</h4>
+<canvas id="canvas"></canvas>
+
+<script src="https://unpkg.com/delaunator@4.0.1/delaunator.js"></script>
+<script>
+       
+var points = [];
+var delaunay = Delaunator.from(points);
+var edges = [];
+var tree = [];
+console.timeEnd('delaunay');
+
+var canvas = document.getElementById('canvas');
+var ctx = canvas.getContext('2d');
+
+var minX = 0;
+var minY = 0;
+var maxX = 200;
+var maxY = 200;
+
+var padding = 5;
+var w = 1000;
+var h = 700; //(w - 2 * padding) * (maxY - minY) / (maxX - minX) + 2 * padding;
+
+canvas.style.width = w + 'px';
+canvas.style.height = h + 'px';
+
+canvas.width = w;
+canvas.height = h;
+
+if (window.devicePixelRatio >= 2) {
+    canvas.width = w * 2;
+    canvas.height = h * 2;
+    ctx.scale(2, 2);
+}
+
+var ratio = (w - 2 * padding) / Math.max(maxX - minX, maxY - minY);
+
+ctx.lineJoin = 'round';
+ctx.lineCap = 'round';
+
+var updated = true;
+
+canvas.onmousemove = function (e) {
+    
+}
+    
+    
+canvas.onclick = function(e) {
+    points.push([
+        (e.layerX - padding) / ratio + minX,
+        (e.layerY - padding) / ratio + minY
+    ]);
+    // console.time('delaunay');
+    delaunay = Delaunator.from(points);
+    // console.timeEnd('delaunay');
+    updated = true;
+    var triangles = delaunay.triangles;
+    edges = [];
+    for (var i = 0; i < triangles.length; i += 3) {
+        var p0 = triangles[i];
+        var p1 = triangles[i + 1];
+        var p2 = triangles[i + 2];
+        addEdge(edges, p0, p1);
+        addEdge(edges, p1, p2);
+        addEdge(edges, p2, p0);
+    }
+    // console.log(edges);
+    tree = computeTree(edges);
+}
+
+function containsBoth(tree, edge){
+    var containsA = false;
+    var containsB = false;
+    var a = edge[0];
+    var b = edge[1];
+    for (var i = 0; i < tree.length; i++) {
+        var aa = tree[i][0];
+        var bb = tree[i][1];
+        if (samePoint(aa, a)  ||  samePoint(bb, a)) {
+            containsA = true;
+            if (containsB) return true;
+        }
+        if (samePoint(aa, b)  ||  samePoint(bb, b)) {
+            containsB = true;
+            if (containsA) return true;
+        }
+    }
+    if (containsA && containsB) {
+        console.log(edge[0] , ' cycle ' ,edge[1]);
+    }
+    return containsA && containsB;
+}
+
+// Kruskal algorithm
+function computeTree(edges) {
+    var trees = [];
+    edges.sort(function(a, b){return a[2] - b[2]});
+    console.log('edges ', edges.length);
+    console.log(edges);
+    for (var i = 0; i < edges.length; i++) {
+        var edge = edges[i];
+        // see if it creates a cycle in an existing tree
+        
+        var createsCycle = false;
+        for (var t = 0 ; t < trees.length ; t++) {
+            if (containsBoth(trees[t], edge)) {
+                createsCycle = true;
+            }
+        }
+        if (createsCycle) {
+            //console.log('creating cycle');
+            continue;
+        }
+        // else it is either on one tree or it joins 2 trees or it is a new one
+        var treeIndex0 = findTreeFor(trees, edge[0]);
+        var treeIndex1 = findTreeFor(trees, edge[1]);
+        if (treeIndex0 < 0 && treeIndex1 < 0) {
+            trees.push([edge]);
+        } else if (treeIndex0 < 0 && treeIndex1 >= 0 ){
+            // it belongs to index1 tree
+            trees[treeIndex1].push(edge);
+        } else if (treeIndex1 < 0 && treeIndex0 >= 0 ) {
+            // it belongs to index0
+            trees[treeIndex0].push(edge);
+        } else {
+            // merge two trees
+            trees[treeIndex1] = trees[treeIndex1].concat(trees[treeIndex0]);
+            trees[treeIndex1].push(edge);
+            trees.splice(treeIndex0,1);
+        }
+        console.log('---------------------------------------------------');
+        console.log(trees);
+    }
+    console.log('number of trees ', trees.length);
+    if (trees.length > 0) {
+        console.log('length of the tree ', trees[0].length);
+    }
+    var result = [];
+    for (var t = 0 ; t < trees.length ; t++) {
+        result = result.concat(trees[t]);
+    }
+    tree = result;
+    return result;
+}
+
+function findTreeFor(trees, point) {
+    for (var i = 0 ; i < trees.length ; i++) {
+        for (var e = 0; e < trees[i].length ; e++)
+        {
+            var edge = trees[i][e];
+            if (samePoint(point, edge[0])) { return i; }
+            if (samePoint(point, edge[1])) { return i; }
+        }
+    }
+    return -1;
+}
+
+/// Joris Stuff
+
+function samePoint(p1, p2) {
+    if (p1 == p2) return true;
+    return false;
+}
+
+function addEdge(edges, p1, p2) {
+    // find if already there
+    for (var i = 0; i < edges.length; i++) {
+        var e = edges[i];
+        if (samePoint(e[0] , p1) && samePoint(e[1],p2)) return;
+        if (samePoint(e[0] , p2) && samePoint(e[1],p1)) return;
+    }
+    edges.push([p1,p2,sqdist(p1, p2)]);
+}
+
+function sqdist(p1,p2) {
+    var dx = points[p1][0] - points[p2][0];
+    var dy = points[p1][1] - points[p2][1];
+    return dx*dx + dy*dy;
+}
+
+
+function xx(point) {
+    return padding + ratio * (point[0] -minX);
+} 
+    
+function yy(point) {
+    return padding + ratio * (point[1] -minY);
+} 
+
+function getX(i) {
+    return xx(points[i]);
+}
+function getY(i) {
+    return yy(points[i]);
+}
+
+function frame() {
+    requestAnimationFrame(frame);
+    draw();
+}
+frame();
+
+function draw() {
+    if (!updated) return;
+    updated = false;
+    ctx.clearRect(0, 0, w, h);
+    var triangles = delaunay.triangles;
+    ctx.beginPath();
+    for (var i = 0; i < triangles.length; i += 3) {
+        var p0 = triangles[i];
+        var p1 = triangles[i + 1];
+        var p2 = triangles[i + 2];
+        ctx.moveTo(getX(p0), getY(p0));
+        ctx.lineTo(getX(p1), getY(p1));
+        ctx.lineTo(getX(p2), getY(p2));
+        ctx.closePath();
+    }
+    ctx.strokeStyle = 'rgba(60,60,10,1.0)';
+    ctx.lineWidth = 0.2;
+    ctx.stroke();
+    
+    if (tree) {
+        ctx.beginPath();
+    for (var i = 0; i < tree.length; i++) {
+        var edge = tree[i];
+        var p0 = edge[0]
+        var p1 = edge[1];
+        ctx.moveTo(getX(p0), getY(p0));
+        ctx.lineTo(getX(p1), getY(p1));
+        ctx.closePath();
+    }
+    ctx.strokeStyle = 'rgba(155,2,0,1)';
+    ctx.lineWidth = 3.0;
+    ctx.stroke();
+    }
+    
+}
+
+</script>
+
+</body>
+</html>
+
