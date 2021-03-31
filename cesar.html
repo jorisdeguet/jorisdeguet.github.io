@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Code de César</title>
+
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.2/css/bulma.min.css" integrity="sha512-byErQdWdTqREz6DLAA9pCnLbdoGGhXfU6gm1c8bkf7F51JVmUBlayGe2A31VpXWQP+eiJ3ilTAZHCR3vmMyybA==" crossorigin="anonymous" />
+
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css" integrity="sha512-HK5fgLBL+xu6dm/Ii3z4xhlSUyZgTT9tuc/hSrtw6uzJOvgRr2a9jyxxT1ely+B+xFAmJKVSTbpM/CuL7qxO8w==" crossorigin="anonymous" />
+
+        <style>
+            body { margin: 0; text-align: center; font-family: sans-serif; }
+            canvas { border: 1px solid #ccc; position: relative; }
+            a, a:visited { color: #09f }
+            .courierr{
+                letter-spacing: 10px;
+                font-family: courier;
+                text-align: left;
+                font-size: 1.3em;
+                font-weight: bolder;
+            }
+            .courierr2{
+                font-family: courier;
+                text-align: left;
+                font-weight: bolder;
+            }
+        </style>
+        <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+    </head>
+    <body>
+        <div class="tile is-ancestor" id="cesar">
+            <div class="tile is-vertical is-4">
+                <div class="tile">
+                    <div class="tile is-parent is-vertical">
+                        
+                        <article class="tile is-child notification is-dark">
+                            <p class="title">Le code de César</p>
+                            <p class="subtitle">ou chiffre par décalage</p>
+                            <div>
+                                Chaque lettre est remplacé par une lettre qui se trouve plus loin dans l'alphabet.
+                            </div>
+                        </article>
+                        
+                        <article class="tile is-child notification is-info">
+                            <h2 class="has-text-light">Alphabet</h2>
+                            <br>
+                            <textarea class="textarea" placeholder="alphabet" rows="4" v-model="alphabet"></textarea>
+                            <h2 class="has-text-light">Décalage</h2>
+                            <button class="button is-light" v-on:click="decr">-</button>
+                            <div class="select">
+                                <select v-model="decalage" v-on:change="encrypter">
+                                    <option v-for="dec in decalages()" v-bind:value="dec">
+                                        {{ dec }}
+                                    </option>
+                                </select>
+                            </div>
+                            <button class="button is-light" v-on:click="incr">+</button>
+                        </article>
+                        
+                    </div>
+                </div>
+               
+            </div>
+            <div class="tile is-parent is-vertical is-8">
+                
+                <article class="tile is-child notification is-dark">
+                        <p class="subtitle">Zone encryption</p>
+                        <div class="content">
+                            <input v-model="clair" class="input is-info" type="text" placeholder="texte à chiffrer" v-on:input="encrypter">
+                            <div v-if="clair.length > 0">
+                                <br>
+                                <h2 class="has-text-light">↓ message original ↓</h2>
+                                <div class="courierr">
+                                    {{clair}}
+                                </div>
+                                <div class="courierr">
+                                    {{chiffre}}
+                                </div>
+                                <h2 class="has-text-light">↑ message encrypté ↑</h2>
+                            </div>
+                            
+                        </div>
+                    </article>
+                <article class="tile is-child notification is-dark">
+                    <div class="content">
+                        <p class="subtitle">Table d'encryption</p>
+                        <div class="content">
+                            <div class="columns is-multiline">
+                                <div class="column is-2 p-0" v-for="l in alphabetEnListe()" >
+                                    <span class="tag is-light courierr2" >
+                                  {{ s(l) }} →
+                                    {{s(chiffrerLettre(l, decalage, alphabet))}} 
+                                        <span v-if="compteLettre(l, clair) > 0">
+                                            &nbsp;x{{ compteLettre(l, clair) }}
+                                        </span>
+                                    
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </div>
+        
+        <script>
+
+            Vue.component('alphabet-compteur', {
+                template: '<li>This is a todo</li>'
+            })
+            
+            function compteur(lettre, texte) {
+                var lettres = texte.split('');
+                var resultat = 0;
+                for (var i = 0 ; i < lettres.length; i++){
+                    var l = lettres[i];  
+                    if (l === lettre) resultat++; 
+                }
+                return resultat;
+            }
+
+            var vue = new Vue({
+                el: '#cesar',
+                data: {
+                    clair:'',
+                    chiffre:'',
+                    decalage:1,
+                    alphabet: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz0123456789.,',
+                },
+                methods: {
+                    encrypter: function () {
+                        var lettres = this.clair.split('');
+                        var resultat = '';
+                        for (var i = 0 ; i < lettres.length ; i++) {
+                            var lettre = lettres[i];
+                            var lettreEncode = 
+                                this.chiffrerLettre(lettre, this.decalage, this.alphabet);
+                            resultat += lettreEncode;
+                        }
+                        this.chiffre = resultat;
+                    },
+                    chiffrerLettre: function(lettre, decalage, alphabet) {
+                        var index = alphabet.indexOf(lettre);
+                        if (index < 0) {
+                            alert('lettre absente de alphabet');
+                        } else {
+                            var indexDecale = (index + decalage) % alphabet.length;
+                            return alphabet[indexDecale];
+                        }
+                    },
+                    s: function(lettre) {
+                        if (lettre === ' ') {
+                            return '⎵'
+                        } else {
+                            return lettre;
+                        }
+                    },
+                    compteLettre: compteur,
+                    // TODO seulement les lettres avec un compte non nul
+                    alphabetEnListe: function () {
+                        var result = this.alphabet.split('');
+//                        var result = [];
+//                        for (var i = 0 ; i < candidats.length ; i++){
+//                            var l = candidats[i];
+//                            if (compteur(l, this.clair)) {
+//                                result.push(l);    
+//                            }
+//                        }
+                        if (this.clair.length == 0) {
+                            return result;
+                        } else {
+                            // on tri par occurence
+                            var clairTexte = this.clair;
+                            function compare(a, b) {
+                                var compteA = compteur(a, clairTexte);
+                                var compteB = compteur(b, clairTexte);
+                              if (compteA < compteB)
+                                return 1;
+                              if (compteA > compteB)
+                                return -1;
+                              return 0;
+                            }
+
+                            return result.sort(compare);
+                        }
+                        
+                    },
+                    decalages: function () {
+                        return [...Array(this.alphabet.length+1).keys()];
+                    },
+                    incr: function() {
+                        this.decalage = this.decalage+1 % this.alphabet.length;
+                        this.encrypter();
+                    },
+                    decr: function() {
+                        this.decalage = this.decalage-1 % this.alphabet.length;
+                        this.encrypter();
+                    }
+                    
+                }
+            })
+
+
+
+        </script>
+
+    </body>
+</html>
+
