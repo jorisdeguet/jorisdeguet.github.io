@@ -83,9 +83,34 @@
                 <article class="tile is-child notification is-dark">
                     <div class="content">
                         <p class="subtitle">Table d'encryption</p>
-                        <div class="content">
-                            <div class="columns is-multiline">
-                                <div class="column is-2 p-0" v-for="l in alphabetEnListe()" >
+                        <div class="columns">
+                            <div class="column">
+                                <svg height="300" width="300">
+                          <circle cx="150" cy="150" r="145" stroke="black" stroke-width="3" fill="white" />
+                        <circle cx="150" cy="150" r="120" stroke="black" stroke-width="1" fill="white" />            
+                            <g fill="black" v-for="(l, index) in alphabetEnListe()"
+                               v-bind:transform="'rotate(' + index*360/alphabet.length +' 150 150)'"
+                                >
+                                <text x="8" y="150"
+                                    font-family="Verdana"
+                                    font-size="13">
+                                {{ s(l) }}→
+                              </text>
+                            </g>
+                            <g fill="black" v-for="(l, index) in alphabetEnListe()"
+                               v-bind:transform="'rotate(' + (index - decalage)*360/alphabet.length +' 150 150)'"
+                                >
+                                <text x="32" y="149"
+                                    font-family="monospace"
+                                    font-size="11">
+                                {{ s(l) }}
+                              </text>
+                            </g>
+                        </svg>
+                            </div>
+                            <div class="column">
+<!--                                <div class="columns is-multiline">-->
+                                <div class=" is-2 p-0" v-for="(l, index) in alphabetEnListeTriee()" >
                                     <span class="tag is-light courierr2" >
                                   {{ s(l) }} →
                                     {{s(chiffrerLettre(l, decalage, alphabet))}} 
@@ -94,7 +119,8 @@
                                         </span>
                                     
                                     </span>
-                                </div>
+<!--                                </div>-->
+                            </div>
                             </div>
                         </div>
                     </div>
@@ -106,18 +132,13 @@
           <div class="column"></div>
           <div class="column"></div>
           <div class="column notification is-danger">Fait avec 
-                <a href="https://vuejs.org">Vue.js</a> par Joris Deguet en 2021
+                <a href="https://vuejs.org">Vue.js</a> et SVG par Joris Deguet en 2021
             </div>
           <div class="column"></div>
           <div class="column"></div>
         </div>
         
         <script>
-
-            Vue.component('alphabet-compteur', {
-                template: '<li>This is a todo</li>'
-            })
-            
             function compteur(lettre, texte) {
                 var lettres = texte.split('');
                 var resultat = 0;
@@ -133,7 +154,7 @@
                 data: {
                     clair:'',
                     chiffre:'',
-                    decalage:1,
+                    decalage:3,
                     alphabet: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz0123456789.,',
                 },
                 methods: {
@@ -168,13 +189,19 @@
                     // TODO seulement les lettres avec un compte non nul
                     alphabetEnListe: function () {
                         var result = this.alphabet.split('');
-//                        var result = [];
-//                        for (var i = 0 ; i < candidats.length ; i++){
-//                            var l = candidats[i];
-//                            if (compteur(l, this.clair)) {
-//                                result.push(l);    
-//                            }
-//                        }
+//                        
+                        return result;
+                        
+                    },
+                    alphabetEnListeTriee: function () {
+                        var candidats = this.alphabetEnListe();
+                        var result = [];
+                        for (var i = 0 ; i < candidats.length ; i++){
+                            var l = candidats[i];
+                            if (compteur(l, this.clair) > 0) {
+                                result.push(l);    
+                            }
+                        }
                         if (this.clair.length == 0) {
                             return result;
                         } else {
@@ -189,13 +216,12 @@
                                 return -1;
                               return 0;
                             }
-
                             return result.sort(compare);
                         }
                         
                     },
                     decalages: function () {
-                        return [...Array(this.alphabet.length+1).keys()];
+                        return [...Array(this.alphabet.length).keys()];
                     },
                     incr: function() {
                         this.decalage = this.decalage+1 % this.alphabet.length;
