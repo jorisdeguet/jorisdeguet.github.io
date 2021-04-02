@@ -23,6 +23,9 @@
                 text-align: left;
                 font-weight: bolder;
             }
+            .bordure {
+                border: 3px solid grey;
+            }
         </style>
         <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
     </head>
@@ -32,7 +35,7 @@
                 <div class="tile">
                     <div class="tile is-parent is-vertical">
                         
-                        <article class="tile is-child notification is-dark">
+                        <article class="tile is-child notification is-light bordure">
                             <p class="title">Le code de César</p>
                             <p class="subtitle">ou chiffre par décalage</p>
                             <div>
@@ -80,7 +83,7 @@
                             
                         </div>
                     </article>
-                <article class="tile is-child notification is-dark">
+                <article class="tile is-child notification is-light bordure">
                     <div class="content">
                         <p class="subtitle">Table d'encryption</p>
                         <div class="columns">
@@ -92,17 +95,17 @@
                                v-bind:transform="'rotate(' + index*360/alphabet.length +' 150 150)'"
                                 >
                                 <text x="8" y="150"
-                                    font-family="Verdana"
-                                    font-size="13">
+                                    font-family="monospace"
+                                    font-size="15">
                                 {{ s(l) }}→
                               </text>
                             </g>
                             <g fill="black" v-for="(l, index) in alphabetEnListe()"
                                v-bind:transform="'rotate(' + (index - decalage)*360/alphabet.length +' 150 150)'"
                                 >
-                                <text x="32" y="149"
+                                <text x="35" y="149"
                                     font-family="monospace"
-                                    font-size="11">
+                                    font-size="13">
                                 {{ s(l) }}
                               </text>
                             </g>
