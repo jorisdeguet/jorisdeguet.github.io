@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Force brute sur transposition</title>
+
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.2/css/bulma.min.css" integrity="sha512-byErQdWdTqREz6DLAA9pCnLbdoGGhXfU6gm1c8bkf7F51JVmUBlayGe2A31VpXWQP+eiJ3ilTAZHCR3vmMyybA==" crossorigin="anonymous" />
+
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css" integrity="sha512-HK5fgLBL+xu6dm/Ii3z4xhlSUyZgTT9tuc/hSrtw6uzJOvgRr2a9jyxxT1ely+B+xFAmJKVSTbpM/CuL7qxO8w==" crossorigin="anonymous" />
+
+        <style>
+            body { margin: 0; text-align: center; font-family: sans-serif; }
+            canvas { border: 1px solid #ccc; position: relative; }
+            a, a:visited { color: #09f }
+            .courierr{
+                letter-spacing: 10px;
+                font-family: courier;
+                text-align: left;
+                font-size: 1.3em;
+                font-weight: bolder;
+            }
+            .courierr2{
+                font-family: courier;
+                text-align: left;
+                font-weight: bolder;
+            }
+            .bordure {
+                border: 3px solid grey;
+            }
+        </style>
+        
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.21.1/axios.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+    </head>
+    <body>
+        <div class="tile is-ancestor m-5" id="cesar">
+            <div class="tile is-vertical is-4">
+                <div class="tile">
+                    <div class="tile is-parent is-vertical">
+
+                        <article class="tile is-child notification is-light bordure">
+                            <p class="title">Décodage transposition</p>
+                            <p class="subtitle">force brute</p>
+                            <div>
+                                Essayer toutes les associations qui permettent de trouver des 
+                                mots en français
+                            </div>
+                        </article>
+
+                        <article class="tile is-child notification is-info">
+                            <h2 class="has-text-light">Alphabet</h2>
+                            <br>
+                            <textarea class="textarea" placeholder="alphabet" rows="4" v-model="alphabet"></textarea>
+                        </article>
+
+                    </div>
+                </div>
+
+            </div>
+            <div class="tile is-parent is-vertical is-8">
+
+                <article class="tile is-child notification is-dark">
+                    <p class="subtitle">Zone attaque</p>
+                    <div class="content">
+                        <input v-model="chiffre" class="input is-info" type="text" placeholder="texte à chiffrer" v-on:input="encrypter">
+                        <div v-if="chiffre.length > 0">
+                            <br>
+                            <h2 class="has-text-light">↓ message encrypté ↓</h2>
+                            <div class="courierr">
+                                {{chiffre}}
+                            </div>
+                            <div class="courierr">
+                                {{clair}}
+                            </div>
+                            <h2 class="has-text-light">↑ message décrypté ↑</h2>
+                            <p>{{alphabetSource()}}</p>
+                        </div>
+
+                    </div>
+                </article>
+                <article class="tile is-child notification is-light bordure">
+                    <div class="content">
+                        <p class="subtitle">Table d'encryption</p>
+                        <div class=" is-2 p-0" >
+                            Utilise la liste de mots en français de pallier.org
+                            {{ dico.length }}
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </div>
+
+        <div class="columns m-5">
+            <div class="column"></div>
+            <div class="column notification is-danger">Fait avec 
+                <a href="https://vuejs.org">Vue.js</a> et SVG par Joris Deguet en 2021
+            </div>
+            <div class="column"></div>
+        </div>
+
+        <script>
+            var vue = new Vue({
+                el: '#cesar',
+                data: {
+                    clair:'',
+                    dico:[],
+                    table:[],
+                    stop:false,
+                    chiffre:'nyna',   //'nynaeygiepqedyiaiewyggfkye',
+                    chiffreAlphabet:'',
+                    alphabet: 'abcdefghijklmnopqrstuvwxyz ',
+                },
+                mounted () {
+                    axios
+                        .get('dico.fr.txt')
+                        .then(response => {
+                            this.dico = response.data;
+                            this.decodeRec([], this.alphabetSource(), this.alphabetEnListe());
+                        }
+                    )
+                    
+                },
+                methods: {
+                    encrypter: function () {
+                        var lettres = this.clair.split('');
+                        var resultat = '';
+                        for (var i = 0 ; i < lettres.length ; i++) {
+                            var lettre = lettres[i];
+                            var lettreEncode = 
+                                this.chiffrerLettre(lettre, this.decalage, this.alphabet);
+                            resultat += lettreEncode;
+                        }
+                        this.chiffre = resultat;
+                    },
+                    decrypter: function (source, table) {
+                        var lettres = source.split('');
+                        var resultat = '';
+                        for (var i = 0 ; i < lettres.length ; i++) {
+                            var lettre = lettres[i];
+                            var lettreDecryptee = 
+                                this.decrypterLettre(lettre, table);
+                            resultat += lettreDecryptee;
+                        }
+                        return resultat;
+                    },
+                    existe: function(mot) {
+                        return this.dico.indexOf(mot) > -1;
+                    },
+                    decodeRec: function(tableCourante, alphabetSourceRestant, alphabetRestant) {
+                        if (this.stop) return;
+                        if (alphabetSourceRestant.length == 0) {
+                            // TODO essayer de décoder 
+                            // split en mots
+                            // chercher mots dans le dico
+                            // compte les lettres qui fonts des mots ok
+                            // si plus que 50%, ajoutez solutions potentielles
+                            //console.log(tableCourante);
+                            var decrypteee = this.decrypter(this.chiffre, tableCourante);
+                            if (this.existe(decrypteee)) {
+                                console.log("BINGO " + decrypteee);
+                            } else {
+                                //console.log(decrypteee);
+                            }
+                            
+                            //this.table = tableCourante;
+                            return;
+                        } else {
+                            // prendre la première lettre de source qui reste
+                            // essayer toutes les lettres qui restent dans l'alphabet
+                            var lsource = alphabetSourceRestant[0];
+                            for (var i = 0 ; i < alphabetRestant.length ; i++) {
+                                var l = alphabetRestant[i];
+                                // copy table courante dans nouvelle
+                                nouvTable = tableCourante.slice();
+                                nouvTable.push(lsource)
+                                nouvTable.push(l);
+                                // tout doit être une copie
+                                var nouvSourceAlphabet = alphabetSourceRestant.slice(1);
+                                var nouvAlphabet = [...alphabetRestant.slice(0, i) , ...alphabetRestant.slice(i+1)]
+                                this.decodeRec(nouvTable, nouvSourceAlphabet, nouvAlphabet);
+                            }
+                        } 
+                    },
+                    chiffrerLettre: function(lettre, decalage, alphabet) {
+                        var index = alphabet.indexOf(lettre);
+                        if (index < 0) {
+                            alert('lettre absente de alphabet');
+                        } else {
+                            var indexDecale = (index + decalage+alphabet.length) % alphabet.length;
+                            console.log(this.decalage+' '+indexDecale);
+                            return alphabet[indexDecale];
+                        }
+                    },
+                    decrypterLettre: function(lettre, table) {
+                        for (var i = 0 ; i < table.length ; i++) {
+                            if (table[i] == lettre) return table[i+1];
+                        }  
+                        return '?';
+                    },
+                    s: function(lettre) {
+                        if (lettre === ' ') {
+                            return '⎵'
+                        } else {
+                            return lettre;
+                        }
+                    },
+                    alphabetEnListe: function () {                     
+                        return this.alphabet.split('');
+                    },
+                    alphabetSource: function () {
+                        var candidats = this.chiffre.split('');
+                        var result = [];
+                        for (var i = 0 ; i < candidats.length ; i++){
+                            var l = candidats[i];
+                            if (!result.includes(l)) {
+                                result.push(l);    
+                            }
+                        }
+                        return result;
+                    },
+                    decalages: function () {
+                        return [...Array(this.alphabet.length).keys()];
+                    },
+                    incr: function() {
+                        this.decalage = this.decalage+1 % this.alphabet.length;
+                        this.encrypter();
+                    },
+                    decr: function() {
+                        this.decalage = (this.decalage-1+this.alphabet.length) % this.alphabet.length;
+                        this.encrypter();
+                    }
+
+                }
+            })
+
+
+
+        </script>
+
+    </body>
+</html>
+
