@@ -177,7 +177,8 @@
                         if (index < 0) {
                             alert('lettre absente de alphabet');
                         } else {
-                            var indexDecale = (index + decalage) % alphabet.length;
+                            var indexDecale = (index + decalage+alphabet.length) % alphabet.length;
+                            console.log(this.decalage+' '+indexDecale);
                             return alphabet[indexDecale];
                         }
                     },
@@ -231,7 +232,7 @@
                         this.encrypter();
                     },
                     decr: function() {
-                        this.decalage = this.decalage-1 % this.alphabet.length;
+                        this.decalage = (this.decalage-1+this.alphabet.length) % this.alphabet.length;
                         this.encrypter();
                     }
                     
