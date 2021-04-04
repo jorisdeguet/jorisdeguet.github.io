@@ -155,6 +155,7 @@
                             // si plus que 50%, ajoutez solutions potentielles
                             //console.log(tableCourante);
                             var decrypteee = this.decrypter(this.chiffre, tableCourante);
+                            var mots = decrypteee.split(' ');
                             if (this.existe(decrypteee)) {
                                 console.log("BINGO " + decrypteee);
                             } else {
