@@ -72,7 +72,7 @@
                                 {{clair}}
                             </div>
                             <h2 class="has-text-light">↑ message décrypté ↑</h2>
-                            <p>{{alphabetSource()}}</p>
+                            <button v-on:click="go()">Go</button>
                         </div>
 
                     </div>
@@ -82,7 +82,7 @@
                         <p class="subtitle">Table d'encryption</p>
                         <div class=" is-2 p-0" >
                             Utilise la liste de mots en français de pallier.org
-                            {{ dico.length }}
+                            {{ dictionnaire.length }} mots
                         </div>
                     </div>
                 </article>
@@ -102,10 +102,11 @@
                 el: '#cesar',
                 data: {
                     clair:'',
-                    dico:[],
+                    dico:'',
+                    dictionnaire:[],
                     table:[],
                     stop:false,
-                    chiffre:'nyna',   //'nynaeygiepqedyiaiewyggfkye',
+                    chiffre: 'nynaeygie', //'nynaeygiepqedyiaiewyggfkye',
                     chiffreAlphabet:'',
                     alphabet: 'abcdefghijklmnopqrstuvwxyz ',
                 },
@@ -114,7 +115,10 @@
                         .get('dico.fr.txt')
                         .then(response => {
                             this.dico = response.data;
-                            this.decodeRec([], this.alphabetSource(), this.alphabetEnListe());
+                            //console.log(this.dico);
+                            this.dictionnaire = response.data.split('\r\n');
+                            //console.log(this.dictionnaire);
+                            //this.decodeRec([], this.alphabetSource(), this.alphabetEnListe());
                         }
                     )
                     
@@ -131,6 +135,9 @@
                         }
                         this.chiffre = resultat;
                     },
+                    go: function() {
+                        this.decodeRec([], this.alphabetSource(), this.alphabetEnListe());
+                    },
                     decrypter: function (source, table) {
                         var lettres = source.split('');
                         var resultat = '';
@@ -143,7 +150,11 @@
                         return resultat;
                     },
                     existe: function(mot) {
-                        return this.dico.indexOf(mot) > -1;
+                        var res = this.dictionnaire.includes(mot)
+//                        if (res) {
+//                            console.log("Existe ::  " + mot);
+//                        }
+                        return this.dictionnaire.includes(mot);
                     },
                     decodeRec: function(tableCourante, alphabetSourceRestant, alphabetRestant) {
                         if (this.stop) return;
@@ -156,12 +167,18 @@
                             //console.log(tableCourante);
                             var decrypteee = this.decrypter(this.chiffre, tableCourante);
                             var mots = decrypteee.split(' ');
-                            if (this.existe(decrypteee)) {
-                                console.log("BINGO " + decrypteee);
-                            } else {
-                                //console.log(decrypteee);
+                            console.log(decrypteee);
+                            //console.log(tableCourante.toString());
+                            var score = 0;
+                            for (var i = 0 ; i < mots.length ; i++) {
+                                if (mots[i].length > 0 && this.existe(mots[i])) {
+                                    console.log("BINGO " + mots[i]);
+                                    score += mots[i].length;
+                                } 
                             }
-                            
+                            if (score > decrypteee.length) {
+                                console.log("BINGO  " + decrypteee + " " + score);
+                            }
                             //this.table = tableCourante;
                             return;
                         } else {
@@ -170,6 +187,9 @@
                             var lsource = alphabetSourceRestant[0];
                             for (var i = 0 ; i < alphabetRestant.length ; i++) {
                                 var l = alphabetRestant[i];
+                                if (tableCourante.length == 0) {
+                                    console.log('exploring ' + l);
+                                }
                                 // copy table courante dans nouvelle
                                 nouvTable = tableCourante.slice();
                                 nouvTable.push(lsource)
@@ -217,19 +237,7 @@
                             }
                         }
                         return result;
-                    },
-                    decalages: function () {
-                        return [...Array(this.alphabet.length).keys()];
-                    },
-                    incr: function() {
-                        this.decalage = this.decalage+1 % this.alphabet.length;
-                        this.encrypter();
-                    },
-                    decr: function() {
-                        this.decalage = (this.decalage-1+this.alphabet.length) % this.alphabet.length;
-                        this.encrypter();
                     }
-
                 }
             })
 
