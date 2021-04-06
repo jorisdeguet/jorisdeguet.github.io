@@ -41,17 +41,33 @@
                             <p class="title">Décodage transposition</p>
                             <p class="subtitle">force brute</p>
                             <div>
-                                Essayer toutes les associations qui permettent de trouver des 
-                                mots en français
+                                Outils pour casser un code par transposition.
                             </div>
+                            <br>
+                            <h1>Alphabet</h1>
+                            <textarea class="textarea" placeholder="alphabet" rows="2" v-model="alphabet"></textarea>
                         </article>
 
                         <article class="tile is-child notification is-info">
-                            <h2 class="has-text-light">Alphabet</h2>
-                            <br>
-                            <textarea class="textarea" placeholder="alphabet" rows="4" v-model="alphabet"></textarea>
+                            <div>
+                                <button v-on:click="reset()">Remise à 0</button>
+                                <div v-for="l in alphabetSource()">
+                                {{s(l)}} ({{compte(l, chiffre)}}) = 
+                                <span v-if="fixe(l)">
+                                    {{ s(decrypterLettre(l,table))}}
+                                </span>
+                                <select v-on:change="fixer(l, $event)" v-if="!fixe(l)">
+                                    <option> </option>
+                                    <option v-for="letter in alphabetEnListe()" 
+                                            v-bind:value="letter">
+                                        {{ s(letter) }}
+                                    </option>
+                                </select>
+                            
+                                </div>
+                            </div>
                         </article>
-
+                        
                     </div>
                 </div>
 
@@ -61,7 +77,7 @@
                 <article class="tile is-child notification is-dark">
                     <p class="subtitle">Zone attaque</p>
                     <div class="content">
-                        <input v-model="chiffre" class="input is-info" type="text" placeholder="texte à chiffrer" v-on:input="encrypter">
+                        <input v-model="chiffre" class="input is-info" type="text" placeholder="texte à chiffrer" v-on:input="maj()">
                         <div v-if="chiffre.length > 0">
                             <br>
                             <h2 class="has-text-light">↓ message encrypté ↓</h2>
@@ -71,18 +87,30 @@
                             <div class="courierr">
                                 {{clair}}
                             </div>
+                            
+                            
                             <h2 class="has-text-light">↑ message décrypté ↑</h2>
                             <button v-on:click="go()">Go</button>
+                            <button v-on:click="gotables()">Calcul des tables</button>
                         </div>
 
                     </div>
                 </article>
                 <article class="tile is-child notification is-light bordure">
                     <div class="content">
-                        <p class="subtitle">Table d'encryption</p>
+                        <p class="subtitle">Outils</p>
+                        {{ table }}
+                        MOTS EN FRANÇAIS:
+                        <div v-for="(mot, index) in clair.split(' ')">
+                            {{ index+1 }} : {{ mot }} 
+                            <span v-for="match in correspondances(mot)">
+                                {{match}}
+                            </span>
+                        </div>
                         <div class=" is-2 p-0" >
                             Utilise la liste de mots en français de pallier.org
                             {{ dictionnaire.length }} mots
+                            {{ tables.length }} mots
                         </div>
                     </div>
                 </article>
@@ -98,6 +126,17 @@
         </div>
 
         <script>
+            function compteur(lettre, texte) {
+                var lettres = texte.split('');
+                var resultat = 0;
+                for (var i = 0 ; i < lettres.length; i++){
+                    var l = lettres[i];  
+                    if (l === lettre) resultat++; 
+                }
+                return resultat;
+            }
+
+            
             var vue = new Vue({
                 el: '#cesar',
                 data: {
@@ -105,8 +144,9 @@
                     dico:'',
                     dictionnaire:[],
                     table:[],
+                    tables: [],
                     stop:false,
-                    chiffre: 'nynaeygie', //'nynaeygiepqedyiaiewyggfkye',
+                    chiffre: 'nynaeygiepqedyiaiewyggfkye',
                     chiffreAlphabet:'',
                     alphabet: 'abcdefghijklmnopqrstuvwxyz ',
                 },
@@ -117,6 +157,11 @@
                             this.dico = response.data;
                             //console.log(this.dico);
                             this.dictionnaire = response.data.split('\r\n');
+                            this.maj();
+                        
+                            var regexp = new RegExp('\r\nmessag.\r\n');
+                            var find = regexp.exec(this.dico);
+                            console.log(find);
                             //console.log(this.dictionnaire);
                             //this.decodeRec([], this.alphabetSource(), this.alphabetEnListe());
                         }
@@ -124,19 +169,35 @@
                     
                 },
                 methods: {
-                    encrypter: function () {
-                        var lettres = this.clair.split('');
+                    compte: compteur,
+                    maj: function () {
+                        var lettres = this.chiffre.split('');
                         var resultat = '';
                         for (var i = 0 ; i < lettres.length ; i++) {
                             var lettre = lettres[i];
-                            var lettreEncode = 
-                                this.chiffrerLettre(lettre, this.decalage, this.alphabet);
-                            resultat += lettreEncode;
+                            var res = 
+                                this.decrypterLettre(lettre, this.table);
+                            resultat += res;
                         }
-                        this.chiffre = resultat;
+                        this.clair = resultat;
                     },
-                    go: function() {
-                        this.decodeRec([], this.alphabetSource(), this.alphabetEnListe());
+                    reset: function() {
+                        this.table = [];
+                        this.maj();
+                    },
+                    fixer: function(l, event) {
+                        this.table.push(l);
+                        this.table.push(event.target.value);
+                        this.maj();
+                    },
+                    fixe: function(l) {
+                        return this.decrypterLettre(l, this.table) !== '.';
+                    },
+                    decrypterLettre: function(lettre, table) {
+                        for (var i = 0 ; i < table.length ; i = i+2) {
+                            if (table[i] == lettre) return table[i+1];
+                        }  
+                        return '.';
                     },
                     decrypter: function (source, table) {
                         var lettres = source.split('');
@@ -149,22 +210,99 @@
                         }
                         return resultat;
                     },
+                    
+                    
+                    go: function() {
+                        this.decodeRec([], this.alphabetSource(), this.alphabetEnListe());
+                    },
+                    gotables: function() {
+                        this.tables = 
+                        this.calculerTables([], this.alphabetSource(), this.alphabetEnListe());
+                    },
+                    
+                    
+                    
+                    // match pour un patron de mot
+                    correspondances: function(schema){
+                        console.log('correspondances ' +schema);
+                        var result = [];
+                        if (schema.length == 0) return;
+                        if (schema.length == this.chiffre.length) return;
+                        console.log('correspondances 1 ' + schema);
+                        if (this.justeDesPoints(schema)) return;
+                        console.log('correspondances pour '+ schema);
+                        
+                        var regexp = new RegExp('\r\n'+schema+'\r\n', 'g');
+                        var matches = this.dico.matchAll(regexp);
+                        for (var match of matches) {
+                            console.log(match);
+                            result.push(match[0]);
+                        }
+                        return result;
+                    },
+                    // bases 
+                    s: function(lettre) {
+                        if (lettre === ' ') {
+                            return '⎵'
+                        } else {
+                            return lettre;
+                        }
+                    },
+                    justeDesPoints: function(chaine) {
+                      for(var i = 0 ; i < chaine.length; i++) {
+                          if (chaine[i] != '.') return false;
+                      }  
+                      return true;    
+                    },
+                    alphabetEnListe: function () {                     
+                        return this.alphabet.split('');
+                    },
+                    alphabetSource: function () {
+                        var candidats = this.chiffre.split('');
+                        var result = [];
+                        for (var i = 0 ; i < candidats.length ; i++){
+                            var l = candidats[i];
+                            if (!result.includes(l)) {
+                                result.push(l);    
+                            }
+                        }
+                        return result;
+                    },
+                    
+                    
+                    // décodage en force brute
                     existe: function(mot) {
                         var res = this.dictionnaire.includes(mot)
-//                        if (res) {
-//                            console.log("Existe ::  " + mot);
-//                        }
                         return this.dictionnaire.includes(mot);
+                    },
+                    calculerTables: function (tableCourante, alphabetSourceRestant, alphabetRestant) {
+                        if (this.stop) return;
+                        if (alphabetSourceRestant.length == 0) {
+                            return [tableCourante];
+                        } else {
+                            var resultat = [];
+                            var lsource = alphabetSourceRestant[0];
+                            for (var i = 0 ; i < alphabetRestant.length ; i++) {
+                                var l = alphabetRestant[i];
+                                if (tableCourante.length == 0) {
+                                    console.log('exploring ' + l);
+                                }
+                                // copy table courante dans nouvelle
+                                nouvTable = tableCourante.slice();
+                                nouvTable.push(lsource)
+                                nouvTable.push(l);
+                                // tout doit être une copie
+                                var nouvSourceAlphabet = alphabetSourceRestant.slice(1);
+                                var nouvAlphabet = [...alphabetRestant.slice(0, i) , ...alphabetRestant.slice(i+1)]
+                                var rec = this.calculerTables(nouvTable, nouvSourceAlphabet, nouvAlphabet);
+                                resultat.concat(rec);
+                            }
+                            return resultat;
+                        } 
                     },
                     decodeRec: function(tableCourante, alphabetSourceRestant, alphabetRestant) {
                         if (this.stop) return;
                         if (alphabetSourceRestant.length == 0) {
-                            // TODO essayer de décoder 
-                            // split en mots
-                            // chercher mots dans le dico
-                            // compte les lettres qui fonts des mots ok
-                            // si plus que 50%, ajoutez solutions potentielles
-                            //console.log(tableCourante);
                             var decrypteee = this.decrypter(this.chiffre, tableCourante);
                             var mots = decrypteee.split(' ');
                             console.log(decrypteee);
@@ -176,7 +314,7 @@
                                     score += mots[i].length;
                                 } 
                             }
-                            if (score > decrypteee.length) {
+                            if (score == decrypteee.length) {
                                 console.log("BINGO  " + decrypteee + " " + score);
                             }
                             //this.table = tableCourante;
@@ -201,43 +339,6 @@
                             }
                         } 
                     },
-                    chiffrerLettre: function(lettre, decalage, alphabet) {
-                        var index = alphabet.indexOf(lettre);
-                        if (index < 0) {
-                            alert('lettre absente de alphabet');
-                        } else {
-                            var indexDecale = (index + decalage+alphabet.length) % alphabet.length;
-                            console.log(this.decalage+' '+indexDecale);
-                            return alphabet[indexDecale];
-                        }
-                    },
-                    decrypterLettre: function(lettre, table) {
-                        for (var i = 0 ; i < table.length ; i++) {
-                            if (table[i] == lettre) return table[i+1];
-                        }  
-                        return '?';
-                    },
-                    s: function(lettre) {
-                        if (lettre === ' ') {
-                            return '⎵'
-                        } else {
-                            return lettre;
-                        }
-                    },
-                    alphabetEnListe: function () {                     
-                        return this.alphabet.split('');
-                    },
-                    alphabetSource: function () {
-                        var candidats = this.chiffre.split('');
-                        var result = [];
-                        for (var i = 0 ; i < candidats.length ; i++){
-                            var l = candidats[i];
-                            if (!result.includes(l)) {
-                                result.push(l);    
-                            }
-                        }
-                        return result;
-                    }
                 }
             })
 
