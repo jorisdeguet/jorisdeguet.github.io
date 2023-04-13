@@ -1,0 +1,36 @@
+execution
+  - execution 1
+    - programmation = humain travaille = reflexion
+    - programme = fichier texte = disque dur
+    - execution = ordinateur travaille, suit les ordres donnés par programmeur
+    - execution = fichier texte, chargé du disque vers mémoire vive
+    - flot d'execution : fichier simple, execute ligne par ligne
+  - execution 2
+    - ordinateur = rapide et stupide
+    - humain = lent et intelligent
+    - bogue = malentendu
+    - exemple de mini-programme sequentiel interessant
+
+type et expression
+  - expression et type 1
+    - calculatrice et type de math, historiquement calcul pour l'armee, calcul pour l'espace
+    - caracteres, chaines de caracteres
+  - expression et type 2
+    - symbole variable et constante
+    - assignation n'est pas une égalité
+
+if for while
+  - while
+    - quel exemple interessant
+  - for
+    - repeter un traitement pour tout plein de trucs ex :
+    - repeter un traitement un certain nombre de fois
+  - if
+
+
+librairies
+  - librairie 1
+    - utiliser une librairie standard / deja installée ex: https://www.tutorialspoint.com/downloading-files-from-web-using-python
+  - librairie 2
+    - installer une librairie dans son environnement 
+    - controler les versions
