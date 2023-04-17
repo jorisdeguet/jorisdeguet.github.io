@@ -16,13 +16,14 @@ flowchart LR
     
         1N6 --> 2N6
  
-    subgraph LR "Mobile"
-      
+    subgraph "Mobile"
+      direction LR
       3N5 --> 4N6
       4N6 --> 5N6
     end
     2N6 --> Mobile
-subgraph LR "Web"
+subgraph  "Web"
+    direction LR
   2W5 --> 3W6
   3W6 --> 4W6
   4W6 --> 5W5
