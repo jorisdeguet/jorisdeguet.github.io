@@ -16,15 +16,16 @@ flowchart LR
     
         1N6 --> 2N6
  
-    subgraph "Mobile"
+    subgraph LR "Mobile"
       
       3N5 --> 4N6
       4N6 --> 5N6
     end
     2N6 --> Mobile
-subgraph "`**Web**`"
+subgraph LR "Web"
   2W5 --> 3W6
   3W6 --> 4W6
   4W6 --> 5W5
 end
+    1N6 --> Web
 ```
