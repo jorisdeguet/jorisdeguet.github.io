@@ -5,6 +5,7 @@ import os
 
 os.system("brew upgrade")                       # executer brew upgrade
 os.system("gem update")                         # executer gem update
+os.system("gem install cocoapods")
 os.system("flutter upgrade")                    # faire la mise à jour de flutter
 os.system("npm update -g")                      # faire la mise à jour de npm
 os.system("pip3 install --upgrade pip")         # faire la mise à jour de pip
