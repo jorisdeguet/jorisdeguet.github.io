@@ -29,12 +29,33 @@ def areIndexConnected(indexA, indexB, gridSize):
         return False
 
 def draw_hexagon(dwg, index,  center_x, center_y, row, col, size, text):
+    path = ""
+    roundPercent = 0.21
     points = []
     for i in range(6):
         angle_rad = math.radians(30 + 60 * i)
         x = center_x + size * math.cos(angle_rad)
         y = center_y + size * math.sin(angle_rad)
         points.append((x, y))
+        #dwg.add(dwg.ellipse(center=(x, y), r=(size * 0.08, size * 0.08), fill='blue'))
+    for i in range(6):
+
+        x1, y1 = points[i]
+        x2, y2 = points[(i + 1) % 6]
+        x3, y3 = points[(i + 2) % 6]
+        # x12, y12 = (1-roundPercent) * x1 + roundPercent * x2, (1-roundPercent) * y1 + roundPercent * y2
+        x21, y21 = roundPercent * x1 + (1-roundPercent) * x2, roundPercent * y1 + (1-roundPercent) * y2
+        x23, y23 = (1-roundPercent) * x2 + roundPercent * x3, (1-roundPercent) * y2 + roundPercent * y3
+        # x32, y32 = roundPercent * x2 + (1-roundPercent) * x3, roundPercent * y2 + (1-roundPercent) * y3
+        if path == "":
+            path += "M " + str(x21) + "," + str(y21)
+        else:
+            path += " L " + str(x21) + "," + str(y21)
+        path += " Q " + str(x2) + "," + str(y2) + " " + str(x23) + "," + str(y23)
+        #dwg.add(dwg.ellipse(center=(x21, y21), r=(size * 0.05, size * 0.05), fill='red'))
+        #dwg.add(dwg.ellipse(center=(x23, y23), r=(size * 0.05, size * 0.05), fill='green'))
+    path += " Z"
+    print("path " + path)
     colors = ["aquamarine", "lightblue", "lightgreen", "tomato"]
     fillColors = random.randrange(0, len(colors))
     fillColor = colors[fillColors]
@@ -42,8 +63,9 @@ def draw_hexagon(dwg, index,  center_x, center_y, row, col, size, text):
         fillColor = "red"
     if areIndexConnected(16, index, 6):
         fillColor = "blue"
-    hexagon = dwg.polygon(points=points, fill=fillColor, stroke='black')
-    dwg.add(hexagon)
+    # hexagon = dwg.polygon(points=points, fill=fillColor, stroke='black')
+    # dwg.add(hexagon)
+    dwg.add(dwg.path(d=path, fill=fillColor, stroke="black", stroke_width=3))
     text_element = dwg.text(text,
                             insert=(center_x - size * 0.6, center_y + size * 0.2),
                             font_family="Arial",
@@ -56,18 +78,18 @@ def draw_hexagon(dwg, index,  center_x, center_y, row, col, size, text):
                             transform="rotate(-30, " + str(center_x) + ", " + str(center_y) + ")" )
     dwg.add(text_element)
 
-def draw_skill_tree(size, skills):
+def draw_skill_tree(size, skills, G):
     gridsize = math.floor(math.sqrt(len(skills)))
     dwg = svgwrite.Drawing(
         filename="skill_tree.svg",
         profile='tiny',
-        size=(str(size * (2*gridsize+ 1) ), str(size * (2*gridsize+1))))
+        size=(str(size * (2*gridsize+ 1) ), str(size * (2*gridsize+1.5))))
     dwg.add(
         dwg.rect(
             insert=(0, 0),
             size=('100%', '100%'),
             rx=None, ry=None,
-            fill='rgb(150,150,150)'))
+            fill='rgb(250,200,200)'))
     print("Grid size " + str(gridsize) )
     for element in skills:
         # print(element)
@@ -76,7 +98,7 @@ def draw_skill_tree(size, skills):
         col = index % gridsize
         x = size * (2 * col + (0 if row % 2 == 0 else 1) + 1)
         y = size *  (0.5 + row * math.sqrt(3) + math.sqrt(3) / 2)
-        draw_hexagon(dwg, index, x, y, row, col,  size, element)
+        draw_hexagon(dwg, index, x, y, row, col,  size, element) 
     dwg.save()
 
 def read_graph_from_yaml(file_path):
@@ -181,7 +203,7 @@ if __name__ == "__main__":
             if score > bestScore or score == 0:
                 bestScore = score
                 print("generation " + str(generation) + "  best score " + str(bestScore))
-                draw_skill_tree(50, individual)
+                draw_skill_tree(50, individual, G)
             #print("individual " + str(individual)[1:10] + "  score " + str(score))
             evaluated[str(individual)] = score
         # Keep the best 10
