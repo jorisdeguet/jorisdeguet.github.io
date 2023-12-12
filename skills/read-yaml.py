@@ -6,18 +6,12 @@ import svgwrite
 
 import yaml
 from dataclasses import dataclass
-
-@dataclass
-class Skill:
-   name: str
-   description: str
+from itertools import permutations
 
 def areIndexConnected(indexA, indexB, gridSize):
     indexA, indexB = (min(indexA, indexB), max(indexA, indexB))
-    # print("areIndexConnected " + str(indexA) + " " + str(indexB))
     rowA, colA = (indexA // gridSize, indexA % gridSize)
     rowB, colB = (indexB // gridSize, indexB % gridSize)
-    # print("rowA " + str(rowA) + " colA " + str(colA) + " rowB " + str(rowB) + " colB " + str(colB))
     diffRow = abs(rowA - rowB)
     diffCol = abs(colA - colB)
     if diffRow == 0:
@@ -100,6 +94,22 @@ def read_deps_from_yaml(file_path):
         data = yaml.safe_load(file)
         return data.get('deps', [])
 
+
+def bestCount(size):
+    tailles = [(2,3), (3, 4), (4, 5), (5, 6), (6, 8), (7, 10), (8, 11), (9, 12)]
+    for (row, col) in tailles:
+        if row*col >= size:
+            return (row, col)
+
+
+def evaluation(individual, G, col):
+    asList = list(individual)
+    score = 0
+    for (a,b) in G.edges:
+        if not areIndexConnected(asList.index(a), asList.index(b), col):
+            score -= 1
+    return score
+
 if __name__ == "__main__":
     file_path = '5N6.yaml'
     skills = read_skills_from_yaml(file_path)
@@ -141,10 +151,51 @@ if __name__ == "__main__":
     print("Sources: " + str(sources))
     parts = list(nx.connected_components(G.to_undirected()))
     print("parts " + str(parts))
-    # print(areIndexConnected(6, 7, 5))
-    # print(areIndexConnected(6, 11, 5))
     strings = []
     for node in skills:
         strings.append(node["name"])
-    draw_skill_tree(50, strings)
+    # chercher 3/4
+    (row, col) = bestCount(len(strings))
+    print("row " + str(row) + " col " + str(col))
+    contentSize = row * col
+    print("contentSize " + str(contentSize))
+    for i in range(0, contentSize - len(strings)):
+        strings.append("___")
+    print(str(len(strings)) + " " + str(strings))
+    perm = permutations(strings)
+
+    population = []
+    # Print the obtained permutations
+    for i in perm:
+        indiv = list(i)
+        random.shuffle(indiv)
+        population.append(indiv)
+        if len(population) == 100:
+            break
+    # generations
+    bestScore = -100
+    for generation in range(1, 400):
+        evaluated = {}
+        for individual in population:
+            score = evaluation(individual, G, col)
+            if score > bestScore or score == 0:
+                bestScore = score
+                print("generation " + str(generation) + "  best score " + str(bestScore))
+                draw_skill_tree(50, individual)
+            #print("individual " + str(individual)[1:10] + "  score " + str(score))
+            evaluated[str(individual)] = score
+        # Keep the best 10
+        population.sort(key=lambda x: evaluated[str(x)], reverse=True)
+        print("average score " + str(sum(evaluated.values())/len(evaluated)))
+        #population = population[:10]
+        # invert two random elements in the first 10
+        for i in range(0, 10):
+            a = random.randrange(0, len(population[i]))
+            b = random.randrange(0, len(population[i]))
+            population[i][a], population[i][b] = population[i][b], population[i][a]
+        # shuffle the last 90
+        for i in range(10, 100):
+            random.shuffle(population[i])
+    print("best score " + str(bestScore))
+    #draw_skill_tree(50, strings)
 
