@@ -1,17 +1,71 @@
 import math
 import random
+from enum import Enum
 
 import networkx as nx
 import svgwrite
-
 import yaml
-from dataclasses import dataclass
 from itertools import permutations
 
-def areIndexConnected(indexA, indexB, gridSize):
+# add a color or black and white setting
+
+class Style:
+    def __init__(self, stroke, stroke_width, inverted=False):
+        self.stroke = stroke
+        self.inverted = inverted
+        self.stroke_width = stroke_width
+        self.stroke_dasharray = 5
+        self.number_of_strokes = 1
+
+def split_string_by_length(text, max_length):
+    words = text.split()
+    segments = []
+    current_segment = ''
+
+    for word in words:
+        if len(current_segment) + len(word) <= max_length:
+            current_segment += ' ' + word if current_segment else word
+        else:
+            segments.append(current_segment)
+            current_segment = word
+
+    if current_segment:  # Append the last segment
+        segments.append(current_segment)
+
+    return segments
+
+
+def styles():
+    styles = []
+    for width in range(1,2,3):
+        for inverted in [True, False]:
+            for dashy in [1, 5, 10]:
+                style = Style( "black", width, inverted)
+                style.stroke_dasharray = dashy
+                style.number_of_strokes = width
+                styles.append(style)
+    return styles
+
+def styleFor(element, parts):
+    toutes =  styles()
+    indexOfPart = find_part_containing(element, parts)
+    return toutes[indexOfPart % len(toutes)]
+
+
+def distance(indexA, indexB, col):
+    if areIndexConnected(indexA, indexB, col):
+        return 0
+    else:
+        indexA, indexB = (min(indexA, indexB), max(indexA, indexB))
+        rowA, colA = (indexA // col, indexA % col)
+        rowB, colB = (indexB // col, indexB % col)
+        diffRow = abs(rowA - rowB)
+        diffCol = abs(colA - colB)
+        return diffRow + diffCol + 1
+def areIndexConnected(indexA, indexB, col):
     indexA, indexB = (min(indexA, indexB), max(indexA, indexB))
-    rowA, colA = (indexA // gridSize, indexA % gridSize)
-    rowB, colB = (indexB // gridSize, indexB % gridSize)
+    rowA, colA = (indexA // col, indexA % col)
+    rowB, colB = (indexB // col, indexB % col)
     diffRow = abs(rowA - rowB)
     diffCol = abs(colA - colB)
     if diffRow == 0:
@@ -28,83 +82,125 @@ def areIndexConnected(indexA, indexB, gridSize):
     else:
         return False
 
-def draw_hexagon(dwg, index,  center_x, center_y, row, col, size, text):
-    path = ""
-    roundPercent = 0.21
-    points = []
-    for i in range(6):
-        angle_rad = math.radians(30 + 60 * i)
-        x = center_x + size * math.cos(angle_rad)
-        y = center_y + size * math.sin(angle_rad)
-        points.append((x, y))
-        #dwg.add(dwg.ellipse(center=(x, y), r=(size * 0.08, size * 0.08), fill='blue'))
-    for i in range(6):
+def draw_hexagon(dwg, center_x, center_y, row, col, size, text, style):
+    if text == "___":
+        return
+    stroke_width = 3
+    number_of_strokes = style.number_of_strokes
+    perimeters = [1.0, 0.95, .9, .85, .8, .75]
+    perimeters = perimeters[0:number_of_strokes]
+    fillColor = "black" if style.inverted else "white"
+    strokeColor = "white" if style.inverted else "black"
+    for perimeter in perimeters:
+        path = ""
+        roundPercent = 0.15
+        points = []
+        for i in range(6):
+            angle_rad = math.radians(30 + 60 * i)
+            x = center_x + size * math.cos(angle_rad) * perimeter
+            y = center_y + size * math.sin(angle_rad) * perimeter
+            points.append((x, y))
+        for i in range(6):
+            x1, y1 = points[i]
+            x2, y2 = points[(i + 1) % 6]
+            x3, y3 = points[(i + 2) % 6]
+            x21, y21 = roundPercent * x1 + (1-roundPercent) * x2, roundPercent * y1 + (1-roundPercent) * y2
+            x23, y23 = (1-roundPercent) * x2 + roundPercent * x3, (1-roundPercent) * y2 + roundPercent * y3
+            if path == "":
+                path += "M " + str(x21) + "," + str(y21)
+            else:
+                path += " L " + str(x21) + "," + str(y21)
+            path += " Q " + str(x2) + "," + str(y2) + " " + str(x23) + "," + str(y23)
+        path += " Z"
+        dwg.add(dwg.path(d=path, fill=fillColor, stroke=strokeColor,
+                         stroke_width=stroke_width/number_of_strokes,
+                         stroke_dasharray=str(style.stroke_dasharray)+","+str(style.stroke_dasharray),
+                         stroke_linecap="round"))
 
-        x1, y1 = points[i]
-        x2, y2 = points[(i + 1) % 6]
-        x3, y3 = points[(i + 2) % 6]
-        # x12, y12 = (1-roundPercent) * x1 + roundPercent * x2, (1-roundPercent) * y1 + roundPercent * y2
-        x21, y21 = roundPercent * x1 + (1-roundPercent) * x2, roundPercent * y1 + (1-roundPercent) * y2
-        x23, y23 = (1-roundPercent) * x2 + roundPercent * x3, (1-roundPercent) * y2 + roundPercent * y3
-        # x32, y32 = roundPercent * x2 + (1-roundPercent) * x3, roundPercent * y2 + (1-roundPercent) * y3
-        if path == "":
-            path += "M " + str(x21) + "," + str(y21)
-        else:
-            path += " L " + str(x21) + "," + str(y21)
-        path += " Q " + str(x2) + "," + str(y2) + " " + str(x23) + "," + str(y23)
-        #dwg.add(dwg.ellipse(center=(x21, y21), r=(size * 0.05, size * 0.05), fill='red'))
-        #dwg.add(dwg.ellipse(center=(x23, y23), r=(size * 0.05, size * 0.05), fill='green'))
-    path += " Z"
-    print("path " + path)
-    colors = ["aquamarine", "lightblue", "lightgreen", "tomato"]
-    fillColors = random.randrange(0, len(colors))
-    fillColor = colors[fillColors]
-    if index == 16:
-        fillColor = "red"
-    if areIndexConnected(16, index, 6):
-        fillColor = "blue"
-    # hexagon = dwg.polygon(points=points, fill=fillColor, stroke='black')
-    # dwg.add(hexagon)
-    dwg.add(dwg.path(d=path, fill=fillColor, stroke="black", stroke_width=3))
-    text_element = dwg.text(text,
-                            insert=(center_x - size * 0.6, center_y + size * 0.2),
-                            font_family="Arial",
-                            font_size=size * 0.1,
-                            transform="rotate(-30, " + str(center_x) + ", " + str(center_y) + ")" )
-    dwg.add(text_element)
-    text_element = dwg.text("row: " + str(row) + " col: " + str(col),
-                            insert=(center_x - size * 0.6, center_y - size * 0.2),
-                            font_size=size * 0.1,
-                            transform="rotate(-30, " + str(center_x) + ", " + str(center_y) + ")" )
-    dwg.add(text_element)
+    lines = split_string_by_length(text, 13)
+    for i, line in enumerate(lines):
+        lineheight = size/4
+        text_element = dwg.text(line,
+                                insert=(center_x, center_y-size/3+lineheight*i),
+                                fill=strokeColor,
+                                font_family="Arial",
+                                font_size=size * 0.17,
+                                text_anchor='middle',
+                                transform="rotate(-30, " + str(center_x) + ", " + str(center_y) + ")")
+        #text_element.add(dwg.tspan(line, dx=[0], dy=[(10*i)] ))
+        dwg.add(text_element)
 
-def draw_skill_tree(size, skills, G):
-    gridsize = math.floor(math.sqrt(len(skills)))
+
+def find_part_containing(element, parts):
+    res = 0
+    for part in parts:
+        if element in part:
+            return res
+        res += 1
+    return res
+
+
+def draw_skill_tree(size, skills, G, rowCount, colCount):
+    # gridsize = math.floor(math.sqrt(len(skills)))
     dwg = svgwrite.Drawing(
         filename="skill_tree.svg",
-        profile='tiny',
-        size=(str(size * (2*gridsize+ 1) ), str(size * (2*gridsize+1.5))))
+        profile='full',
+        size=(str(size * (2*colCount+ 1) ), str(size * (2*rowCount+.5))))
     dwg.add(
         dwg.rect(
             insert=(0, 0),
             size=('100%', '100%'),
             rx=None, ry=None,
-            fill='rgb(250,200,200)'))
-    print("Grid size " + str(gridsize) )
+            fill='rgb(200,200,200)'))
+    parts = list(nx.connected_components(G.to_undirected()))
+    print("parts " + str(parts))
+
     for element in skills:
-        # print(element)
+        # find the part containing the skill named element
         index = skills.index(element)
-        row = index // gridsize
-        col = index % gridsize
+        row = index // colCount
+        col = index % colCount
         x = size * (2 * col + (0 if row % 2 == 0 else 1) + 1)
         y = size *  (0.5 + row * math.sqrt(3) + math.sqrt(3) / 2)
-        draw_hexagon(dwg, index, x, y, row, col,  size, element) 
+        # colors = ["aquamarine", "lightblue", "lightgreen", "tomato"]
+        # fillColors = random.randrange(0, len(colors))
+        # fillColor = colors[fillColors]
+        style = styleFor(element, parts)
+        if index == 11:
+            fillColor = "red"
+        if areIndexConnected(11, index, colCount):
+            fillColor = "blue"
+        draw_hexagon(dwg, x, y, row, col,  size, element, style)
+    # add arrows for dependencies
+    marker = dwg.defs.add(
+        dwg.marker(insert=(1, 1), size=(2, 2), orient='auto', markerUnits='strokeWidth', id='arrowhead'))
+    marker.add(dwg.path(d='M0,0 L0,2 L2,1 z', fill='black'))
+    marker2 = dwg.defs.add(
+        dwg.marker(insert=(1, 1), size=(2, 2), orient='auto', markerUnits='strokeWidth', id='arrowhead2'))
+    marker2.add(dwg.path(d='M0,0 L0,2 L2,1 z', fill='white'))
+    for (a, b) in G.edges:
+        indexA = skills.index(a)
+        indexB = skills.index(b)
+        rowA, colA = (indexA // colCount, indexA % colCount)
+        rowB, colB = (indexB // colCount, indexB % colCount)
+        x1 = xFor(colA, rowA, size)
+        y1 = yFor(rowA, size)
+        x2 = xFor(colB, rowB, size)
+        y2 = yFor(rowB, size)
+        xStart, yStart = (x1 + (x2 - x1)* 2/5, y1 + (y2 - y1) * 2/5)
+        xEnd, yEnd = (x1 + (x2 - x1) * 3/5, y1 + (y2 - y1) * 3/5)
+        # draw an arrow at the third of the line
+        dwg.add(dwg.line(start=(xStart, yStart), end=(xEnd, yEnd), stroke="black", stroke_width=5,
+                         stroke_linecap='round', marker_end=marker.get_funciri()))
+        dwg.add(dwg.line(start=(xStart, yStart), end=(xEnd, yEnd), stroke="white", stroke_width=3,
+                         stroke_linecap='round', marker_end=marker2.get_funciri()))
     dwg.save()
 
-def read_graph_from_yaml(file_path):
-    with open(file_path, 'r') as file:
-        graph_data = yaml.safe_load(file)
-        return graph_data.get('graph', {})
+def yFor(rowA, size):
+    return size * (0.5 + rowA * math.sqrt(3) + math.sqrt(3) / 2)
+
+def xFor(colA, rowA, size):
+    return size * (2 * colA + (0 if rowA % 2 == 0 else 1) + 1)
 
 def read_skills_from_yaml(file_path):
     with open(file_path, 'r') as file:
@@ -116,20 +212,17 @@ def read_deps_from_yaml(file_path):
         data = yaml.safe_load(file)
         return data.get('deps', [])
 
-
 def bestCount(size):
     tailles = [(2,3), (3, 4), (4, 5), (5, 6), (6, 8), (7, 10), (8, 11), (9, 12)]
     for (row, col) in tailles:
         if row*col >= size:
             return (row, col)
 
-
 def evaluation(individual, G, col):
     asList = list(individual)
     score = 0
     for (a,b) in G.edges:
-        if not areIndexConnected(asList.index(a), asList.index(b), col):
-            score -= 1
+        score -= distance(asList.index(a), asList.index(b), col)
     return score
 
 if __name__ == "__main__":
@@ -150,15 +243,6 @@ if __name__ == "__main__":
     for dep in deps:
         print(f"Source: {dep['from']}, target: {dep['to']}")
         G.add_edge(dep['from'], dep['to'])
-
-    # find a skill distribution that fit in a page and allows arrows to be drawn
-    print("size of the skill tree:" + str(len(skills)))
-    squareDim = math.floor(math.sqrt(len(skills))) + 1
-    print("size of the skill size:" + str(squareDim))
-
-    print(str(G))
-    print(str(G.size()))
-    #nx.write_yaml(G, "gna.yaml")
     sources = []
     for s in skills:
         # print("yo")
@@ -171,12 +255,9 @@ if __name__ == "__main__":
             sources.append(s)
             print("Source " + s["name"])
     print("Sources: " + str(sources))
-    parts = list(nx.connected_components(G.to_undirected()))
-    print("parts " + str(parts))
     strings = []
     for node in skills:
         strings.append(node["name"])
-    # chercher 3/4
     (row, col) = bestCount(len(strings))
     print("row " + str(row) + " col " + str(col))
     contentSize = row * col
@@ -185,7 +266,6 @@ if __name__ == "__main__":
         strings.append("___")
     print(str(len(strings)) + " " + str(strings))
     perm = permutations(strings)
-
     population = []
     # Print the obtained permutations
     for i in perm:
@@ -196,28 +276,44 @@ if __name__ == "__main__":
             break
     # generations
     bestScore = -100
-    for generation in range(1, 400):
+    bestIndividual = skills
+    counter = 0
+    while bestScore != 0 and counter < 10000:
+        counter += 1
         evaluated = {}
         for individual in population:
             score = evaluation(individual, G, col)
             if score > bestScore or score == 0:
                 bestScore = score
-                print("generation " + str(generation) + "  best score " + str(bestScore))
-                draw_skill_tree(50, individual, G)
-            #print("individual " + str(individual)[1:10] + "  score " + str(score))
+                bestIndividual = individual
+                draw_skill_tree(50, individual, G, row, col)
+                #print("generation " + str(generation) + "  best score " + str(bestScore))
             evaluated[str(individual)] = score
         # Keep the best 10
         population.sort(key=lambda x: evaluated[str(x)], reverse=True)
-        print("average score " + str(sum(evaluated.values())/len(evaluated)))
-        #population = population[:10]
+        # print("average score " + str(sum(evaluated.values())/len(evaluated))+ "  best score " + str(bestScore))
         # invert two random elements in the first 10
         for i in range(0, 10):
             a = random.randrange(0, len(population[i]))
             b = random.randrange(0, len(population[i]))
             population[i][a], population[i][b] = population[i][b], population[i][a]
+        # split and inverse the next 10
+        for i in range(10, 20):
+            # get a random index in the length of the individual
+            index = random.randrange(0, len(population[i]))
+            # split the individual in two parts
+            first = population[i][:index]
+            second = population[i][index:]
+            # concatenate the two parts
+            population[i] = second + first
+        for i in range(10, 20):
+            a = random.randrange(0, len(population[i]))
+            b = random.randrange(0, len(population[i]))
+            population[i][a], population[i][b] = population[i][b], population[i][a]
         # shuffle the last 90
-        for i in range(10, 100):
+        for i in range(20, 100):
             random.shuffle(population[i])
     print("best score " + str(bestScore))
-    #draw_skill_tree(50, strings)
+    print("best individual " + str(bestIndividual))
+    # draw_skill_tree(50, bestIndividual, G, row, col)
 
