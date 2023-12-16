@@ -1,5 +1,10 @@
 import math
+import os
 import random
+import shutil
+from datetime import datetime
+from svglib.svglib import svg2rlg
+from reportlab.graphics import renderPDF
 from enum import Enum
 
 import networkx as nx
@@ -7,7 +12,12 @@ import svgwrite
 import yaml
 from itertools import permutations
 
+# TODO https://docs.render.com/docs/deploy-flask
+
 # add a color or black and white setting
+backgroundColor = "rgb(255,255,255)"
+lightColor = "rgb(230,230,230)"
+darkColor = "rgb(10,10,10)"
 
 class Style:
     def __init__(self, stroke, stroke_width, inverted=False):
@@ -28,12 +38,9 @@ def split_string_by_length(text, max_length):
         else:
             segments.append(current_segment)
             current_segment = word
-
     if current_segment:  # Append the last segment
         segments.append(current_segment)
-
     return segments
-
 
 def styles():
     styles = []
@@ -50,7 +57,6 @@ def styleFor(element, parts):
     toutes =  styles()
     indexOfPart = find_part_containing(element, parts)
     return toutes[indexOfPart % len(toutes)]
-
 
 def distance(indexA, indexB, col):
     if areIndexConnected(indexA, indexB, col):
@@ -89,8 +95,8 @@ def draw_hexagon(dwg, center_x, center_y, row, col, size, text, style):
     number_of_strokes = style.number_of_strokes
     perimeters = [1.0, 0.95, .9, .85, .8, .75]
     perimeters = perimeters[0:number_of_strokes]
-    fillColor = "black" if style.inverted else "white"
-    strokeColor = "white" if style.inverted else "black"
+    fillColor = darkColor if style.inverted else lightColor
+    strokeColor = lightColor if style.inverted else darkColor
     for perimeter in perimeters:
         path = ""
         roundPercent = 0.15
@@ -142,8 +148,10 @@ def find_part_containing(element, parts):
 
 def draw_skill_tree(size, skills, G, rowCount, colCount):
     # gridsize = math.floor(math.sqrt(len(skills)))
+    # name the file with the date and time
+    file_name = "results/" + str(datetime.now()) + ".svg"
     dwg = svgwrite.Drawing(
-        filename="skill_tree.svg",
+        filename=file_name,
         profile='full',
         size=(str(size * (2*colCount+ 1) ), str(size * (2*rowCount+.5))))
     dwg.add(
@@ -151,10 +159,9 @@ def draw_skill_tree(size, skills, G, rowCount, colCount):
             insert=(0, 0),
             size=('100%', '100%'),
             rx=None, ry=None,
-            fill='rgb(200,200,200)'))
+            fill=backgroundColor))
     parts = list(nx.connected_components(G.to_undirected()))
-    print("parts " + str(parts))
-
+    # print("parts " + str(parts))
     for element in skills:
         # find the part containing the skill named element
         index = skills.index(element)
@@ -195,6 +202,8 @@ def draw_skill_tree(size, skills, G, rowCount, colCount):
         dwg.add(dwg.line(start=(xStart, yStart), end=(xEnd, yEnd), stroke="white", stroke_width=3,
                          stroke_linecap='round', marker_end=marker2.get_funciri()))
     dwg.save()
+    drawing = svg2rlg(file_name)
+    renderPDF.drawToFile(drawing, "./results/file.pdf")
 
 def yFor(rowA, size):
     return size * (0.5 + rowA * math.sqrt(3) + math.sqrt(3) / 2)
@@ -224,6 +233,48 @@ def evaluation(individual, G, col):
     for (a,b) in G.edges:
         score -= distance(asList.index(a), asList.index(b), col)
     return score
+
+def hill_climb(strings, G, col, evaluationFunction):
+    evaluated = []
+    perm = permutations(strings)
+    population = []
+    # Print the obtained permutations
+    for i in perm:
+        indiv = list(i)
+        random.shuffle(indiv)
+        population.append(indiv)
+        if len(population) == 10:
+            break
+    # generations
+    bestScore = -1000
+    scoreHistory = [bestScore]
+    bestIndividual = skills
+    counter = 0
+    while bestScore != 0 and counter < 20000:
+        previousBestIndividual = bestIndividual
+        counter += 1
+        evaluated = {}
+        for individual in population:
+            score = evaluation(individual, G, col)
+            if score > bestScore or score == 0:
+                bestScore = score
+                bestIndividual = individual
+                scoreHistory.append(bestScore)
+                # print("generation " + str(generation) + "  best score " + str(bestScore))
+            evaluated[str(individual)] = score
+        # Keep the best 10
+        population.sort(key=lambda x: evaluated[str(x)], reverse=True)
+        # for the top scorer, try all inversions
+        population.clear()
+        if previousBestIndividual == bestIndividual:
+            break
+        population.append(bestIndividual)
+        for a in range(0, len(bestIndividual)):
+            for b in range(a + 1, len(bestIndividual)):
+                newby = bestIndividual.copy()
+                newby[a], newby[b] = newby[b], newby[a]
+                population.append(newby)
+    return bestScore, bestIndividual
 
 if __name__ == "__main__":
     file_path = '5N6.yaml'
@@ -264,56 +315,23 @@ if __name__ == "__main__":
     print("contentSize " + str(contentSize))
     for i in range(0, contentSize - len(strings)):
         strings.append("___")
-    print(str(len(strings)) + " " + str(strings))
-    perm = permutations(strings)
-    population = []
-    # Print the obtained permutations
-    for i in perm:
-        indiv = list(i)
-        random.shuffle(indiv)
-        population.append(indiv)
-        if len(population) == 100:
-            break
-    # generations
-    bestScore = -100
-    bestIndividual = skills
-    counter = 0
-    while bestScore != 0 and counter < 10000:
-        counter += 1
-        evaluated = {}
-        for individual in population:
-            score = evaluation(individual, G, col)
-            if score > bestScore or score == 0:
-                bestScore = score
-                bestIndividual = individual
-                draw_skill_tree(50, individual, G, row, col)
-                #print("generation " + str(generation) + "  best score " + str(bestScore))
-            evaluated[str(individual)] = score
-        # Keep the best 10
-        population.sort(key=lambda x: evaluated[str(x)], reverse=True)
-        # print("average score " + str(sum(evaluated.values())/len(evaluated))+ "  best score " + str(bestScore))
-        # invert two random elements in the first 10
-        for i in range(0, 10):
-            a = random.randrange(0, len(population[i]))
-            b = random.randrange(0, len(population[i]))
-            population[i][a], population[i][b] = population[i][b], population[i][a]
-        # split and inverse the next 10
-        for i in range(10, 20):
-            # get a random index in the length of the individual
-            index = random.randrange(0, len(population[i]))
-            # split the individual in two parts
-            first = population[i][:index]
-            second = population[i][index:]
-            # concatenate the two parts
-            population[i] = second + first
-        for i in range(10, 20):
-            a = random.randrange(0, len(population[i]))
-            b = random.randrange(0, len(population[i]))
-            population[i][a], population[i][b] = population[i][b], population[i][a]
-        # shuffle the last 90
-        for i in range(20, 100):
-            random.shuffle(population[i])
-    print("best score " + str(bestScore))
-    print("best individual " + str(bestIndividual))
+    # print(str(len(strings)) + " " + str(strings))
+    path = os.path.join(".", "results")
+    try:
+        shutil.rmtree(path)
+    except OSError as e:
+        print("Error: %s - %s." % (e.filename, e.strerror))
+    # create a folder for the svg files
+    try:
+        os.mkdir(path)
+    except OSError as error:
+        print(error)
+
+    for round in range(1, 10):
+        bestScore, bestIndividual = hill_climb(strings, G, col, evaluation)
+        print("best score " + str(bestScore))
+        # print("best individual " + str(bestIndividual))
+        if bestScore == 0:
+            draw_skill_tree(50, bestIndividual, G, row, col)
     # draw_skill_tree(50, bestIndividual, G, row, col)
 

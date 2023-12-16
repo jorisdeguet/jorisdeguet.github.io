@@ -11,6 +11,8 @@ skills:
     description: "Tiroir de navigation"
   - name: "ListView explicite"
     description: "ListView, liste explicite, liste  avec map et converter"
+  - name: "ListView map et converter"
+    description: "ListView, liste explicite, liste  avec map et converter"
   - name: "HTTP DIO"
     description: "Appel à DIO, type simple"
   - name: "DIO JSON"
@@ -58,4 +60,6 @@ deps:
     to: "Firestore contrôle d'accès"
   - from: "Firestore intro"
     to: "Firestore requêtes"
+  - from: "ListView explicite"
+    to: "ListView map et converter"
 
