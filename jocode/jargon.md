@@ -1,5 +1,7 @@
 # Un aide mémoire sur le jargon informatique
 
+On veut aller doucement, comprendre ce qui se passe
+
 
 ## Exécuter un programme
 
