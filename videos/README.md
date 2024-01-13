@@ -1,5 +1,20 @@
 La page centrale de planification des videos de Joris
 
+
+# A trier
+- comment aider un étudiant, lui donner la réponse, une technique, commencer à faire avec lui
+- comment aider un étudiant s'il ne comprend pas ce qu'il a (qqun a aidé, généré par de l'IA, copier coller)
+- donner des devoirs à la maison personnalisés (basé sur notre évaluation)
+- suivre un skill tree pour prof
+  - evaluation / retroaction
+  - gestion de la classe / discipline
+  - contenu de cours
+  - attitude et lien avec les étudiants
+- Opinion : pourquoi chercher à s'améliorer? (alors que je serai pas payé plus)
+  - pour moi, je suis mieux quand mes cours se passent mieux
+  - pour mes élèves, par ce qu'est pour ça que je suis là
+- 
+
 # Tech tips
 Des conseils et solutions techniques pour faciliter la vie 
 
@@ -24,3 +39,7 @@ Réactivité, réflexions faites à l'avance pour avoir des éléments de réact
 - je choppe un étudiant ou des étudiants qui triche que faire?
 - c'est le bordel dans ma classe, que faire? (Bouger les gens)
 - une épreuve a foiré, les notes sont horribles que faire?
+
+# Opinions
+
+Des opinions. Pas des conseils. Pas des solutions. Des opinions.

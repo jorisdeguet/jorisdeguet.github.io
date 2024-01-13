@@ -16,10 +16,9 @@
 
 ## videos pour profs
 
-### comment partir un site pour un cours / programme sans connaitre HTML ou l'hébergement (Github + MarkDown)
-### protéger son contenu de cours
-- Beaucoup de profs ont tout, TOUT ce qu'ils ont fait sur un truc
-- Une clé USB acheté il y a 10 ans, un vieux laptop qui fait des étincelles quand il démarre, etc.
+
+
+https://cs.smu.ca/~dawson/images4.html
 
 ### lignes directrices pour évaluer un élève
 
