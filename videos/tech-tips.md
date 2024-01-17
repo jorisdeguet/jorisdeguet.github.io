@@ -17,6 +17,8 @@ Fin? Pointer vers possibilité en ligne / Cloud
 
 ## Quelle connexion internet Wifi etc choisir?
 
-## 
+## Attention à mes profils en ligne
+
+- Se chercher sur Google, Insta, Facebook
 
 ## comment partir un site pour un cours / programme sans connaitre HTML ou l'hébergement (Github + MarkDown)

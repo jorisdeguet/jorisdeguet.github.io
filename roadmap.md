@@ -1,4 +1,11 @@
+Divers:
+https://wangerflange.com/downloads/WF2v_domeplans.pdf
+https://www.youtube.com/watch?v=V_KhrXggRsU
+https://www.notta.ai/en/blog/record-screen-and-webcam#:~:text=Open%20QuickTime%20Player%20on%20your,bring%20up%20your%20webcam%20feed.&text=Under%20the%20%27View%27%20menu%2C,and%20place%20of%20the%20window.
+
 ## videos courtes
+
+
 
 ### C'est lent : Internet ou Wifi?
 
