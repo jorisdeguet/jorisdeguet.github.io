@@ -18,7 +18,7 @@ def selectLastModified(driver, date):
 # type be in "PropertyType-Plex-input" "PropertyType-SingleFamilyHome-input" "PropertyType-Chalet-input"
 def select_type(driver, type):
     # TYPE OF PROPERTY
-    click_data_target("#PropertyTypeSection-secondary")
+    click_data_target(driver,"#PropertyTypeSection-secondary")
     click_by_id(driver, type)
     driver.implicitly_wait(5)
 
@@ -26,13 +26,12 @@ def select_type(driver, type):
 
 
 def minArea(driver, squarefeet):
-    click_data_target("#OtherCriteriaSection-secondary")
     land_area_min = driver.find_element(by=By.ID, value="LandArea-min")
     land_area_min.send_keys(str(squarefeet))
 
 def selectPrice(driver, value):
     # price selection
-    click_by_id("SalePrice-button")
+    click_by_id(driver, "SalePrice-button")
     # get the div with class "max-slider-handle"
     max_price = driver.find_element(by=By.CLASS_NAME, value="max-slider-handle")
     move = ActionChains(driver)
@@ -70,6 +69,7 @@ select_type(driver, "PropertyType-Plex-input")
 
 # minArea(driver, 50000)
 # TODO go get everything since yesterday or last date in folder
+click_data_target(driver, "#OtherCriteriaSection-secondary")
 selectLastModified(driver, "2024-02-06")
 
 startSearch(driver)
@@ -78,12 +78,17 @@ print(driver.current_url)
 
 # get all element with class "a-more-detail"
 # iterate until there is no more "More" button
+
+
+
 while(True):
-    elements = driver.find_elements(By.CLASS_NAME, 'a-more-detail')
+    nextButton = driver.find_element(By.CSS_SELECTOR, ".col-12 > #divWrapperPager .next > a")
+
+    elements = driver.find_elements(By.CLASS_NAME, 'address')
 
     for e in elements:
         print(e.text)
-
+    nextButton.click()
 
 
 driver.quit()
