@@ -67,6 +67,11 @@ On peut demander aux élèves ce qu'ils pensent de la classe comment ça se pass
 
 Modèle de questionnaires
 ```
+Comment est-ce que tu trouves l'ambiance dans la classe?
+
+Est-ce que l'ambiance t'empêche de travailler / te concentrer?
+
+
 
 ```
 
@@ -168,3 +173,10 @@ En pratique:
 ## mesures nucléaires 
 - filmer la classe, le pouvoir de la video, les enfants ont souvent des comptes à rendre à au moins un ami un parent qui 
 - l'exclusion, si un étudiant envers et contre tout continue à crier / insulter il faut discuter avec les parents, la direction etc.
+
+
+# si ca marche toujours pas.
+
+Une des raisons pour laquelle on separe les amis dans la formation de classe c'est pour éviter des mauvaises dynamiques
+preetablies. C'est dure a comprendre pour les parents mais ca peut eviter des situation ou tous la classe 
+est disfonctionelle
