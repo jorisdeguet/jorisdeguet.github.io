@@ -1,73 +1,36 @@
-import time
 
-from selenium.webdriver.chrome.options import Options as ChromeOptions
-from selenium import webdriver
 from selenium.webdriver import ActionChains
 from selenium.webdriver.common.by import By
 
+from immo.shared import click_data_target, click_by_id, setup
 
-def select_type():
+
+def startSearch(driver):
+    search_button = driver.find_element(by=By.CLASS_NAME, value="js-trigger-search")
+    search_button.click()
+
+def selectLastModified(driver, date):
+    # get the text field for LastModifiedDate-dateFilterPicker
+    last_modified_date = driver.find_element(by=By.ID, value="LastModifiedDate-dateFilterPicker")
+    last_modified_date.send_keys(date)
+
+
+# type be in "PropertyType-Plex-input" "PropertyType-SingleFamilyHome-input" "PropertyType-Chalet-input"
+def select_type(driver, type):
     # TYPE OF PROPERTY
     click_data_target("#PropertyTypeSection-secondary")
-    # click_by_id("PropertyType-SingleFamilyHome-input")
-    click_by_id("PropertyType-Plex-input")
-    # click_by_id("PropertyType-HobbyFarm-input")
-    # click_by_id("PropertyType-Chalet-input")
-    driver.implicitly_wait(5)
-
-def click_data_target(data_target):
-    for i in range(3):
-        try:
-            secondary_button = driver.find_element(by=By.CSS_SELECTOR,
-                                                   value="[data-target='"+data_target+"']")
-            driver.execute_script("arguments[0].click();", secondary_button)
-            break
-        except Exception as inst:
-            print(inst)
-            print('Retry in 1 second')
-            time.sleep(1)
+    click_by_id(driver, type)
     driver.implicitly_wait(5)
 
 
-def minArea(squarefeet):
+
+
+def minArea(driver, squarefeet):
     click_data_target("#OtherCriteriaSection-secondary")
     land_area_min = driver.find_element(by=By.ID, value="LandArea-min")
     land_area_min.send_keys(str(squarefeet))
 
-
-def click_by_id(id):
-    for i in range(3):
-        try:
-            element = driver.find_element(by=By.ID, value=id)
-            driver.execute_script("arguments[0].click();", element)
-            break
-        except Exception as inst:
-            print(inst)
-            print('Retry in 1 second')
-            # sleep for 1 second
-            time.sleep(1)
-    driver.implicitly_wait(5)
-
-
-def setup():
-    global driver
-    options = ChromeOptions()
-    # options.add_argument("--headless=new")
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("--disable-gpu")
-    options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36")
-    driver = webdriver.Chrome(options=options)
-    driver.delete_all_cookies()
-
-
-setup()
-driver.get("https://www.centris.ca/")
-driver.implicitly_wait(5)
-click_by_id("didomi-notice-agree-button")   # accept cookies
-
-
-def selectPrice(value):
+def selectPrice(driver, value):
     # price selection
     click_by_id("SalePrice-button")
     # get the div with class "max-slider-handle"
@@ -89,29 +52,38 @@ def selectPrice(value):
     driver.implicitly_wait(5)
 
 
-# 17 is 300 000, 33 is 900 000
-selectPrice(33)
-
-click_by_id("filter-search")
 
 
+driver = setup()
+driver.get("https://www.centris.ca/")
+driver.implicitly_wait(5)
+click_by_id(driver, "didomi-notice-agree-button")   # accept cookies
+
+#### Price is right  #### 17 is 300 000, 33 is 900 000
+selectPrice(driver, 33)
 
 
+#### Dates and types ####
+click_by_id(driver, "filter-search")
+select_type(driver, "PropertyType-Plex-input")
+# TODO select Parc-Extension as location
 
-select_type()
-minArea(50000)
-# get the text field for LastModifiedDate-dateFilterPicker
-last_modified_date = driver.find_element(by=By.ID, value="LastModifiedDate-dateFilterPicker")
-last_modified_date.send_keys("2024-02-06")
+# minArea(driver, 50000)
+# TODO go get everything since yesterday or last date in folder
+selectLastModified(driver, "2024-02-06")
 
-# find button "Rechercher" by class
-search_button = driver.find_element(by=By.CLASS_NAME, value = "js-trigger-search")
-search_button.click()
-
-# get all element with class "a-more-detail"
-
-
-
+startSearch(driver)
 
 print(driver.current_url)
-#driver.quit()
+
+# get all element with class "a-more-detail"
+# iterate until there is no more "More" button
+while(True):
+    elements = driver.find_elements(By.CLASS_NAME, 'a-more-detail')
+
+    for e in elements:
+        print(e.text)
+
+
+
+driver.quit()

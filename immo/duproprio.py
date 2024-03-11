@@ -5,6 +5,7 @@ from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 
+from immo.shared import click_by_id, setup, click_by_class
 
 
 def searchParcEx():
@@ -24,21 +25,6 @@ def searchParcEx():
     driver.find_element(By.CSS_SELECTOR, ".hrJbIL #search-field__form__input").send_keys("Parc-exten")
 
 
-
-def click_data_target(data_target):
-    for i in range(3):
-        try:
-            secondary_button = driver.find_element(by=By.CSS_SELECTOR,
-                                                   value="[data-target='"+data_target+"']")
-            driver.execute_script("arguments[0].click();", secondary_button)
-            break
-        except Exception as inst:
-            print(inst)
-            print('Retry in 1 second')
-            time.sleep(1)
-    driver.implicitly_wait(5)
-
-
 def resultsAsList():
     driver.find_element(By.CSS_SELECTOR, ".Results__SearchResultsLabelStyled-sc-wz8a02-9 rect").click()
     driver.find_element(By.CSS_SELECTOR, ".sc-gsFSXq:nth-child(5)").click()
@@ -47,50 +33,12 @@ def resultsAsList():
 
 
 
-def click_by_id(id):
-    for i in range(3):
-        try:
-            element = driver.find_element(by=By.ID, value=id)
-            driver.execute_script("arguments[0].click();", element)
-            break
-        except Exception as inst:
-            print(inst)
-            print('Retry in 1 second')
-            # sleep for 1 second
-            time.sleep(1)
-    driver.implicitly_wait(5)
 
-def click_by_class(class_name):
-    for i in range(3):
-        try:
-            element = driver.find_element(by=By.CLASS_NAME, value=class_name)
-            driver.execute_script("arguments[0].click();", element)
-            break
-        except Exception as inst:
-            print(inst)
-            print('Retry in 1 second')
-            # sleep for 1 second
-            time.sleep(1)
-    driver.implicitly_wait(5)
-
-
-def setup():
-    global driver
-    options = ChromeOptions()
-    # options.add_argument("--headless=new")
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("--disable-gpu")
-    options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36")
-    driver = webdriver.Chrome(options=options)
-    driver.delete_all_cookies()
-
-
-setup()
+driver = setup()
 driver.get("https://duproprio.com/")
 driver.implicitly_wait(5)
-click_by_id("onetrust-accept-btn-handler")   # accept cookies
-click_by_class("bByjIz")
+click_by_id(driver, "onetrust-accept-btn-handler")   # accept cookies
+click_by_class(driver, "bByjIz")
 #
 # click_by_class("ikKuLf")
 # click_by_class("hvNUuP")
