@@ -5,7 +5,7 @@ from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 
-from immo.shared import click_by_id, setup, click_by_class
+from shared import click_by_id, setup, click_by_class
 
 
 def searchParcEx():

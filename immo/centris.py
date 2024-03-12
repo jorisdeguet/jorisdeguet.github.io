@@ -5,7 +5,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
-from immo.shared import click_data_target, click_by_id, setup
+from shared import click_data_target, click_by_id, setup
 
 
 def startSearch(driver):
