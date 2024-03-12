@@ -111,15 +111,23 @@ print(driver.current_url)
 # iterate until there is no more "More" button
 
 # TODO go get everything since yesterday or last date in folder
-
+addresses = []
 while(True):
     nextButton = driver.find_element(By.CSS_SELECTOR, ".col-12 > #divWrapperPager .next > a")
     print("nextButton is " + str(nextButton))
     elements = driver.find_elements(By.CLASS_NAME, 'address')
-
-    #for e in elements:
-    #    print(e.text)
-    nextButton.click()
-
-
+    duplicate = False
+    for e in elements:
+        if addresses.count(e.text) == 0:
+            addresses.append(e.text)
+        else:
+            duplicate = True
+            break
+    if duplicate:
+        break
+    try:
+        nextButton.click()
+    except:
+        print("ouch")
+print(addresses)
 driver.quit()
