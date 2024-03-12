@@ -104,7 +104,7 @@ select_parc_ex(driver)
 selectPrice(driver, 33)
 #### Dates and types ####
 select_type(driver, "PropertyType-Plex-input")
-selectLastModified(driver, "2024-03-10")
+#selectLastModified(driver, "2024-03-10")
 
 startSearch(driver)
 
