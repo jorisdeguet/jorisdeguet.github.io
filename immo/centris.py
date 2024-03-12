@@ -1,27 +1,64 @@
+import time
 
-from selenium.webdriver import ActionChains
+from selenium.webdriver import ActionChains, Keys
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.wait import WebDriverWait
 
 from immo.shared import click_data_target, click_by_id, setup
 
 
 def startSearch(driver):
     search_button = driver.find_element(by=By.CLASS_NAME, value="js-trigger-search")
-    search_button.click()
+    driver.execute_script("arguments[0].click();", search_button)
 
 def selectLastModified(driver, date):
     # get the text field for LastModifiedDate-dateFilterPicker
+    click_by_id(driver, "filter-search")
+    click_data_target(driver, "#OtherCriteriaSection-secondary")
+    driver.find_element(By.CSS_SELECTOR, "#OtherCriteriaSection-heading-filters .btn").click()
+    driver.find_element(By.CSS_SELECTOR, ".calendar-icon").click()
+    driver.find_element(By.ID, "LastModifiedDate-dateFilterPicker").click()
+    driver.find_element(By.ID, "LastModifiedDate-dateFilterPicker").send_keys(date)
+    driver.find_element(By.ID, "LastModifiedDate-dateFilterPicker").send_keys(Keys.ENTER)
+    driver.find_element(By.CSS_SELECTOR, ".btn-search:nth-child(3)").click()
     last_modified_date = driver.find_element(by=By.ID, value="LastModifiedDate-dateFilterPicker")
     last_modified_date.send_keys(date)
+#    driver.find_element(By.CSS_SELECTOR, "#OtherCriteriaSection-heading-filters .btn").click()
+    click_by_id(driver, "filter-search")
 
 
 # type be in "PropertyType-Plex-input" "PropertyType-SingleFamilyHome-input" "PropertyType-Chalet-input"
 def select_type(driver, type):
+    click_by_id(driver, "filter-search")
+    driver.find_element(By.CSS_SELECTOR, "#OtherCriteriaSection-heading-filters .btn").click()
     # TYPE OF PROPERTY
     click_data_target(driver,"#PropertyTypeSection-secondary")
     click_by_id(driver, type)
     driver.implicitly_wait(5)
+    driver.find_element(By.CSS_SELECTOR, "#OtherCriteriaSection-heading-filters .btn").click()
+    click_by_id(driver, "filter-search")
 
+def select_parc_ex(driver):
+    #field = driver.find_element(By.CLASS_NAME, "select2-search__field")
+    search_container = driver.find_element(By.CSS_SELECTOR, ".select2-selection__rendered")
+    driver.execute_script("arguments[0].click();", search_container)
+    driver.implicitly_wait(5)
+    #driver.find_element(By.CLASS_NAME, "select2-search__field").click()
+    WebDriverWait(driver, 10).until(
+        EC.visibility_of_element_located((By.CLASS_NAME, "select2-search__field")))
+
+    driver.find_element(By.CLASS_NAME, "select2-search__field").send_keys("parc-ex")
+    # wait until the included search settles
+    WebDriverWait(driver, 10).until(
+        EC.visibility_of_element_located((By.CLASS_NAME, "select2-search__field")))
+    time.sleep(3)
+    driver.find_element(By.CLASS_NAME, "select2-search__field").send_keys(Keys.ENTER)
+    WebDriverWait(driver, 10).until(
+        EC.visibility_of_element_located((By.CLASS_NAME, "select2-search__field")))
+    driver.implicitly_wait(5)
+    # target = driver.find_element(By.CSS_SELECTOR, "#filter-search > span")
+    # driver.execute_script("arguments[0].click();", target)
 
 
 
@@ -58,19 +95,13 @@ driver.get("https://www.centris.ca/")
 driver.implicitly_wait(5)
 click_by_id(driver, "didomi-notice-agree-button")   # accept cookies
 
+
+select_parc_ex(driver)
 #### Price is right  #### 17 is 300 000, 33 is 900 000
 selectPrice(driver, 33)
-
-
 #### Dates and types ####
-click_by_id(driver, "filter-search")
 select_type(driver, "PropertyType-Plex-input")
-# TODO select Parc-Extension as location
-
-# minArea(driver, 50000)
-# TODO go get everything since yesterday or last date in folder
-click_data_target(driver, "#OtherCriteriaSection-secondary")
-selectLastModified(driver, "2024-02-06")
+selectLastModified(driver, "2024-03-10")
 
 startSearch(driver)
 
@@ -79,15 +110,15 @@ print(driver.current_url)
 # get all element with class "a-more-detail"
 # iterate until there is no more "More" button
 
-
+# TODO go get everything since yesterday or last date in folder
 
 while(True):
     nextButton = driver.find_element(By.CSS_SELECTOR, ".col-12 > #divWrapperPager .next > a")
-
+    print("nextButton is " + str(nextButton))
     elements = driver.find_elements(By.CLASS_NAME, 'address')
 
-    for e in elements:
-        print(e.text)
+    #for e in elements:
+    #    print(e.text)
     nextButton.click()
 
 
