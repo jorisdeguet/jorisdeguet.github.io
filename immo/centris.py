@@ -76,20 +76,19 @@ def selectPrice(driver, value):
     # get the div with class "max-slider-handle"
     max_price = driver.find_element(by=By.CLASS_NAME, value="max-slider-handle")
     move = ActionChains(driver)
-    move.click_and_hold(max_price).move_by_offset(-75, 0).release().perform()
+    move.click_and_hold(max_price).move_by_offset(-20, 0).release().perform()
     # move the slider to the left until aria-valuenow is 17
     for i in range(200):
         print(str(max_price.get_attribute("aria-valuenow")))
         if max_price.get_attribute("aria-valuenow") <= str(value):
             break
         else:
-
             # move the slider to the left
             move = ActionChains(driver)
             move.click_and_hold(max_price).move_by_offset(-5, 0).release().perform()
             # driver.implicitly_wait(10)
         # driver.implicitly_wait(5)
-    driver.implicitly_wait(5)
+    #driver.implicitly_wait(5)
 
 
 
