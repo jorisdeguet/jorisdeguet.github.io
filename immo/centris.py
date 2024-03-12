@@ -116,6 +116,9 @@ print(driver.current_url)
 # TODO go get everything since yesterday or last date in folder
 addresses = []
 while(True):
+    time.sleep(3)
+    WebDriverWait(driver, 10).until(
+        EC.visibility_of_element_located((By.CSS_SELECTOR, ".col-12 > #divWrapperPager .next > a")))
     nextButton = driver.find_element(By.CSS_SELECTOR, ".col-12 > #divWrapperPager .next > a")
     print("nextButton is " + str(nextButton))
     elements = driver.find_elements(By.CLASS_NAME, 'address')
@@ -129,8 +132,12 @@ while(True):
     if duplicate:
         break
     try:
-        nextButton.click()
+        #nextButton.click()
+        driver.execute_script("arguments[0].click();", nextButton)
     except:
         print("ouch")
-print(addresses)
+for ad in sorted(addresses):
+    print(ad)
+#print(sorted(addresses))
+
 driver.quit()

@@ -6,7 +6,7 @@ from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium import webdriver
 def setup():
     options = ChromeOptions()
-    options.add_argument("--headless=new")
+    #options.add_argument("--headless=new")
     options.add_argument("--window-size=1000,1000")
     #options.add_argument("--start-maximized")
     options.add_argument("--disable-gpu")
