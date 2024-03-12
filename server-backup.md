@@ -1,4 +1,4 @@
-
+jo@jo.local  mot de passe: marie etc.
 ## Creer un RAID 1
 
 https://www.digitalocean.com/community/tutorials/how-to-create-raid-arrays-with-mdadm-on-ubuntu-22-04
