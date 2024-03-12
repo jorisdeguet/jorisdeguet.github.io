@@ -16,7 +16,11 @@ def selectLastModified(driver, date):
     # get the text field for LastModifiedDate-dateFilterPicker
     click_by_id(driver, "filter-search")
     click_data_target(driver, "#OtherCriteriaSection-secondary")
-    driver.find_element(By.CSS_SELECTOR, "#OtherCriteriaSection-heading-filters .btn").click()
+
+    WebDriverWait(driver, 10).until(
+        EC.visibility_of_element_located((By.CSS_SELECTOR, "#OtherCriteriaSection-heading-filters .btn")))
+    bouton = driver.find_element(By.CSS_SELECTOR, "#OtherCriteriaSection-heading-filters .btn")
+    driver.execute_script("arguments[0].click();", bouton)
     driver.find_element(By.CSS_SELECTOR, ".calendar-icon").click()
     driver.find_element(By.ID, "LastModifiedDate-dateFilterPicker").click()
     driver.find_element(By.ID, "LastModifiedDate-dateFilterPicker").send_keys(date)
