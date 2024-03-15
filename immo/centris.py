@@ -1,16 +1,45 @@
+import datetime
 import time
+from dataclasses import dataclass
+
+# TODO regarder dans les fichiers AAAA-MM-JJ.txt si on a déjà vu cette annonce
+# TODO fix un provider de courriel pour envoyer le fichier texte
+# TODO always add Nouveau prix
+
+import mailchimp_transactional as MailchimpTransactional
+from mailchimp_transactional.api_client import ApiClientError
 
 from selenium.webdriver import ActionChains, Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
+import os
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
+
+from immo.test_twilio import send_sms
 from shared import click_data_target, click_by_id, setup
 
+
+@dataclass
+class Item:
+    url: str
+    date: datetime
 
 def startSearch(driver):
     search_button = driver.find_element(by=By.CLASS_NAME, value="js-trigger-search")
     driver.execute_script("arguments[0].click();", search_button)
+
+def alreadySeen(url):
+    # open file duplex in current folder
+    with open("./immo/duplex", "r") as file:
+        # read all lines into a list
+        lines = file.readlines()
+        # check if the url is in the list
+        if url+"\n" in lines:
+            return True
+    return False
 
 def selectLastModified(driver, date):
     # get the text field for LastModifiedDate-dateFilterPicker
@@ -86,12 +115,6 @@ def selectPrice(driver, value):
             # move the slider to the left
             move = ActionChains(driver)
             move.click_and_hold(max_price).move_by_offset(-5, 0).release().perform()
-            # driver.implicitly_wait(10)
-        # driver.implicitly_wait(5)
-    #driver.implicitly_wait(5)
-
-
-
 
 driver = setup()
 driver.get("https://www.centris.ca/")
@@ -113,19 +136,31 @@ print(driver.current_url)
 # get all element with class "a-more-detail"
 # iterate until there is no more "More" button
 
+# create the data folder if it does not exist
+
 # TODO go get everything since yesterday or last date in folder
 addresses = []
+urls = []
 while(True):
-    time.sleep(3)
+    time.sleep(2)
     WebDriverWait(driver, 10).until(
         EC.visibility_of_element_located((By.CSS_SELECTOR, ".col-12 > #divWrapperPager .next > a")))
     nextButton = driver.find_element(By.CSS_SELECTOR, ".col-12 > #divWrapperPager .next > a")
     print("nextButton is " + str(nextButton))
-    elements = driver.find_elements(By.CLASS_NAME, 'address')
+    #elements = driver.find_elements(By.CLASS_NAME, 'address')
+    elements = driver.find_elements(By.CSS_SELECTOR, ".shell")
     duplicate = False
     for e in elements:
-        if addresses.count(e.text) == 0:
-            addresses.append(e.text)
+        addressElement = e.find_element(By.CLASS_NAME, 'address')
+        url = e.find_element(By.TAG_NAME, 'a').get_attribute("href")
+        urls.append(url)
+        # get today's date as YYYY-MM-DD
+        today = datetime.date.today().strftime("%Y-%m-%d")
+        print(url)
+        # transform the relative url into an absolute url
+
+        if addresses.count(addressElement.text) == 0:
+            addresses.append(addressElement.text)
         else:
             duplicate = True
             break
@@ -139,5 +174,19 @@ while(True):
 for ad in sorted(addresses):
     print(ad)
 #print(sorted(addresses))
+# join urls with newlines
+onlyTheNew = []
+for url in urls:
+    if alreadySeen(url):
+        print("seen")
+    else:
+        onlyTheNew.append(url)
+        print("not seen " + url)
+urls = onlyTheNew
+chunks = [urls[i:i + 10] for i in range(0, len(urls), 10)]
+for chunk in chunks:
+    url_list = '\n'.join(chunk)
+    #send_sms(url_list)
+
 
 driver.quit()

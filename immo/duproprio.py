@@ -1,8 +1,6 @@
 import time
 
 from selenium.webdriver import ActionChains
-from selenium.webdriver.chrome.options import Options as ChromeOptions
-from selenium import webdriver
 from selenium.webdriver.common.by import By
 
 from shared import click_by_id, setup, click_by_class
@@ -31,22 +29,14 @@ def resultsAsList():
     driver.find_element(By.LINK_TEXT, "List").click()
     driver.find_element(By.CSS_SELECTOR, ".featured-builder__content").click()
 
-
-
-
 driver = setup()
-driver.get("https://duproprio.com/")
+driver.get("https://duproprio.com/fr/rechercher/liste")
 driver.implicitly_wait(5)
 click_by_id(driver, "onetrust-accept-btn-handler")   # accept cookies
 click_by_class(driver, "bByjIz")
-#
-# click_by_class("ikKuLf")
-# click_by_class("hvNUuP")
 
 
 searchParcEx()
-
-
 resultsAsList()
 #
 #
