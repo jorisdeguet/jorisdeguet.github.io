@@ -18,7 +18,7 @@ import os
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
-from immo.test_twilio import send_sms
+from test_twilio import send_sms
 from shared import click_data_target, click_by_id, setup
 
 
@@ -33,7 +33,7 @@ def startSearch(driver):
 
 def alreadySeen(url):
     # open file duplex in current folder
-    with open("./immo/duplex", "r") as file:
+    with open("/mnt/Photos/duplex", "r") as file:
         # read all lines into a list
         lines = file.readlines()
         # check if the url is in the list
@@ -41,6 +41,11 @@ def alreadySeen(url):
             return True
     return False
 
+def addToAlreadySeen(newOnes):
+   with open("/mnt/Photos/duplex", "a") as file:
+        file.write("\n\nnew entry \n\n")
+        for url in newOnes:
+            file.write(url + "\n")
 def selectLastModified(driver, date):
     # get the text field for LastModifiedDate-dateFilterPicker
     click_by_id(driver, "filter-search")
@@ -183,10 +188,14 @@ for url in urls:
         onlyTheNew.append(url)
         print("not seen " + url)
 urls = onlyTheNew
-chunks = [urls[i:i + 10] for i in range(0, len(urls), 10)]
-for chunk in chunks:
-    url_list = '\n'.join(chunk)
-    #send_sms(url_list)
+if len(urls) == 0:
+    send_sms("pas de duplex nouveau cette fois-ci")
+else:
+    chunks = [urls[i:i + 10] for i in range(0, len(urls), 10)]
+    for chunk in chunks:
+        url_list = '\n  \n  \n'.join(chunk)
+        send_sms(url_list)
 
-
+# marked as already seen
+addToAlreadySeen(urls)
 driver.quit()
