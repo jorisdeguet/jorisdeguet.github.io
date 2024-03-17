@@ -7,6 +7,7 @@ from shared import click_by_id, setup,  select_parc_ex, select_type, \
 # uniquement trouvé le driver pour la version  ici
 # https://chrome-versions.com/google-chrome-stable-114.0.5735.90-1.deb
 # https://chromedriver.storage.googleapis.com/index.html?path=114.0.5735.90/
+# TODO regarder https://googlechromelabs.github.io/chrome-for-testing/#stable
 
 # si on met à jour Chrome, le script ne marche plus
 
