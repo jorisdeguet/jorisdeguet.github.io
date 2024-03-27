@@ -13,16 +13,20 @@ from shared import click_by_id, setup,  select_parc_ex, select_type, \
 
 # le script va sur la page, met les critères re recherche, itère sur les pages
 # collecte les urls, compare avec les urls connues, envoie un sms si nouvelle url
+def duplex():
+    driver = setup()
+    driver.get("https://www.centris.ca/")
+    driver.implicitly_wait(5)
+    click_by_id(driver, "didomi-notice-agree-button")   # accept cookies
 
-driver = setup()
-driver.get("https://www.centris.ca/")
-driver.implicitly_wait(5)
-click_by_id(driver, "didomi-notice-agree-button")   # accept cookies
+    select_parc_ex(driver)
+    selectPrice(driver, 33)   # 33 is 900 000
+    select_type(driver, "PropertyType-Plex-input")
+    startSearch(driver)
 
-select_parc_ex(driver)
-selectPrice(driver, 33)   # 33 is 900 000
-select_type(driver, "PropertyType-Plex-input")
-startSearch(driver)
+    newOnes = explore_and_send(driver, "Duplex", "/mnt/Photos/duplex")
+    driver.quit()
+    return newOnes
 
-explore_and_send(driver, "Duplex", "/mnt/Photos/duplex")
-driver.quit()
+if __name__ == "__main__":
+    duplex()

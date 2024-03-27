@@ -13,7 +13,7 @@ from test_twilio import send_sms
 
 def setup():
     options = ChromeOptions()
-    options.add_argument("--headless=new")
+    #options.add_argument("--headless=new")
     options.add_argument("--window-size=1000,1000")
     #options.add_argument("--start-maximized")
     options.add_argument("--disable-gpu")
@@ -110,7 +110,7 @@ def select_parc_ex(driver):
     WebDriverWait(driver, 10).until(
         EC.visibility_of_element_located((By.CLASS_NAME, "select2-search__field")))
 
-    driver.find_element(By.CLASS_NAME, "select2-search__field").send_keys("parc-ex")
+    driver.find_element(By.CLASS_NAME, "select2-search__field").send_keys("Parc-Extension P")
     # wait until the included search settles
     WebDriverWait(driver, 10).until(
         EC.visibility_of_element_located((By.CLASS_NAME, "select2-search__field")))
@@ -126,39 +126,46 @@ def select_parc_ex(driver):
 
 def alreadySeen(url, filePath="/mnt/Photos/duplex"):
     # open file duplex in current folder
-    with open(filePath, "r") as file:
-        # read all lines into a list
-        lines = file.readlines()
-        # check if the url is in the list
-        if url+"\n" in lines:
-            return True
-    return False
+    try:
+        with open(filePath, "r") as file:
+            # read all lines into a list
+            lines = file.readlines()
+            # check if the url is in the list
+            if url+"\n" in lines:
+                return True
+        return False
+    except Exception as e:
+        print(e)
+        return False
 
 def addToAlreadySeen(newOnes, filePath="/mnt/Photos/duplex"):
-   with open(filePath, "a") as file:
-        file.write("\n\nnew entry \n\n")
-        for url in newOnes:
-            file.write(url + "\n")
+    try:
+        with open(filePath, "a") as file:
+            file.write("\n\nnew entry \n\n")
+            for url in newOnes:
+                file.write(url + "\n")
+    except Exception as e:
+        print(e)
 
 # ATTENTION, marche sur MacOS mais pas sur Ubuntu en headless
-def selectLastModified(driver, date):
-    # get the text field for LastModifiedDate-dateFilterPicker
-    click_by_id(driver, "filter-search")
-    click_data_target(driver, "#OtherCriteriaSection-secondary")
-
-    WebDriverWait(driver, 10).until(
-        EC.visibility_of_element_located((By.CSS_SELECTOR, "#OtherCriteriaSection-heading-filters .btn")))
-    bouton = driver.find_element(By.CSS_SELECTOR, "#OtherCriteriaSection-heading-filters .btn")
-    driver.execute_script("arguments[0].click();", bouton)
-    driver.find_element(By.CSS_SELECTOR, ".calendar-icon").click()
-    driver.find_element(By.ID, "LastModifiedDate-dateFilterPicker").click()
-    driver.find_element(By.ID, "LastModifiedDate-dateFilterPicker").send_keys(date)
-    driver.find_element(By.ID, "LastModifiedDate-dateFilterPicker").send_keys(Keys.ENTER)
-    driver.find_element(By.CSS_SELECTOR, ".btn-search:nth-child(3)").click()
-    last_modified_date = driver.find_element(by=By.ID, value="LastModifiedDate-dateFilterPicker")
-    last_modified_date.send_keys(date)
-#    driver.find_element(By.CSS_SELECTOR, "#OtherCriteriaSection-heading-filters .btn").click()
-    click_by_id(driver, "filter-search")
+# def selectLastModified(driver, date):
+#     # get the text field for LastModifiedDate-dateFilterPicker
+#     click_by_id(driver, "filter-search")
+#     click_data_target(driver, "#OtherCriteriaSection-secondary")
+#
+#     WebDriverWait(driver, 10).until(
+#         EC.visibility_of_element_located((By.CSS_SELECTOR, "#OtherCriteriaSection-heading-filters .btn")))
+#     bouton = driver.find_element(By.CSS_SELECTOR, "#OtherCriteriaSection-heading-filters .btn")
+#     driver.execute_script("arguments[0].click();", bouton)
+#     driver.find_element(By.CSS_SELECTOR, ".calendar-icon").click()
+#     driver.find_element(By.ID, "LastModifiedDate-dateFilterPicker").click()
+#     driver.find_element(By.ID, "LastModifiedDate-dateFilterPicker").send_keys(date)
+#     driver.find_element(By.ID, "LastModifiedDate-dateFilterPicker").send_keys(Keys.ENTER)
+#     driver.find_element(By.CSS_SELECTOR, ".btn-search:nth-child(3)").click()
+#     last_modified_date = driver.find_element(by=By.ID, value="LastModifiedDate-dateFilterPicker")
+#     last_modified_date.send_keys(date)
+# #    driver.find_element(By.CSS_SELECTOR, "#OtherCriteriaSection-heading-filters .btn").click()
+#     click_by_id(driver, "filter-search")
 
 
 
@@ -202,13 +209,7 @@ def explore_and_send(driver, text, filePath):
         else:
             onlyTheNew.append(url)
             print("not seen " + url)
-    if len(onlyTheNew) == 0:
-        send_sms("pas de " + text + " nouveau cette fois-ci")
-    else:
-        chunks = [onlyTheNew[i:i + 10] for i in range(0, len(onlyTheNew), 10)]
-        for chunk in chunks:
-            url_list = '\n  \n  \n'.join(chunk)
-            send_sms(url_list)
     # marked as already seen
     addToAlreadySeen(urls, filePath)
+    return onlyTheNew
 

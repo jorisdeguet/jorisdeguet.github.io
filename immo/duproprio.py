@@ -5,12 +5,33 @@ from selenium.webdriver.common.by import By
 
 from shared import click_by_id, setup, click_by_class
 
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.wait import WebDriverWait
+
 
 def searchParcEx():
-    global element, actions
-    driver.find_element(By.CSS_SELECTOR, ".hrJbIL #search-field__form__input").click()
-    driver.find_element(By.CSS_SELECTOR, ".hrJbIL #search-field__form__input").click()
-    element = driver.find_element(By.CSS_SELECTOR, ".hrJbIL #search-field__form__input")
+    WebDriverWait(driver, 10).until(
+        EC.visibility_of_element_located((By.CSS_SELECTOR, "#search-field__form__input")))
+    searchField = driver.find_element(By.CSS_SELECTOR, "#search-field__form__input")
+    driver.execute_script("arguments[0].click();", searchField)
+    driver.implicitly_wait(5)
+
+    # driver.find_element(By.CLASS_NAME, "select2-search__field").click()
+
+    time.sleep(3)
+    searchField.send_keys("parc-ex")
+    # wait until the included search settles
+    WebDriverWait(driver, 10).until(
+        EC.visibility_of_element_located((By.CLASS_NAME, "select2-search__field")))
+    time.sleep(3)
+    driver.find_element(By.CLASS_NAME, "select2-search__field").send_keys(Keys.ENTER)
+    WebDriverWait(driver, 10).until(
+        EC.visibility_of_element_located((By.CLASS_NAME, "select2-search__field")))
+    driver.implicitly_wait(5)
+
+    driver.find_element(By.CSS_SELECTOR, "#search-field__form__input").click()
+    driver.find_element(By.CSS_SELECTOR, "#search-field__form__input").click()
+    element = driver.find_element(By.CSS_SELECTOR, " #search-field__form__input")
     actions = ActionChains(driver)
     actions.double_click(element).perform()
     element = driver.find_element(By.CSS_SELECTOR,
@@ -20,7 +41,7 @@ def searchParcEx():
     element = driver.find_element(By.CSS_SELECTOR, "body")
     actions = ActionChains(driver)
     actions.move_to_element(element, 0, 0).perform()
-    driver.find_element(By.CSS_SELECTOR, ".hrJbIL #search-field__form__input").send_keys("Parc-exten")
+    driver.find_element(By.CSS_SELECTOR, "#search-field__form__input").send_keys("Parc-exten")
 
 
 def resultsAsList():
@@ -33,7 +54,7 @@ driver = setup()
 driver.get("https://duproprio.com/fr/rechercher/liste")
 driver.implicitly_wait(5)
 click_by_id(driver, "onetrust-accept-btn-handler")   # accept cookies
-click_by_class(driver, "bByjIz")
+# click_by_class(driver, "bByjIz")
 
 
 searchParcEx()
