@@ -11,6 +11,7 @@ text = ""
 
 if len(newOnes) == 0:
     text = "Rien de nouveau aujourd'hui\n"
+    #send_sms(text)
 else:
     chunks = [newOnes[i:i + 10] for i in range(0, len(newOnes), 10)]
     for chunk in chunks:

@@ -13,7 +13,7 @@ from test_twilio import send_sms
 
 def setup():
     options = ChromeOptions()
-    #options.add_argument("--headless=new")
+    options.add_argument("--headless=new")
     options.add_argument("--window-size=1000,1000")
     #options.add_argument("--start-maximized")
     options.add_argument("--disable-gpu")
