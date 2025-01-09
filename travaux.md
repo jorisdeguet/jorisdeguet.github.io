@@ -13,11 +13,17 @@ graph TD
     PlacerLaveuse --> BoucherFenetreGarage
     RefairePlomberie --> PlacerLaveuse
     RefairePlafond --> Electricité
-
+    Electricité --> IsolerMurs
+IsolerMurs --> Electricité
+    PlacerChauffeEau --> RerouterChauffGarage
+    PlacerLaveuse --> RerouterChauffGarage
+    Escalier --> PlacerLaveuse
     RerouterChauffGarage  --> BoucherFenetreGarage
-    PlacerDouche
-    PercerEvacuationSecheuse
-    PercerEvacuationSDB
+    
 
 
 ```
+
+PlacerDouche
+    PercerEvacuationSecheuse
+    PercerEvacuationSDB
