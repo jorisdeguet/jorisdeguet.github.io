@@ -4,7 +4,7 @@ graph TD
     BoucherTrousBeton --> FinirSol
     FinirSol -- Hauteur Marche --> Escalier
     BoucherFenetreGarage --> IsolerMurs
-    IsolerChFroide --> PlacerChauffeEau
+    IsolerChFroide[Isoler Chambre Froide ✓] --> PlacerChauffeEau
     PlacerChauffeEau[Placer Chaffe eau ✓] --> RefairePlomberie
 
     FinirSol --> MursInterieurs
