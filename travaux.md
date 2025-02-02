@@ -5,13 +5,13 @@ graph TD
     FinirSol -- Hauteur Marche --> Escalier
     BoucherFenetreGarage --> IsolerMurs
     IsolerChFroide --> PlacerChauffeEau
-    PlacerChauffeEau --> RefairePlomberie
+    PlacerChauffeEau[Placer Chaffe eau ✓] --> RefairePlomberie
 
     FinirSol --> MursInterieurs
     BoucherFenetreGarage -->MursInterieurs
     PlacerChauffeEau --> BoucherFenetreGarage
     PlacerLaveuse --> BoucherFenetreGarage
-    RefairePlomberie --> PlacerLaveuse
+    RefairePlomberie[Refaire Plomberie ✓] --> PlacerLaveuse
     RefairePlafond --> Electricité
     Electricité --> IsolerMurs
 IsolerMurs --> Electricité
