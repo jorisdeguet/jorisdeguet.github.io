@@ -24,6 +24,24 @@ IsolerMurs --> Electricité
 
 ```
 
+- cacher qu'on fait de l'electricité
+- cacher qu'on a condamné les fenêtres du garage
+
+juin 2 2025
+```mermaid
+graph TD
+    RefairePlafond
+    FinirSol -- Hauteur Marche --> Escalier
+    PareVapeurCoteLeandre --> FermerCloisonLéandre
+    PrevoirCablageThermostat2 --> FermerCloisonLéandre
+    FinirSol --> MursInterieurs
+    RefaireCableLumiereExterieure --> Electricité
+    RerouterChauffGarage  --> BoucherFenetreGarage
+    
+
+
+```
+
 PlacerDouche
     PercerEvacuationSecheuse
     PercerEvacuationSDB
