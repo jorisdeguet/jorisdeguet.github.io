@@ -14,7 +14,7 @@ graph TD
     RefairePlomberie[Refaire Plomberie ✓] --> PlacerLaveuse
     RefairePlafond --> Electricité
     Electricité --> IsolerMurs
-IsolerMurs --> Electricité
+    IsolerMurs --> Electricité
     PlacerChauffeEau --> RerouterChauffGarage
     PlacerLaveuse --> RerouterChauffGarage
     Escalier --> PlacerLaveuse
@@ -37,6 +37,7 @@ graph TD
     FinirSol --> MursInterieurs
     RefaireCableLumiereExterieure --> Electricité
     RerouterChauffGarage  --> BoucherFenetreGarage
+    VerifierDoubleFissureLinteauEgressLeandre
     
 
 
