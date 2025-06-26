@@ -9,7 +9,7 @@ const selectedTag = ref(null)
 
 // Charger data.json dynamiquement
 onMounted(async () => {
-  const response = await fetch('/data.json')
+  const response = await fetch('https://raw.githubusercontent.com/jorisdeguet/jorisdeguet.github.io/refs/heads/master/remiro/data.json')
   items.value = await response.json()
 })
 
