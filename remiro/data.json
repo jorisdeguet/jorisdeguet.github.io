@@ -1,0 +1,395 @@
+[
+  {
+    "nom_de_projet": "Intuitive: da Vinci",
+    "urls": [
+      "https://www.intuitive.com/en-us/products-and-services/da-vinci"
+    ],
+    "URL_de_photo": null,
+    "tags": [
+      "RAMIS",
+      "teleoperated",
+      "Commercial"
+    ],
+    "description": "Location: California, USA"
+  },
+  {
+    "nom_de_projet": "Medtronic: Hugo RAS",
+    "urls": [
+      "https://www.medtronic.com/covidien/en-au/robotic-assisted-surgery/hugo-ras-system.html"
+    ],
+    "URL_de_photo": "/images/related/medtronics-hugo.*",
+    "tags": [
+      "RAMIS",
+      "teleoperated",
+      "Commercial"
+    ],
+    "description": "Location: USA. Wheeled separate patient side manipulators, physical RCM. Surgeon’s side controllers similar to da Vinci (7-dofs, cartesian), flat panel display."
+  },
+  {
+    "nom_de_projet": "Medicaroid: Hinotori",
+    "urls": [
+      "https://www.medicaroid.com"
+    ],
+    "URL_de_photo": "/images/related/medicaroid-hinotori.*",
+    "tags": [
+      "RAMIS",
+      "teleoperated",
+      "Commercial"
+    ],
+    "description": "Location: Kobe, Japan. Four patient side manipulators, software RCM, mounted on single serial robot for positioning. Surgeon's side with fixed stereo display (ala HMD), two 7-dofs haptic arms (similar to da Vinci)."
+  },
+  {
+    "nom_de_projet": "CMR Surgical: Versius",
+    "urls": [
+      "https://cmrsurgical.com/versius"
+    ],
+    "URL_de_photo": null,
+    "tags": [
+      "RAMIS",
+      "teleoperated",
+      "Commercial"
+    ],
+    "description": "Location: UK. Modular, portable bedside units, open console, 3D HD vision, 7-dof arms."
+  },
+  {
+    "nom_de_projet": "SSII: Mantra",
+    "urls": [
+      "https://ssinnovations.com/ssi-mantra/"
+    ],
+    "URL_de_photo": "/images/related/ssi-mantra.*",
+    "tags": [
+      "RAMIS",
+      "teleoperated",
+      "Commercial"
+    ],
+    "description": "Location: Gurugram, Haryana, India. Up to 5 patient side manipulators on separate wheeled-cart, physical RCM. Surgeon's side with 3D flat panel and glasses, 7-dof haptic arms?"
+  },
+  {
+    "nom_de_projet": "Cornerstone Robotics: Sentire",
+    "urls": [
+      "https://www.csrbtx.com/en/product_center/"
+    ],
+    "URL_de_photo": "/images/related/cornerstone-sentire.*",
+    "tags": [
+      "RAMIS",
+      "teleoperated",
+      "Commercial"
+    ],
+    "description": "Location: Hong Kong. Similar to da Vinci X."
+  },
+  {
+    "nom_de_projet": "Moon surgical: Maestro",
+    "urls": [
+      "https://moonsurgical.com/maestro-system"
+    ],
+    "URL_de_photo": "/images/related/moon-maestro.*",
+    "tags": [
+      "RAMIS",
+      "collaborative control",
+      "autonomous",
+      "Commercial"
+    ],
+    "description": "Location: Paris, France/ San Carlos, California, USA. ScoPilot (similar to AESOP) assistant holding endoscope for manual surgery."
+  },
+  {
+    "nom_de_projet": "Revolve Surgical: R1",
+    "urls": [
+      "https://www.revolvesurgical.com"
+    ],
+    "URL_de_photo": "/images/related/revolve-r1.*",
+    "tags": [
+      "RAMIS",
+      "collaborative control",
+      "Commercial"
+    ],
+    "description": "Wristed instruments held by mechanical RCMs. Surgeon holds the instruments using wristed handle."
+  },
+  {
+    "nom_de_projet": "Vicarious Surgical Inc",
+    "urls": [
+      "https://www.vicarioussurgical.com/"
+    ],
+    "URL_de_photo": "/images/related/vicarious.*",
+    "tags": [
+      "RAMIS",
+      "teleoperated",
+      "Commercial"
+    ],
+    "description": "Location: Waltham, Massachussets, USA. Surgeon’s side controllers in cartesian space (off-the-shelf ForceDimension?), flat panel display. Patient side single port, two manipulators, folded stereo camera."
+  },
+  {
+    "nom_de_projet": "Asensus Surgical: Senhance, LUNA",
+    "urls": [
+      "https://www.asensus.com/senhance"
+    ],
+    "URL_de_photo": null,
+    "tags": [
+      "RAMIS",
+      "teleoperated",
+      "Commercial"
+    ],
+    "description": "Location: Durham, North Carolina, USA. Wheeled separate patient side manipulators, software RCM. Senhance had surgeon’s side manipulator emulate laparoscopic instruments (not cartesian). LUNA seems use free hand system (optical or magnetic tracking?), flat panel display."
+  },
+  {
+    "nom_de_projet": "Titan Medical: Enos",
+    "urls": [
+      "https://titanmedicalinc.com/"
+    ],
+    "URL_de_photo": "/images/related/titan-enos.*",
+    "tags": [
+      "RAMIS",
+      "Commercial"
+    ],
+    "description": "Location: Toronto, Ontario, Canada. Surgeon’s side controllers in cartesian space (off-the-shelf ForceDimension?), flat panel display. Patient side single port, two manipulators, articulated stereo camera."
+  },
+  {
+    "nom_de_projet": "Johnson & Johnson MedTech: Ottava",
+    "urls": [
+      "https://thenext.jnjmedtech.com/surgical-robotics"
+    ],
+    "URL_de_photo": null,
+    "tags": [
+      "RAMIS",
+      "teleoperated",
+      "Commercial"
+    ],
+    "description": "Table-mounted separate patient side serial manipulators, software RCM Based on snapshots, stereo display with eye piece (ala da Vinci)."
+  },
+  {
+    "nom_de_projet": "Virtuoso Surgical: Virtuoso",
+    "urls": [
+      "https://virtuososurgical.net/"
+    ],
+    "URL_de_photo": "/images/related/virtuoso.*",
+    "tags": [
+      "RAMIS",
+      "teleoperated",
+      "Commercial"
+    ],
+    "description": "Location: Nashville, Tennessee, USA. Patient side single port, concentric tubes, mono camera. Surgeon’s side manipulator emulate laparoscopic instruments (not cartesian)."
+  },
+  {
+    "nom_de_projet": "Rob Surgical: Bitrack",
+    "urls": [
+      "https://www.robsurgical.com/"
+    ],
+    "URL_de_photo": "/images/related/rob-surgical-bitrack.*",
+    "tags": [
+      "RAMIS",
+      "teleoperated",
+      "Commercial"
+    ],
+    "description": "Barcelona, Spain. Up to four patient manipulators, software RCM, uses off-the-shelf instruments (no articulated wrist?). Surgeon's side use 2 haptic devices and flat panel display."
+  },
+  {
+    "nom_de_projet": "Revo Surgical: Revo-i",
+    "urls": [
+      "http://revosurgical.com"
+    ],
+    "URL_de_photo": "/images/related/revo-i.*",
+    "tags": [
+      "RAMIS",
+      "teleoperated",
+      "Commercial"
+    ],
+    "description": "Seoul, South Korea. Similar to da Vinci Si."
+  },
+  {
+    "nom_de_projet": "Surgical Science: FlexVR",
+    "urls": [
+      "https://surgicalscience.com/simulators/flexvr/"
+    ],
+    "URL_de_photo": null,
+    "tags": [
+      "RAMIS simulator",
+      "Simulation"
+    ],
+    "description": "Location: Göteborg, Sweden."
+  },
+  {
+    "nom_de_projet": "ForceDimension: Sigma, Omega",
+    "urls": [
+      "https://www.forcedimension.com"
+    ],
+    "URL_de_photo": "/images/related/force-dimension.*",
+    "tags": [
+      "haptic devices",
+      "Haptic systems"
+    ],
+    "description": "Location: Switzerland. Haptic devices using parallel platform for position, gripper is motorized, up to 7 dofs motorized."
+  },
+  {
+    "nom_de_projet": "Haption: Virtuoso",
+    "urls": [
+      "https://www.haption.com"
+    ],
+    "URL_de_photo": "/images/related/haption.*",
+    "tags": [
+      "haptic devices",
+      "Haptic systems"
+    ],
+    "description": "Location: France. Haptic devices using serial arm, up to 6 dofs motorized."
+  },
+  {
+    "nom_de_projet": "Quanser: HD2",
+    "urls": [
+      "https://www.quanser.com/products/hd2-high-definition-haptic-device"
+    ],
+    "URL_de_photo": "/images/related/quanser.*",
+    "tags": [
+      "Haptic systems"
+    ],
+    "description": "Location: Ontario, Canada."
+  },
+  {
+    "nom_de_projet": "Noah Medical: Galaxy",
+    "urls": [
+      "https://www.noahmed.com/"
+    ],
+    "URL_de_photo": null,
+    "tags": [
+      "flexible robot",
+      "Bronchoscopy"
+    ],
+    "description": "Location: California, USA. Used with C-Arm/CBCT."
+  },
+  {
+    "nom_de_projet": "Intuitive: Ion",
+    "urls": [
+      "https://www.intuitive.com/en-us/products-and-services/da-vinci"
+    ],
+    "URL_de_photo": null,
+    "tags": [
+      "flexible robot",
+      "Bronchoscopy"
+    ],
+    "description": "Location: California, USA. Used with C-Arm/CBCT."
+  },
+  {
+    "nom_de_projet": "Johnson & Johnson MedTech: Monarch Quest",
+    "urls": [
+      "https://thenext.jnjmedtech.com"
+    ],
+    "URL_de_photo": null,
+    "tags": [
+      "flexible robot",
+      "Bronchoscopy"
+    ],
+    "description": "Location: New Jersey, USA. Used with C-Arm/CBCT."
+  },
+  {
+    "nom_de_projet": "Stryker: Mako",
+    "urls": [
+      "https://www.stryker.com/us/en/joint-replacement/systems/Mako_SmartRobotics_Overview.html"
+    ],
+    "URL_de_photo": null,
+    "tags": [
+      "Open orthopedic surgery",
+      "knee",
+      "Orthopedic"
+    ],
+    "description": ""
+  },
+  {
+    "nom_de_projet": "Johnson & Johnson: Velys",
+    "urls": [
+      "https://www.jnjmedtech.com/en-US/patient/velys"
+    ],
+    "URL_de_photo": null,
+    "tags": [
+      "Open orthopedic surgery",
+      "knee",
+      "hip",
+      "Orthopedic"
+    ],
+    "description": ""
+  },
+  {
+    "nom_de_projet": "Think Surgical: TMINI",
+    "urls": [
+      "https://thinksurgical.com/"
+    ],
+    "URL_de_photo": null,
+    "tags": [
+      "Open orthopedic surgery",
+      "knee",
+      "Orthopedic"
+    ],
+    "description": "Location: Freemont, California, USA."
+  },
+  {
+    "nom_de_projet": "Curexo: Cuvis {joint,spine}",
+    "urls": [
+      "https://www.curexo.com/"
+    ],
+    "URL_de_photo": null,
+    "tags": [
+      "Open surgery",
+      "knee",
+      "spine",
+      "Orthopedic"
+    ],
+    "description": "Location: Seoul, South Korea. Different robotic systems for knee and spine."
+  },
+  {
+    "nom_de_projet": "eCential Robotics",
+    "urls": [
+      "https://www.ecential-robotics.com/en-us"
+    ],
+    "URL_de_photo": null,
+    "tags": [
+      "Open surgery",
+      "Orthopedic"
+    ],
+    "description": "Location: Grenoble, France. Seems to use Kuka medical arm and optical tracker."
+  },
+  {
+    "nom_de_projet": "AcuSurgical: Luca",
+    "urls": [
+      "https://acusurgical.com"
+    ],
+    "URL_de_photo": null,
+    "tags": [
+      "Eye surgery",
+      "teleoperated",
+      "Other"
+    ],
+    "description": "Location: Montpellier, France. 2 patient side manipulators."
+  },
+  {
+    "nom_de_projet": "MMI: Symani",
+    "urls": [
+      "https://www.mmimicro.com/our-technology/symani-surgical-system/"
+    ],
+    "URL_de_photo": null,
+    "tags": [
+      "Open microsurgery",
+      "Other"
+    ],
+    "description": "Location: Jacksonville, Florida, USA. 2 patient side manipulators with wrist (7 dofs), direct line of sight, free hand joysticks?"
+  },
+  {
+    "nom_de_projet": "RavenII",
+    "urls": [
+      "https://robotsguide.com/robots/ravensurgical"
+    ],
+    "URL_de_photo": null,
+    "tags": [
+      "RAMIS",
+      "Research systems"
+    ],
+    "description": "Patient side, physical RCM, compatible with da Vinci instruments. Surgeon’s side uses off-the-shelf haptic devices (ForceDimension). No camera nor display."
+  },
+  {
+    "nom_de_projet": "SuPER",
+    "urls": [
+      "https://www.kinovarobotics.com/resource/enhancing-robotic-surgery-with-a-plug-and-play-multi-robot-surgical-platforms"
+    ],
+    "URL_de_photo": null,
+    "tags": [
+      "RAMIS",
+      "Research systems"
+    ],
+    "description": "da Vinci S/Si instruments mounted on serial manipulator (Kinova). Surgeon’s side uses off-the-shelf haptic devices (ForceDimension). No camera nor display."
+  }
+]
