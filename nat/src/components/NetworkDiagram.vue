@@ -40,7 +40,7 @@
 
         <!-- Left side: Local Network IP (rotated 90°) -->
         <text x="370" y="225" text-anchor="middle" font-size="11" font-weight="600" fill="#64748b" transform="rotate(-90 370 225)">
-          🏠 Réseau local: 10.0.0.0/24
+          🏠 IP local: 10.0.0.1
         </text>
 
         <!-- Right side: Public IP (rotated 90°) -->
@@ -138,25 +138,39 @@
         </div>
       </div>
 
-      <div class="layer-section https-layer" v-if="currentStep > 0">
+      <div class="layer-section https-layer" v-if="currentStep >= 1">
         <div class="layer-header">🔹 HTTPS</div>
         <div class="layer-content">
-          <div class="detail-row">
-            <span class="label">URL:</span>
-            <span class="value">monsuperserveur.com</span>
+          <!-- Show encrypted content for specific steps -->
+          <div v-if="[2, 3, 4, 6, 7, 8].includes(currentStep)" class="encrypted-content">
+            <div class="detail-row">
+              <span class="label">Payload (AES-256):</span>
+              <span class="value encrypted-text">{{ encryptedPayload }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="label">État:</span>
+              <span class="value">🔐 Chiffré en transit</span>
+            </div>
           </div>
-          <div class="detail-row">
-            <span class="label">Méthode:</span>
-            <span class="value">GET</span>
-          </div>
-          <div class="detail-row">
-            <span class="label">État:</span>
-            <span class="value">🔒 Encrypté</span>
+          <!-- Show normal content for other steps -->
+          <div v-else>
+            <div class="detail-row">
+              <span class="label">URL:</span>
+              <span class="value">monsuperserveur.com</span>
+            </div>
+            <div class="detail-row">
+              <span class="label">Méthode:</span>
+              <span class="value">GET</span>
+            </div>
+            <div class="detail-row">
+              <span class="label">État:</span>
+              <span class="value">🔒 Encrypté</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="layer-section tcp-layer" v-if="currentStep > 0">
+      <div class="layer-section tcp-layer" v-if="currentStep >= 1">
         <div class="layer-header">🔹 TCP</div>
         <div class="layer-content">
           <div class="detail-row">
@@ -170,7 +184,7 @@
         </div>
       </div>
 
-      <div class="layer-section ip-layer" v-if="currentStep > 0">
+      <div class="layer-section ip-layer" v-if="currentStep >= 1">
         <div class="layer-header">🔹 IP</div>
         <div class="layer-content">
           <div class="detail-row">
@@ -194,33 +208,46 @@ const selected = ref('A')
 const natTable = reactive([])
 const running = ref(false)
 const visiblePacket = ref(false)
-const packetX = ref(0)
-const packetY = ref(0)
+const packetX = ref(150)
+const packetY = ref(150)
 const statusMessage = ref('')
 const highlightedEntry = ref(-1)
 const paused = ref(false)
 const currentStep = ref(0)
-const totalSteps = ref(8)
+const totalSteps = ref(10)
 const packetInfo = reactive({
-  srcIP: '',
-  srcPort: '',
-  destIP: '',
-  destPort: ''
+  srcIP: '10.0.0.2',
+  srcPort: '40000',
+  destIP: '203.0.113.5',
+  destPort: '443'
 })
 
 let publicPortCounter = 40000
 let resumeAnimation = null
+let encryptedPayload = '' // Store generated encrypted content
+
+// Function to generate fake encrypted content (looks like AES encrypted data)
+function generateFakeEncrypted() {
+  const chars = '0123456789ABCDEF'
+  let result = ''
+  for (let i = 0; i < 64; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return result
+}
 
 // Step descriptions
 const stepDescriptions = {
-  1: "Le laptop envoie une requête HTTPS au serveur distant. Le paquet contient l'IP source privée (10.0.0.x) et un port source aléatoire. Il traverse d'abord le réseau local pour atteindre le routeur.",
-  2: "Le routeur analyse le paquet sortant et crée une nouvelle entrée dans sa table NAT. Il associe l'IP privée et le port source à un port public unique. Cette mapping permet de router correctement les réponses.",
-  3: "Le routeur réécrit l'en-tête IP du paquet : il remplace l'IP source privée (10.0.0.x) par son IP publique (198.51.100.10) et change le port source. Le paquet modifié est envoyé sur Internet.",
-  4: "Le paquet traverse Internet et arrive au serveur de destination (203.0.113.5:443). Le serveur ne voit que l'IP publique du routeur, pas l'IP privée du laptop. Il prépare une réponse.",
-  5: "Le serveur envoie sa réponse HTTPS. L'IP source devient 203.0.113.5:443 et l'IP destination est l'IP publique du routeur (198.51.100.10) avec le port public mappé. Le paquet repart vers Internet.",
-  6: "Le paquet de réponse arrive au routeur. Le routeur doit maintenant déterminer quel laptop du réseau local doit recevoir ce paquet en consultant sa table NAT.",
-  7: "Le routeur cherche dans sa table NAT : il trouve la correspondance entre le port public destination et l'IP privée + port d'origine. Cela lui permet d'identifier le bon laptop destinataire.",
-  8: "Le routeur réécrit l'en-tête IP : il remplace l'IP destination publique par l'IP privée du laptop (10.0.0.x) et restaure le port source original. Le paquet est délivré au bon laptop qui reçoit la réponse HTTPS."
+  1: "Le laptop prépare une requête HTTPS. Il crée un paquet contenant l'URL de destination (monsuperserveur.com), la méthode HTTP (GET). Le paquet n'a pas encore quitté le laptop.",
+  2: "Le laptop envoie une requête HTTPS au serveur distant. Le paquet contient l'IP source privée (10.0.0.x) et un port source aléatoire. Il traverse d'abord le réseau local pour atteindre le routeur.",
+  3: "Le routeur analyse le paquet sortant et crée une nouvelle entrée dans sa table NAT. Il associe l'IP privée et le port source à un port public unique. Cette mapping permet de router correctement les réponses.",
+  4: "Le routeur réécrit l'en-tête IP du paquet : il remplace l'IP source privée (10.0.0.x) par son IP publique (198.51.100.10) et change le port source. Le paquet modifié est envoyé sur Internet.",
+  5: "Le paquet traverse Internet et arrive au serveur de destination (203.0.113.5:443). Le serveur ne voit que l'IP publique du routeur, pas l'IP privée du laptop. Il prépare une réponse.",
+  6: "Le serveur envoie sa réponse HTTPS. L'IP source devient 203.0.113.5:443 et l'IP destination est l'IP publique du routeur (198.51.100.10) avec le port public mappé. Le paquet repart vers Internet.",
+  7: "Le paquet de réponse arrive au routeur. Le routeur doit maintenant déterminer quel laptop du réseau local doit recevoir ce paquet en consultant sa table NAT.",
+  8: "Le routeur cherche dans sa table NAT : il trouve la correspondance entre le port public destination et l'IP privée + port d'origine. Cela lui permet d'identifier le bon laptop destinataire.",
+  9: "Le routeur réécrit l'en-tête IP : il remplace l'IP destination publique par l'IP privée du laptop (10.0.0.x) et restaure le port source original. Le paquet est délivré au bon laptop qui reçoit la réponse HTTPS.",
+  10: "✅ La requête HTTPS est complétée avec succès. Le laptop a reçu la réponse du serveur distant via le NAT du routeur."
 }
 
 // SVG coordinates for devices
@@ -297,14 +324,28 @@ async function sendRequest() {
   if (running.value) return
   running.value = true
   highlightedEntry.value = -1
-  currentStep.value = 0
+  currentStep.value = 1
+  encryptedPayload = generateFakeEncrypted() // Generate encrypted content at the start
 
   const srcIP = selected.value === 'A' ? '10.0.0.2' : '10.0.0.3'
   const srcPort = randPort()
   const srcPos = selected.value === 'A' ? positions.laptopA : positions.laptopB
 
-  // 1) Laptop to router
+  // 1) Laptop preparing request
   currentStep.value = 1
+  packetInfo.srcIP = srcIP
+  packetInfo.srcPort = srcPort.toString()
+  packetInfo.destIP = '203.0.113.5'
+  packetInfo.destPort = '443'
+  statusMessage.value = `${srcIP}: Préparation de la requête HTTPS...`
+  visiblePacket.value = true
+  packetX.value = srcPos.x
+  packetY.value = srcPos.y
+  await new Promise(r => setTimeout(r, 600))
+  await waitForStep()
+
+  // 2) Laptop to router
+  currentStep.value = 2
   packetInfo.srcIP = srcIP
   packetInfo.srcPort = srcPort.toString()
   packetInfo.destIP = '203.0.113.5'
@@ -314,8 +355,8 @@ async function sendRequest() {
   await new Promise(r => setTimeout(r, 300))
   await waitForStep()
 
-  // 2) Router creates NAT entry
-  currentStep.value = 2
+  // 3) Router creates NAT entry
+  currentStep.value = 3
   const publicPort = publicPortCounter++
   const entryIndex = natTable.length
   natTable.push({
@@ -328,8 +369,8 @@ async function sendRequest() {
   await new Promise(r => setTimeout(r, 700))
   await waitForStep()
 
-  // 3) Router to cloud (NAT translation applied)
-  currentStep.value = 3
+  // 4) Router to cloud (NAT translation applied)
+  currentStep.value = 4
   packetInfo.srcIP = '198.51.100.10'
   packetInfo.srcPort = publicPort.toString()
   packetInfo.destIP = '203.0.113.5'
@@ -338,15 +379,15 @@ async function sendRequest() {
   await animatePath(linearPath(positions.router, positions.cloud), 8)
   await waitForStep()
 
-  // 4) Cloud to server
-  currentStep.value = 4
+  // 5) Cloud to server
+  currentStep.value = 5
   statusMessage.value = `198.51.100.10:${publicPort} → Server (203.0.113.5:443)`
   await animatePath(linearPath(positions.cloud, positions.server), 8)
   await new Promise(r => setTimeout(r, 600))
   await waitForStep()
 
-  // 5) Server response (swap src/dest)
-  currentStep.value = 5
+  // 6) Server response (swap src/dest)
+  currentStep.value = 6
   packetInfo.srcIP = '203.0.113.5'
   packetInfo.srcPort = '443'
   packetInfo.destIP = '198.51.100.10'
@@ -355,21 +396,21 @@ async function sendRequest() {
   await animatePath(linearPath(positions.server, positions.cloud), 8)
   await waitForStep()
 
-  // 6) Cloud to router
-  currentStep.value = 6
+  // 7) Cloud to router
+  currentStep.value = 7
   await animatePath(linearPath(positions.cloud, positions.router), 8)
   await new Promise(r => setTimeout(r, 400))
   await waitForStep()
 
-  // 7) Router lookup NAT table
-  currentStep.value = 7
+  // 8) Router lookup NAT table
+  currentStep.value = 8
   highlightedEntry.value = entryIndex
   statusMessage.value = `Routeur: lookup NAT table (port ${publicPort} → ${srcIP}:${srcPort})`
   await new Promise(r => setTimeout(r, 900))
   await waitForStep()
 
-  // 8) Router to destination laptop (NAT reverse translation)
-  currentStep.value = 8
+  // 9) Router to destination laptop (NAT reverse translation)
+  currentStep.value = 9
   packetInfo.srcIP = '203.0.113.5'
   packetInfo.srcPort = '443'
   packetInfo.destIP = srcIP
@@ -378,6 +419,8 @@ async function sendRequest() {
   await animatePath(bezierPath(positions.router, srcPos), 8)
   await new Promise(r => setTimeout(r, 700))
 
+  // 10) Completion
+  currentStep.value = 10
   statusMessage.value = `✅ Requête HTTPS complétée avec succès!`
   await new Promise(r => setTimeout(r, 1000))
 
@@ -635,6 +678,31 @@ function resetTable() {
   background: #e0f2fe;
   padding: 2px 8px;
   border-radius: 4px;
+}
+
+.encrypted-content {
+  padding: 8px 0;
+}
+
+.encrypted-text {
+  font-family: 'Courier New', monospace !important;
+  font-size: 0.75rem !important;
+  letter-spacing: 0.5px;
+  word-break: break-all;
+  background: #1f2937;
+  color: white !important;
+  padding: 8px !important;
+  border-radius: 4px;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.encrypted-label {
+  color: white !important;
+}
+
+.encrypted-state {
+  color: white !important;
 }
 
 .step-description {
