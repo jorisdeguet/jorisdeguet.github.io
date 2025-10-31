@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "914241253175",
+    "project_id": "supertache-36df7",
+    "storage_bucket": "supertache-36df7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:914241253175:android:2f44fa2f123dd34ba1f4b2",
+        "android_client_info": {
+          "package_name": "com.supertache.supertache"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAZvedJvqMwbVImuqRl3Df5vQXitd3tLRY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
