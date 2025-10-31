@@ -14,8 +14,6 @@ class _SignupScreenState extends State<SignupScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _nomController = TextEditingController();
-  final _prenomController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -25,8 +23,6 @@ class _SignupScreenState extends State<SignupScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _nomController.dispose();
-    _prenomController.dispose();
     super.dispose();
   }
 
@@ -38,8 +34,6 @@ class _SignupScreenState extends State<SignupScreen> {
         await authService.signUpWithEmailAndPassword(
           _emailController.text.trim(),
           _passwordController.text,
-          _nomController.text.trim(),
-          _prenomController.text.trim(),
         );
         if (mounted) {
           Navigator.pop(context);
@@ -84,36 +78,6 @@ class _SignupScreenState extends State<SignupScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextFormField(
-                  controller: _prenomController,
-                  decoration: const InputDecoration(
-                    labelText: 'Prénom',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Veuillez entrer votre prénom';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _nomController,
-                  decoration: const InputDecoration(
-                    labelText: 'Nom',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person_outline),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Veuillez entrer votre nom';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
                 TextFormField(
                   controller: _emailController,
                   decoration: const InputDecoration(

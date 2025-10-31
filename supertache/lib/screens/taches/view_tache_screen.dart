@@ -6,10 +6,17 @@ import '../../models/groupe.dart';
 import '../../models/enseignant.dart';
 import '../../widgets/app_drawer.dart';
 
-class ViewTacheScreen extends StatelessWidget {
+class ViewTacheScreen extends StatefulWidget {
   final String tacheId;
 
   const ViewTacheScreen({super.key, required this.tacheId});
+
+  @override
+  State<ViewTacheScreen> createState() => _ViewTacheScreenState();
+}
+
+class _ViewTacheScreenState extends State<ViewTacheScreen> {
+  bool _enseignantsExpanded = true;
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +40,7 @@ class ViewTacheScreen extends StatelessWidget {
       ),
       drawer: const AppDrawer(),
       body: FutureBuilder<Tache?>(
-        future: firestoreService.getTache(tacheId),
+        future: firestoreService.getTache(widget.tacheId),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -95,70 +102,116 @@ class ViewTacheScreen extends StatelessWidget {
 
               // Enseignants
               Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.people, color: Colors.blue),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Enseignants (${tache.enseignantEmails.length})',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                        ],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _enseignantsExpanded = !_enseignantsExpanded;
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.people, color: Colors.blue),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Enseignants (${tache.enseignantEmails.length})',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const Spacer(),
+                            Icon(
+                              _enseignantsExpanded
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 12),
+                    ),
+                    if (_enseignantsExpanded) ...[
+                      const Divider(height: 1),
                       FutureBuilder<List<Enseignant>>(
                         future: firestoreService.getEnseignantsByEmails(tache.enseignantEmails),
                         builder: (context, ensSnapshot) {
                           if (ensSnapshot.connectionState == ConnectionState.waiting) {
-                            return const CircularProgressIndicator();
+                            return const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Center(child: CircularProgressIndicator()),
+                            );
                           }
 
                           final enseignants = ensSnapshot.data ?? [];
-                          return Column(
-                            children: tache.enseignantEmails.map((email) {
-                              final enseignant = enseignants.firstWhere(
-                                (e) => e.email == email,
-                                orElse: () => Enseignant(
-                                  id: '',
-                                  nom: '',
-                                  prenom: '',
-                                  email: email,
-                                ),
-                              );
+                          
+                          // Créer une liste complète avec tous les emails
+                          final enseignantsList = tache.enseignantEmails.map((email) {
+                            final enseignant = enseignants.firstWhere(
+                              (e) => e.email == email,
+                              orElse: () => Enseignant(
+                                id: '',
+                                email: email,
+                              ),
+                            );
+                            return enseignant;
+                          }).toList();
+                          
+                          // Trier par nom de famille (dérivé de l'email)
+                          enseignantsList.sort((a, b) {
+                            final nameA = a.displayName.split('.').last.toLowerCase();
+                            final nameB = b.displayName.split('.').last.toLowerCase();
+                            return nameA.compareTo(nameB);
+                          });
 
-                              return ListTile(
-                                leading: CircleAvatar(
-                                  child: Text(
-                                    enseignant.prenom.isNotEmpty
-                                        ? enseignant.prenom.substring(0, 1)
-                                        : '?',
+                          return Column(
+                            children: [
+                              ...enseignantsList.map((enseignant) {
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                    child: Text(
+                                      enseignant.displayName.isNotEmpty
+                                          ? enseignant.displayName.substring(0, 1).toUpperCase()
+                                          : '?',
+                                    ),
                                   ),
+                                  title: Text(
+                                    enseignant.id.isNotEmpty
+                                        ? enseignant.displayName
+                                        : 'Compte non créé',
+                                  ),
+                                  subtitle: Text(enseignant.email),
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.red),
+                                    onPressed: () => _confirmRemoveEnseignant(
+                                      context,
+                                      tache,
+                                      enseignant.email,
+                                    ),
+                                  ),
+                                );
+                              }),
+                              const Divider(height: 1),
+                              ListTile(
+                                leading: const CircleAvatar(
+                                  child: Icon(Icons.add),
                                 ),
-                                title: Text(
-                                  enseignant.nom.isNotEmpty
-                                      ? enseignant.nomComplet
-                                      : 'Compte non créé',
-                                ),
-                                subtitle: Text(email),
-                              );
-                            }).toList(),
+                                title: const Text('Ajouter un enseignant'),
+                                onTap: () => _showAddEnseignantDialog(context, tache),
+                              ),
+                            ],
                           );
                         },
                       ),
                     ],
-                  ),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
 
               // Groupes
               StreamBuilder<List<Groupe>>(
-                stream: firestoreService.getGroupesByTache(tacheId),
+                stream: firestoreService.getGroupesByTache(widget.tacheId),
                 builder: (context, groupeSnapshot) {
                   if (groupeSnapshot.connectionState == ConnectionState.waiting) {
                     return const Card(
@@ -295,7 +348,7 @@ class ViewTacheScreen extends StatelessWidget {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
               final firestoreService = Provider.of<FirestoreService>(context, listen: false);
-              await firestoreService.deleteTache(tacheId);
+              await firestoreService.deleteTache(widget.tacheId);
               if (context.mounted) {
                 Navigator.pop(context); // Fermer le dialog
                 Navigator.pop(context); // Retourner à la liste
@@ -305,6 +358,111 @@ class ViewTacheScreen extends StatelessWidget {
               }
             },
             child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmRemoveEnseignant(BuildContext context, Tache tache, String email) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Retirer l\'enseignant'),
+        content: Text(
+          'Voulez-vous retirer $email de cette tâche ?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+              final updatedEmails = List<String>.from(tache.enseignantEmails)
+                ..remove(email);
+              
+              final updatedTache = tache.copyWith(enseignantEmails: updatedEmails);
+              await firestoreService.updateTache(updatedTache);
+              
+              if (context.mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Enseignant retiré')),
+                );
+                setState(() {}); // Forcer le rebuild
+              }
+            },
+            child: const Text('Retirer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddEnseignantDialog(BuildContext context, Tache tache) {
+    final emailController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ajouter un enseignant'),
+        content: TextField(
+          controller: emailController,
+          decoration: const InputDecoration(
+            labelText: 'Email',
+            hintText: 'enseignant@example.com',
+          ),
+          keyboardType: TextInputType.emailAddress,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final email = emailController.text.trim().toLowerCase();
+              
+              if (email.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Veuillez entrer un email')),
+                );
+                return;
+              }
+              
+              if (!email.contains('@')) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Email invalide')),
+                );
+                return;
+              }
+              
+              if (tache.enseignantEmails.contains(email)) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Cet enseignant est déjà dans la liste')),
+                );
+                return;
+              }
+              
+              final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+              final updatedEmails = List<String>.from(tache.enseignantEmails)
+                ..add(email);
+              
+              final updatedTache = tache.copyWith(enseignantEmails: updatedEmails);
+              await firestoreService.updateTache(updatedTache);
+              
+              if (context.mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Enseignant ajouté')),
+                );
+                setState(() {}); // Forcer le rebuild
+              }
+            },
+            child: const Text('Ajouter'),
           ),
         ],
       ),

@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../models/enseignant.dart';
-import '../screens/home_screen.dart';
 import '../screens/cours/cours_list_screen.dart';
 import '../screens/profile_screen.dart';
 
@@ -34,15 +33,10 @@ class AppDrawer extends StatelessWidget {
 
           final enseignant = snapshot.data;
           // Utiliser l'email de l'utilisateur Firebase si le profil n'existe pas encore
-          final displayName = enseignant?.nomComplet ?? currentUser?.email?.split('@')[0] ?? 'Utilisateur';
+          final displayName = enseignant?.displayName ?? currentUser?.email?.split('@')[0] ?? 'Utilisateur';
           final email = enseignant?.email ?? currentUser?.email ?? '';
           
-          String initial = '?';
-          if (enseignant != null && enseignant.prenom.isNotEmpty) {
-            initial = enseignant.prenom.substring(0, 1).toUpperCase();
-          } else if (email.isNotEmpty) {
-            initial = email.substring(0, 1).toUpperCase();
-          }
+          final initial = email.isNotEmpty ? email[0].toUpperCase() : '?';
           
           return ListView(
             padding: EdgeInsets.zero,

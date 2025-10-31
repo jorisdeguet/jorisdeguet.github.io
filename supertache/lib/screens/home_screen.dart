@@ -19,7 +19,7 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mes tâches'),
+        title: const Text('Toutes les tâches'),
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
@@ -29,7 +29,7 @@ class HomeScreen extends StatelessWidget {
       ),
       drawer: const AppDrawer(),
       body: StreamBuilder<List<Tache>>(
-        stream: firestoreService.getTachesForEnseignant(currentUserId!),
+        stream: firestoreService.getAllTaches(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -54,7 +54,7 @@ class HomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Vous ne faites partie d\'aucune tâche pour le moment',
+                    'Aucune tâche n\'a été créée pour le moment',
                     style: TextStyle(color: Colors.grey),
                   ),
                   const SizedBox(height: 32),

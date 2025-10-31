@@ -44,8 +44,6 @@ class AuthService {
           // Créer un document enseignant avec des valeurs par défaut
           final enseignant = Enseignant(
             id: result.user!.uid,
-            nom: result.user!.displayName?.split(' ').last ?? '',
-            prenom: result.user!.displayName?.split(' ').first ?? '',
             email: email,
           );
           await _firestoreService.createEnseignant(enseignant);
@@ -62,8 +60,6 @@ class AuthService {
   Future<User?> signUpWithEmailAndPassword(
     String email,
     String password,
-    String nom,
-    String prenom,
   ) async {
     try {
       // Par défaut, on garde la session pour les nouveaux utilisateurs
@@ -77,8 +73,6 @@ class AuthService {
       if (result.user != null) {
         final enseignant = Enseignant(
           id: result.user!.uid,
-          nom: nom,
-          prenom: prenom,
           email: email,
         );
         await _firestoreService.createEnseignant(enseignant);
@@ -95,18 +89,7 @@ class AuthService {
     await _auth.sendPasswordResetEmail(email: email);
   }
 
-  // Mettre à jour le profil de l'enseignant
-  Future<void> updateEnseignantProfile(String nom, String prenom) async {
-    if (currentUser != null) {
-      final enseignant = Enseignant(
-        id: currentUser!.uid,
-        nom: nom,
-        prenom: prenom,
-        email: currentUser!.email!,
-      );
-      await _firestoreService.updateEnseignant(enseignant);
-    }
-  }
+
 
   Future<void> signOut() async {
     await _auth.signOut();
