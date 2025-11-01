@@ -1,5 +1,28 @@
 # Changelog - Dernières modifications
 
+## Écrans d'authentification - Largeur limitée
+
+### Modifications du 1er novembre 2025
+
+**Problème**: Sur les grands écrans, les champs de connexion et d'inscription s'étiraient sur toute la largeur, rendant l'interface peu ergonomique.
+
+**Solution**: Ajout d'une contrainte de largeur maximale de 600 pixels pour les formulaires.
+
+### Fichiers modifiés
+- `lib/screens/auth/login_screen.dart`
+  - Ajout de `ConstrainedBox(constraints: BoxConstraints(maxWidth: 600))`
+  - Les champs de connexion ne dépassent plus 600 pixels de largeur
+  - Centrage automatique sur les grands écrans
+
+- `lib/screens/auth/signup_screen.dart`
+  - Même modification appliquée à l'écran d'inscription
+  - Cohérence visuelle entre les deux écrans d'authentification
+
+### Résultat
+- ✅ Sur mobile: aucun changement visible (largeur déjà limitée)
+- ✅ Sur tablette/desktop: formulaires limités à 600px et centrés
+- ✅ Meilleure lisibilité et ergonomie sur grands écrans
+
 ## Navigation et Routes
 
 ### Problème résolu
