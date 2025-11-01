@@ -233,11 +233,17 @@ class _CreateRepartitionScreenState extends State<CreateRepartitionScreen> {
         throw Exception('Aucun enseignant trouvé pour cette tâche');
       }
 
-      // Générer la répartition avec l'algorithme génétique
-      final repartition = await _geneticService.generateRepartition(
+      // Créer une répartition vide
+      final repartitionId = 'rep_${DateTime.now().millisecondsSinceEpoch}';
+      final repartition = Repartition(
+        id: repartitionId,
+        nom: 'Répartition ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
         tacheId: widget.tacheId,
-        groupes: groupes,
-        enseignants: enseignantsList,
+        dateCreation: DateTime.now(),
+        allocations: {for (var e in enseignantsList) e.id: <String>[]},
+        groupesNonAlloues: groupes.map((g) => g.id).toList(),
+        estValide: false,
+        methode: 'genetique',
       );
 
       // Sauvegarder la répartition
@@ -247,13 +253,9 @@ class _CreateRepartitionScreenState extends State<CreateRepartitionScreen> {
 
       // Afficher un message de succès
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            repartition.estValide
-                ? 'Répartition valide générée avec succès!'
-                : 'Répartition générée (non optimale)',
-          ),
-          backgroundColor: repartition.estValide ? Colors.green : Colors.orange,
+        const SnackBar(
+          content: Text('Répartition créée avec succès!'),
+          backgroundColor: Colors.green,
         ),
       );
 

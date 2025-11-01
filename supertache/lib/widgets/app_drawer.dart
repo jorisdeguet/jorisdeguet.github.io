@@ -5,6 +5,7 @@ import '../services/firestore_service.dart';
 import '../models/enseignant.dart';
 import '../screens/cours/cours_list_screen.dart';
 import '../screens/profile_screen.dart';
+import '../screens/preferences/enseignant_preferences_screen.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -94,6 +95,22 @@ class AppDrawer extends StatelessWidget {
                       MaterialPageRoute(
                         builder: (context) => const ProfileScreen(),
                         settings: const RouteSettings(name: '/profile'),
+                      ),
+                    );
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.tune),
+                title: const Text('Mes préférences'),
+                onTap: () {
+                  Navigator.pop(context);
+                  if (ModalRoute.of(context)?.settings.name != '/preferences') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const EnseignantPreferencesScreen(),
+                        settings: const RouteSettings(name: '/preferences'),
                       ),
                     );
                   }

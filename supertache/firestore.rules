@@ -1,8 +1,27 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Règle par défaut: authentification requise
     match /{document=**} {
       allow read, write: if request.auth != null;
+    }
+    
+    // Préférences des enseignants
+    match /enseignant_preferences/{enseignantId} {
+      // Un enseignant peut lire et modifier ses propres préférences
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == enseignantId;
+    }
+    
+    // Votes des tâches
+    match /tache_votes/{voteId} {
+      // Tout le monde peut lire les votes (pour voir les résultats)
+      allow read: if request.auth != null;
+      // Un enseignant peut créer/modifier son propre vote
+      allow create, update: if request.auth != null && 
+                              request.resource.data.enseignantId == request.auth.uid;
+      // Interdire la suppression des votes
+      allow delete: if false;
     }
   }
 }

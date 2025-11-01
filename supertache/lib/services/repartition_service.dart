@@ -41,4 +41,17 @@ class RepartitionService {
     if (!doc.exists) return null;
     return Repartition.fromMap(doc.id, doc.data()!);
   }
+
+  // Récupérer les répartitions d'une tâche (Future au lieu de Stream)
+  Future<List<Repartition>> getRepartitionsForTacheFuture(String tacheId) async {
+    final snapshot = await _firestore
+        .collection('repartitions')
+        .where('tacheId', isEqualTo: tacheId)
+        .orderBy('dateCreation', descending: true)
+        .get();
+    
+    return snapshot.docs
+        .map((doc) => Repartition.fromMap(doc.id, doc.data()))
+        .toList();
+  }
 }

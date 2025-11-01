@@ -3,6 +3,8 @@ import '../models/enseignant.dart';
 import '../models/groupe.dart';
 import '../models/tache.dart';
 import '../models/cours.dart';
+import '../models/enseignant_preferences.dart';
+import '../models/tache_vote.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -174,6 +176,16 @@ class FirestoreService {
             snapshot.docs.map((doc) => Cours.fromMap(doc.id, doc.data())).toList());
   }
 
+  Future<List<Cours>> getAllCoursFuture() async {
+    final snapshot = await _db
+        .collection('cours')
+        .orderBy('code')
+        .get();
+    return snapshot.docs
+        .map((doc) => Cours.fromMap(doc.id, doc.data()))
+        .toList();
+  }
+
   Future<Cours?> getCours(String id) async {
     final doc = await _db.collection('cours').doc(id).get();
     if (doc.exists) {
@@ -245,5 +257,75 @@ class FirestoreService {
       }
     }
     return enseignants;
+  }
+
+  // Préférences des enseignants
+  Future<void> saveEnseignantPreferences(EnseignantPreferences preferences) async {
+    await _db
+        .collection('enseignant_preferences')
+        .doc(preferences.enseignantId)
+        .set(preferences.toMap());
+  }
+
+  Future<EnseignantPreferences?> getEnseignantPreferences(String enseignantId) async {
+    final doc = await _db
+        .collection('enseignant_preferences')
+        .doc(enseignantId)
+        .get();
+    
+    if (doc.exists && doc.data() != null) {
+      return EnseignantPreferences.fromMap(doc.data()!);
+    }
+    return null;
+  }
+
+  Future<Map<String, EnseignantPreferences>> getAllEnseignantPreferences(List<String> enseignantIds) async {
+    final preferences = <String, EnseignantPreferences>{};
+    
+    for (var id in enseignantIds) {
+      final pref = await getEnseignantPreferences(id);
+      if (pref != null) {
+        preferences[id] = pref;
+      }
+    }
+    
+    return preferences;
+  }
+
+  // Votes des tâches
+  Future<void> saveTacheVote(TacheVote vote) async {
+    final docId = '${vote.tacheGenerationId}_${vote.enseignantId}';
+    await _db.collection('tache_votes').doc(docId).set(vote.toMap());
+  }
+
+  Future<TacheVote?> getTacheVote(String generationId, String enseignantId) async {
+    final docId = '${generationId}_$enseignantId';
+    final doc = await _db.collection('tache_votes').doc(docId).get();
+    
+    if (doc.exists && doc.data() != null) {
+      return TacheVote.fromMap(doc.data()!);
+    }
+    return null;
+  }
+
+  Future<List<TacheVote>> getTacheVotes(String generationId) async {
+    final snapshot = await _db
+        .collection('tache_votes')
+        .where('tacheGenerationId', isEqualTo: generationId)
+        .get();
+    
+    return snapshot.docs
+        .map((doc) => TacheVote.fromMap(doc.data()))
+        .toList();
+  }
+
+  Stream<List<TacheVote>> getTacheVotesStream(String generationId) {
+    return _db
+        .collection('tache_votes')
+        .where('tacheGenerationId', isEqualTo: generationId)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => TacheVote.fromMap(doc.data()))
+            .toList());
   }
 }

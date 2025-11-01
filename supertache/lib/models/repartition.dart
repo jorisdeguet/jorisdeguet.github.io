@@ -9,6 +9,7 @@ class Repartition {
   final List<String> groupesNonAlloues; // IDs des groupes non alloués
   final bool estValide;
   final String? methode; // 'manuelle' ou 'genetique'
+  final bool estAutomatique; // true si généré par l'algorithme génétique
 
   Repartition({
     required this.id,
@@ -19,6 +20,7 @@ class Repartition {
     required this.groupesNonAlloues,
     required this.estValide,
     this.methode,
+    this.estAutomatique = false,
   });
 
   Map<String, dynamic> toMap() {
@@ -31,6 +33,7 @@ class Repartition {
       'groupesNonAlloues': groupesNonAlloues,
       'estValide': estValide,
       'methode': methode,
+      'estAutomatique': estAutomatique,
     };
   }
 
@@ -48,6 +51,7 @@ class Repartition {
       groupesNonAlloues: List<String>.from(map['groupesNonAlloues'] ?? []),
       estValide: map['estValide'] ?? false,
       methode: map['methode'],
+      estAutomatique: map['estAutomatique'] ?? false,
     );
   }
 

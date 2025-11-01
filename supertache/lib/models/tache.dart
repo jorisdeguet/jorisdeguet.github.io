@@ -12,6 +12,10 @@ class Tache {
   final List<String> enseignantEmails; // Emails des enseignants inclus
   final List<String> enseignantIds; // IDs des enseignants (rempli après résolution)
   final List<String> groupeIds; // IDs des groupes
+  
+  // Paramètres pour l'algorithme génétique
+  final double ciMin; // CI minimale acceptée (par défaut 38.0)
+  final double ciMax; // CI maximale acceptée (par défaut 46.0)
 
   Tache({
     required this.id,
@@ -24,6 +28,8 @@ class Tache {
     required this.enseignantEmails,
     this.enseignantIds = const [],
     this.groupeIds = const [],
+    this.ciMin = 38.0,
+    this.ciMax = 46.0,
   });
 
   double calculateCITotale(List<Groupe> groupes) {
@@ -43,6 +49,8 @@ class Tache {
       'enseignantEmails': enseignantEmails,
       'enseignantIds': enseignantIds,
       'groupeIds': groupeIds,
+      'ciMin': ciMin,
+      'ciMax': ciMax,
     };
   }
 
@@ -60,6 +68,8 @@ class Tache {
       enseignantEmails: List<String>.from(map['enseignantEmails'] ?? []),
       enseignantIds: List<String>.from(map['enseignantIds'] ?? []),
       groupeIds: List<String>.from(map['groupeIds'] ?? []),
+      ciMin: map['ciMin']?.toDouble() ?? 38.0,
+      ciMax: map['ciMax']?.toDouble() ?? 46.0,
     );
   }
 
@@ -75,6 +85,8 @@ class Tache {
     List<String>? enseignantEmails,
     List<String>? enseignantIds,
     List<String>? groupeIds,
+    double? ciMin,
+    double? ciMax,
   }) {
     return Tache(
       id: id,
@@ -87,6 +99,8 @@ class Tache {
       enseignantEmails: enseignantEmails ?? this.enseignantEmails,
       enseignantIds: enseignantIds ?? this.enseignantIds,
       groupeIds: groupeIds ?? this.groupeIds,
+      ciMin: ciMin ?? this.ciMin,
+      ciMax: ciMax ?? this.ciMax,
     );
   }
 }
