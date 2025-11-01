@@ -8,6 +8,7 @@ import '../../services/groupe_service.dart';
 import '../../services/enseignant_service.dart';
 import '../../services/tache_service.dart';
 import '../../services/ci_calculator_service.dart';
+import '../ci_explanation_screen.dart';
 
 class ManualRepartitionScreen extends StatefulWidget {
   final String tacheId;
@@ -251,24 +252,48 @@ class _ManualRepartitionScreenState extends State<ManualRepartitionScreen> {
                       ),
                     ),
                   ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        'CI: ${ci.toStringAsFixed(2)}',
-                        style: TextStyle(
-                          color: ci >= 35 && ci <= 47 ? Colors.green : Colors.red,
-                          fontWeight: FontWeight.bold,
+                  InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => CIExplanationScreen(
+                            groupes: groupes,
+                            enseignantEmail: enseignant.email,
+                          ),
                         ),
-                      ),
-                      Text(
-                        '$totalEtudiants ét. • ${totalHeuresTheorie.toInt()}T/${totalHeuresPratique.toInt()}P',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[700],
+                      );
+                    },
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'CI: ${ci.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                color: ci >= 35 && ci <= 47 ? Colors.green : Colors.red,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            SizedBox(width: 4),
+                            Icon(
+                              Icons.info_outline,
+                              size: 16,
+                              color: ci >= 35 && ci <= 47 ? Colors.green : Colors.red,
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
+                        Text(
+                          '$totalEtudiants ét. • ${totalHeuresTheorie.toInt()}T/${totalHeuresPratique.toInt()}P',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),

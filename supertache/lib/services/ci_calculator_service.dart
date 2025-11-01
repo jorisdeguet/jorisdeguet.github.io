@@ -9,23 +9,23 @@ class CICalculatorService {
     if (groupes.isEmpty) return 0.0;
 
     // 1. Calculer HC (Heures de Cours)
-    final double pondHC = _calculatePondHC(groupes);
+    final double pondHC = calculatePondHC(groupes);
 
     // 2. Calculer HP (Heures de Préparation)
-    final double pondHP = _calculatePondHP(groupes);
+    final double pondHP = calculatePondHP(groupes);
 
     // 3. Calculer PES (Période-Étudiant par Semaine)
-    final double pondPES = _calculatePondPES(groupes);
+    final double pondPES = calculatePondPES(groupes);
 
     // 4. Calculer NES (Nombre d'Étudiants - facteur de correction)
-    final double pondNES = _calculatePondNES(groupes);
+    final double pondNES = calculatePondNES(groupes);
 
     return pondHC + pondHP + pondPES + pondNES;
   }
 
   /// Calcule la pondération des Heures de Cours (HC)
   /// Formule: HC × 1.2
-  double _calculatePondHC(List<Groupe> groupes) {
+  double calculatePondHC(List<Groupe> groupes) {
     double totalHC = 0.0;
     
     for (var groupe in groupes) {
@@ -39,42 +39,64 @@ class CICalculatorService {
 
   /// Calcule la pondération des Heures de Préparation (HP)
   /// Le multiplicateur varie selon le nombre de préparations différentes
-  double _calculatePondHP(List<Groupe> groupes) {
+  double calculatePondHP(List<Groupe> groupes) {
     // Compter le nombre de cours différents (préparations différentes)
     final Set<String> coursUniques = groupes.map((g) => g.cours).toSet();
     final int nbPreparations = coursUniques.length;
 
-    // Calculer le total d'heures pour les préparations
+    // Calculer HP = somme des heures de chaque cours DIFFÉRENT (pas par groupe)
+    // Pour chaque cours unique, on prend sa pondération (théorie + pratique)
     double totalHP = 0.0;
     for (var coursCode in coursUniques) {
-      // Prendre les heures du premier groupe de ce cours
+      // Prendre les heures du premier groupe de ce cours (tous les groupes du même cours ont les mêmes heures)
       final groupe = groupes.firstWhere((g) => g.cours == coursCode);
       totalHP += groupe.heuresTheorie + groupe.heuresPratique;
     }
 
     // Appliquer le coefficient selon le nombre de préparations
-    double coefficient;
-    if (nbPreparations <= 2) {
-      coefficient = 0.9;
-    } else if (nbPreparations == 3) {
-      coefficient = 1.1;
-    } else {
-      coefficient = 1.3;
-    }
+    final coefficient = getHPCoefficient(nbPreparations);
 
     return totalHP * coefficient;
+  }
+
+  /// Retourne le coefficient HP selon le nombre de préparations différentes
+  double getHPCoefficient(int nbPreparations) {
+    if (nbPreparations <= 2) {
+      return 0.9;
+    } else if (nbPreparations == 3) {
+      return 1.1;
+    } else {
+      return 1.75;
+    }
+  }
+
+  /// Calcule le nombre d'heures de préparation (HP brut, avant coefficient)
+  double calculateHP(List<Groupe> groupes) {
+    final Set<String> coursUniques = groupes.map((g) => g.cours).toSet();
+    double totalHP = 0.0;
+    for (var coursCode in coursUniques) {
+      final groupe = groupes.firstWhere((g) => g.cours == coursCode);
+      totalHP += groupe.heuresTheorie + groupe.heuresPratique;
+    }
+    return totalHP;
+  }
+
+  /// Calcule le nombre d'heures de cours (HC brut, avant coefficient)
+  double calculateHC(List<Groupe> groupes) {
+    return groupes.fold(0.0, (sum, g) => sum + g.heuresTheorie + g.heuresPratique);
+  }
+
+  /// Calcule le nombre de cours différents
+  int calculateNbCoursDifferents(List<Groupe> groupes) {
+    return groupes.map((g) => g.cours).toSet().length;
   }
 
   /// Calcule la pondération PES (Période-Étudiant par Semaine)
   /// PES = somme de (nb étudiants × heures-cours) pour chaque groupe
   /// Pondération par paliers: 0-415: ×0.04, >415: ×0.07
-  double _calculatePondPES(List<Groupe> groupes) {
+  double calculatePondPES(List<Groupe> groupes) {
     // Calculer le PES total
-    double totalPES = 0.0;
-    for (var groupe in groupes) {
-      final double heuresCours = groupe.heuresTheorie + groupe.heuresPratique;
-      totalPES += groupe.nombreEtudiants * heuresCours;
-    }
+    final totalPES = calculatePES(groupes);
 
     // Appliquer la pondération par paliers
     double ponderation = 0.0;
@@ -91,24 +113,73 @@ class CICalculatorService {
     return ponderation;
   }
 
+  /// Calcule le PES total (Période-Étudiant par Semaine)
+  double calculatePES(List<Groupe> groupes) {
+    double totalPES = 0.0;
+    for (var groupe in groupes) {
+      final double heuresCours = groupe.heuresTheorie + groupe.heuresPratique;
+      totalPES += groupe.nombreEtudiants * heuresCours;
+    }
+    return totalPES;
+  }
+
   /// Calcule la pondération NES (Nombre d'Étudiants - correction)
   /// Si NES >= 75 et heures > 2h/sem: NES × 0.01
-  double _calculatePondNES(List<Groupe> groupes) {
-    // Calculer le nombre total d'étudiants
-    final int totalEtudiants = groupes.fold(0, (sum, g) => sum + g.nombreEtudiants);
-    
-    // Calculer les heures totales par semaine
-    final double totalHeures = groupes.fold(
-      0.0, 
-      (sum, g) => sum + g.heuresTheorie + g.heuresPratique
-    );
+  double calculatePondNES(List<Groupe> groupes) {
+    final nes = calculateNES(groupes);
+    final totalHeures = calculateHC(groupes);
 
-    // Appliquer la correction si applicable
-    if (totalEtudiants >= 75 && totalHeures > 2) {
-      return totalEtudiants * 0.01;
+    double result = 0.0;
+    
+    if (nes >= 75) {
+      result += nes * 0.01;
+    }
+    
+    if (nes > 160) {
+      result += ((nes - 160) * (nes - 160)) * 0.1;
     }
 
-    return 0.0;
+    return result;
+  }
+
+  /// Calcule le NES (Nombre d'Étudiants Simplifiés)
+  /// NES = NES1 + (0.8 × NES2)
+  double calculateNES(List<Groupe> groupes) {
+    final nes1 = calculateNES1(groupes);
+    final nes2 = calculateNES2(groupes);
+    return nes1 + (0.8 * nes2);
+  }
+
+  /// Calcule NES1 (étudiants des cours avec pondération >= 3)
+  double calculateNES1(List<Groupe> groupes) {
+    final Set<String> etudiantsUniques = {};
+    
+    for (var groupe in groupes) {
+      final ponderation = groupe.heuresTheorie + groupe.heuresPratique;
+      if (ponderation >= 3) {
+        for (int i = 0; i < groupe.nombreEtudiants; i++) {
+          etudiantsUniques.add('${groupe.id}_etudiant_$i');
+        }
+      }
+    }
+    
+    return etudiantsUniques.length.toDouble();
+  }
+
+  /// Calcule NES2 (étudiants des cours avec 2 <= pondération < 3)
+  double calculateNES2(List<Groupe> groupes) {
+    final Set<String> etudiantsUniques = {};
+    
+    for (var groupe in groupes) {
+      final ponderation = groupe.heuresTheorie + groupe.heuresPratique;
+      if (ponderation >= 2 && ponderation < 3) {
+        for (int i = 0; i < groupe.nombreEtudiants; i++) {
+          etudiantsUniques.add('${groupe.id}_etudiant_$i');
+        }
+      }
+    }
+    
+    return etudiantsUniques.length.toDouble();
   }
 
   /// Retourne des détails sur le calcul pour débogage
@@ -128,15 +199,12 @@ class CICalculatorService {
 
     final coursUniques = groupes.map((g) => g.cours).toSet();
     final totalEtudiants = groupes.fold(0, (sum, g) => sum + g.nombreEtudiants);
-    final totalHeures = groupes.fold(
-      0.0, 
-      (sum, g) => sum + g.heuresTheorie + g.heuresPratique
-    );
+    final totalHeures = calculateHC(groupes);
 
-    final pondHC = _calculatePondHC(groupes);
-    final pondHP = _calculatePondHP(groupes);
-    final pondPES = _calculatePondPES(groupes);
-    final pondNES = _calculatePondNES(groupes);
+    final pondHC = calculatePondHC(groupes);
+    final pondHP = calculatePondHP(groupes);
+    final pondPES = calculatePondPES(groupes);
+    final pondNES = calculatePondNES(groupes);
 
     return {
       'ci': pondHC + pondHP + pondPES + pondNES,
