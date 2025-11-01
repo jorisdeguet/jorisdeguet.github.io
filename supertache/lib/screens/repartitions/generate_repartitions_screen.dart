@@ -175,8 +175,20 @@ class _GenerateRepartitionsScreenState extends State<GenerateRepartitionsScreen>
           SnackBar(
             content: Text('${solutions.length} répartitions générées avec succès!'),
             backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
           ),
         );
+
+        // Navigation automatique vers l'écran de comparaison
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            Navigator.pushReplacementNamed(
+              context,
+              '/vote/repartitions',
+              arguments: widget.tacheId,
+            );
+          }
+        });
       }
     } catch (e) {
       setState(() => _isGenerating = false);

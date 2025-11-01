@@ -236,7 +236,26 @@ class GeneticAlgorithmService {
         score -= distance * 5; // Pénalité de 5 points par unité de CI hors plage
       }
 
-      // 2. Score de préférences de cours
+      // 2. Score basé sur le nombre de cours distincts à préparer
+      final coursDistincts = enseignantGroupes.map((g) => g.cours).toSet();
+      final nbCoursDistincts = coursDistincts.length;
+
+      if (nbCoursDistincts == 1) {
+        // 1 cours à préparer : score neutre (0)
+        score += 0;
+      } else if (nbCoursDistincts == 2) {
+        // 2 cours à préparer : pénalité de -10
+        score -= 10;
+      } else if (nbCoursDistincts == 3) {
+        // 3 cours à préparer : pénalité de -30
+        score -= 30;
+      } else if (nbCoursDistincts >= 4) {
+        // 4+ cours à préparer : pénalité de -100
+        score -= 100;
+      }
+      // Si 0 cours (pas de groupes), pas de pénalité ni bonus
+
+      // 3. Score de préférences de cours
       final prefs = preferences[enseignant.id];
       if (prefs != null) {
         final coursEnseignant = enseignantGroupes.map((g) => g.cours).toSet();
@@ -258,7 +277,7 @@ class GeneticAlgorithmService {
           // Mix: score neutre (0)
         }
 
-        // 3. Score de préférences de collègues
+        // 4. Score de préférences de collègues
         // Collègues = autres enseignants qui ont des groupes
         final collegues = enseignantsIds
             .where((id) => id != enseignant.id)

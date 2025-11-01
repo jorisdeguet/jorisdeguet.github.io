@@ -7,6 +7,8 @@ import 'services/auth_service.dart';
 import 'services/firestore_service.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/voting/vote_repartitions_screen.dart';
+import 'theme/retro_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,11 +36,23 @@ class MyApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: 'SuperTâche',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-          useMaterial3: true,
-        ),
+        theme: RetroTheme.theme,
         home: const AuthWrapper(),
+        onGenerateRoute: (settings) {
+          // Route pour l'écran de vote des répartitions
+          if (settings.name == '/vote/repartitions') {
+            final tacheId = settings.arguments as String;
+            return MaterialPageRoute(
+              builder: (context) => VoteRepartitionsScreen(
+                tacheId: tacheId,
+                generationId: 'latest', // Utiliser la dernière génération
+              ),
+            );
+          }
+
+          // Route par défaut
+          return null;
+        },
       ),
     );
   }
