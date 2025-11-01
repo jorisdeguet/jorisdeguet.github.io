@@ -27,6 +27,7 @@ class GeneticAlgorithmService {
     required String tacheId,
     required List<Groupe> groupes,
     required List<Enseignant> enseignants,
+    void Function(int generation, double fitness)? onProgress,
   }) async {
     // Initialiser la population
     List<_Chromosome> population = _initializePopulation(groupes, enseignants);
@@ -48,6 +49,11 @@ class GeneticAlgorithmService {
       if (population.first.fitness > bestFitness) {
         bestFitness = population.first.fitness;
         bestChromosome = population.first;
+      }
+
+      // Rapporter le progrès
+      if (onProgress != null && generation % 10 == 0) {
+        onProgress(generation, bestFitness);
       }
 
       // Condition d'arrêt si solution optimale trouvée
@@ -81,6 +87,11 @@ class GeneticAlgorithmService {
       }
 
       population = newPopulation.take(populationSize).toList();
+    }
+
+    // Rapporter le progrès final
+    if (onProgress != null) {
+      onProgress(maxGenerations - 1, bestFitness);
     }
 
     // Convertir le meilleur chromosome en répartition

@@ -26,6 +26,8 @@ class _CreateRepartitionScreenState extends State<CreateRepartitionScreen> {
   final GeneticAlgorithmService _geneticService = GeneticAlgorithmService();
 
   bool _isLoading = false;
+  int _currentGeneration = 0;
+  double _bestFitness = 0.0;
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +71,13 @@ class _CreateRepartitionScreenState extends State<CreateRepartitionScreen> {
                     CircularProgressIndicator(),
                     SizedBox(height: 16),
                     Text('Génération en cours...'),
+                    if (_currentGeneration > 0) ...[
+                      SizedBox(height: 8),
+                      Text(
+                        'Génération $_currentGeneration: Meilleur fitness = ${_bestFitness.toStringAsFixed(2)}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -209,7 +218,11 @@ class _CreateRepartitionScreenState extends State<CreateRepartitionScreen> {
   }
 
   void _createGeneticRepartition() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _currentGeneration = 0;
+      _bestFitness = 0.0;
+    });
 
     try {
       // Récupérer les données
@@ -225,6 +238,26 @@ class _CreateRepartitionScreenState extends State<CreateRepartitionScreen> {
 
       final enseignantsList = enseignants.whereType<Enseignant>().toList();
 
+      // S'assurer que l'utilisateur connecté est dans la liste
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null && currentUser.email != null) {
+        final currentUserEmail = currentUser.email!;
+        final isCurrentUserIncluded = enseignantsList.any((e) => e.email == currentUserEmail);
+        
+        if (!isCurrentUserIncluded) {
+          final currentEnseignant = await _enseignantService.getEnseignantByEmail(currentUserEmail);
+          if (currentEnseignant != null) {
+            enseignantsList.add(currentEnseignant);
+          } else {
+            // Créer un enseignant pour l'utilisateur actuel
+            enseignantsList.add(Enseignant(
+              id: currentUser.uid,
+              email: currentUserEmail,
+            ));
+          }
+        }
+      }
+
       if (groupes.isEmpty) {
         throw Exception('Aucun groupe trouvé pour cette tâche');
       }
@@ -238,6 +271,12 @@ class _CreateRepartitionScreenState extends State<CreateRepartitionScreen> {
         tacheId: widget.tacheId,
         groupes: groupes,
         enseignants: enseignantsList,
+        onProgress: (generation, fitness) {
+          setState(() {
+            _currentGeneration = generation;
+            _bestFitness = fitness;
+          });
+        },
       );
 
       // Sauvegarder la répartition
