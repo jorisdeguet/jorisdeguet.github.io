@@ -34,9 +34,12 @@ class GeneticAlgorithmService {
 
     _Chromosome? bestChromosome;
     double bestFitness = double.negativeInfinity;
+    int lastGeneration = 0;
 
     // Évolution génétique
     for (int generation = 0; generation < maxGenerations; generation++) {
+      lastGeneration = generation;
+      
       // Évaluation
       for (var chromosome in population) {
         chromosome.fitness = _evaluateFitness(chromosome, groupes, enseignants);
@@ -91,7 +94,7 @@ class GeneticAlgorithmService {
 
     // Rapporter le progrès final
     if (onProgress != null) {
-      onProgress(maxGenerations - 1, bestFitness);
+      onProgress(lastGeneration, bestFitness);
     }
 
     // Convertir le meilleur chromosome en répartition
