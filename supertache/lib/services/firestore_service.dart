@@ -113,6 +113,14 @@ class FirestoreService {
             snapshot.docs.map((doc) => Groupe.fromMap(doc.id, doc.data())).toList());
   }
 
+  Future<List<Groupe>> getGroupesByTacheFuture(String tacheId) async {
+    final snapshot = await _db
+        .collection('groupes')
+        .where('tacheId', isEqualTo: tacheId)
+        .get();
+    return snapshot.docs.map((doc) => Groupe.fromMap(doc.id, doc.data())).toList();
+  }
+
   Future<List<Groupe>> getGroupesByIds(List<String> ids) async {
     if (ids.isEmpty) return [];
     final docs = await Future.wait(
@@ -220,6 +228,20 @@ class FirestoreService {
         enseignants.add(
           Enseignant.fromMap(snapshot.docs.first.id, snapshot.docs.first.data())
         );
+      }
+    }
+    return enseignants;
+  }
+
+  Future<List<Enseignant>> getEnseignantsByIds(List<String> ids) async {
+    if (ids.isEmpty) return [];
+    
+    final enseignants = <Enseignant>[];
+    for (var id in ids) {
+      final doc = await _db.collection('enseignants').doc(id).get();
+      
+      if (doc.exists) {
+        enseignants.add(Enseignant.fromMap(doc.id, doc.data()!));
       }
     }
     return enseignants;

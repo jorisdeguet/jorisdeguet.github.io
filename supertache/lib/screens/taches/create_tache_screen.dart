@@ -163,8 +163,8 @@ class _CreateTacheScreenState extends State<CreateTacheScreen> {
           if (_parsedGroupes.isNotEmpty && _parsedEmails.isNotEmpty)
             TextButton.icon(
               onPressed: _isLoading ? null : _createTache,
-              icon: const Icon(Icons.check, color: Colors.white),
-              label: const Text('Créer', style: TextStyle(color: Colors.white)),
+              icon: const Icon(Icons.check),
+              label: const Text('Créer'),
             ),
         ],
       ),
@@ -405,7 +405,7 @@ class _CreateTacheScreenState extends State<CreateTacheScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                'CI: ${groupe.ci.toStringAsFixed(2)}',
+                                '${groupe.heuresTheorie.toInt()}T/${groupe.heuresPratique.toInt()}P',
                                 style: const TextStyle(fontWeight: FontWeight.bold),
                               ),
                               IconButton(

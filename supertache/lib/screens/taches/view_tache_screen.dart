@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../repartitions/repartition_list_screen.dart';
+
 import 'package:provider/provider.dart';
 import '../../services/firestore_service.dart';
 import '../../models/tache.dart';
@@ -16,7 +18,7 @@ class ViewTacheScreen extends StatefulWidget {
 }
 
 class _ViewTacheScreenState extends State<ViewTacheScreen> {
-  bool _enseignantsExpanded = true;
+  bool _enseignantsExpanded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -52,278 +54,349 @@ class _ViewTacheScreenState extends State<ViewTacheScreen> {
 
           final tache = snapshot.data!;
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              // En-tête
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        tache.nom,
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final isWideScreen = constraints.maxWidth > 600;
+              
+              return ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  // En-tête
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: tache.type == SessionType.automne
-                                  ? Colors.orange.shade100
-                                  : Colors.blue.shade100,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Text(
-                              '${tache.type == SessionType.automne ? "Automne" : "Hiver"} ${tache.year}',
-                              style: TextStyle(
-                                color: tache.type == SessionType.automne
-                                    ? Colors.orange.shade900
-                                    : Colors.blue.shade900,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
                           Text(
-                            'Créée le ${_formatDate(tache.dateCreation)}',
-                            style: TextStyle(color: Colors.grey[600]),
+                            tache.nom,
+                            style: Theme.of(context).textTheme.headlineSmall,
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: tache.type == SessionType.automne
+                                      ? Colors.orange.shade100
+                                      : Colors.blue.shade100,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Text(
+                                  '${tache.type == SessionType.automne ? "Automne" : "Hiver"} ${tache.year}',
+                                  style: TextStyle(
+                                    color: tache.type == SessionType.automne
+                                        ? Colors.orange.shade900
+                                        : Colors.blue.shade900,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Text(
+                                'Créée le ${_formatDate(tache.dateCreation)}',
+                                style: TextStyle(color: Colors.grey[600]),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
-              // Enseignants
-              Card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    InkWell(
+                  // Bouton pour créer une répartition
+                  Card(
+                    color: Colors.purple.shade50,
+                    child: InkWell(
                       onTap: () {
-                        setState(() {
-                          _enseignantsExpanded = !_enseignantsExpanded;
-                        });
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => RepartitionListScreen(tacheId: widget.tacheId),
+                          ),
+                        );
                       },
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.people, color: Colors.blue),
-                            const SizedBox(width: 8),
+                            Icon(Icons.grid_on, color: Colors.purple.shade700),
+                            const SizedBox(width: 12),
                             Text(
-                              'Enseignants (${tache.enseignantEmails.length})',
-                              style: Theme.of(context).textTheme.titleMedium,
+                              'Gérer les répartitions',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.purple.shade700,
+                              ),
                             ),
-                            const Spacer(),
-                            Icon(
-                              _enseignantsExpanded
-                                  ? Icons.expand_less
-                                  : Icons.expand_more,
-                            ),
+                            const SizedBox(width: 8),
+                            Icon(Icons.arrow_forward, color: Colors.purple.shade700),
                           ],
                         ),
                       ),
                     ),
-                    if (_enseignantsExpanded) ...[
-                      const Divider(height: 1),
-                      FutureBuilder<List<Enseignant>>(
-                        future: firestoreService.getEnseignantsByEmails(tache.enseignantEmails),
-                        builder: (context, ensSnapshot) {
-                          if (ensSnapshot.connectionState == ConnectionState.waiting) {
-                            return const Padding(
-                              padding: EdgeInsets.all(16),
-                              child: Center(child: CircularProgressIndicator()),
-                            );
-                          }
+                  ),
+                  const SizedBox(height: 16),
 
-                          final enseignants = ensSnapshot.data ?? [];
-                          
-                          // Créer une liste complète avec tous les emails
-                          final enseignantsList = tache.enseignantEmails.map((email) {
-                            final enseignant = enseignants.firstWhere(
-                              (e) => e.email == email,
-                              orElse: () => Enseignant(
-                                id: '',
-                                email: email,
-                              ),
-                            );
-                            return enseignant;
-                          }).toList();
-                          
-                          // Trier par nom de famille (dérivé de l'email)
-                          enseignantsList.sort((a, b) {
-                            final nameA = a.displayName.split('.').last.toLowerCase();
-                            final nameB = b.displayName.split('.').last.toLowerCase();
-                            return nameA.compareTo(nameB);
-                          });
-
-                          return Column(
-                            children: [
-                              ...enseignantsList.map((enseignant) {
-                                return ListTile(
-                                  leading: CircleAvatar(
-                                    child: Text(
-                                      enseignant.displayName.isNotEmpty
-                                          ? enseignant.displayName.substring(0, 1).toUpperCase()
-                                          : '?',
-                                    ),
-                                  ),
-                                  title: Text(
-                                    enseignant.id.isNotEmpty
-                                        ? enseignant.displayName
-                                        : 'Compte non créé',
-                                  ),
-                                  subtitle: Text(enseignant.email),
-                                  trailing: IconButton(
-                                    icon: const Icon(Icons.delete, color: Colors.red),
-                                    onPressed: () => _confirmRemoveEnseignant(
-                                      context,
-                                      tache,
-                                      enseignant.email,
-                                    ),
-                                  ),
-                                );
-                              }),
-                              const Divider(height: 1),
-                              ListTile(
-                                leading: const CircleAvatar(
-                                  child: Icon(Icons.add),
-                                ),
-                                title: const Text('Ajouter un enseignant'),
-                                onTap: () => _showAddEnseignantDialog(context, tache),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ],
+                  // Layout en 2 colonnes sur grand écran
+                  if (isWideScreen)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: _buildEnseignantsCard(context, tache)),
+                        const SizedBox(width: 16),
+                        Expanded(child: _buildGroupesCard(context, tache)),
+                      ],
+                    )
+                  else ...[
+                    _buildEnseignantsCard(context, tache),
+                    const SizedBox(height: 16),
+                    _buildGroupesCard(context, tache),
                   ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Groupes
-              StreamBuilder<List<Groupe>>(
-                stream: firestoreService.getGroupesByTache(widget.tacheId),
-                builder: (context, groupeSnapshot) {
-                  if (groupeSnapshot.connectionState == ConnectionState.waiting) {
-                    return const Card(
-                      child: Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                    );
-                  }
-
-                  final groupes = groupeSnapshot.data ?? [];
-                  final ciTotale = tache.calculateCITotale(groupes);
-
-                  return Column(
-                    children: [
-                      Card(
-                        color: Colors.green.shade50,
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                            children: [
-                              _StatItem(
-                                icon: Icons.group,
-                                label: 'Groupes',
-                                value: '${groupes.length}',
-                              ),
-                              _StatItem(
-                                icon: Icons.people,
-                                label: 'Étudiants',
-                                value: '${groupes.fold(0, (sum, g) => sum + g.nombreEtudiants)}',
-                              ),
-                              _StatItem(
-                                icon: Icons.assessment,
-                                label: 'CI Totale',
-                                value: ciTotale.toStringAsFixed(2),
-                                valueColor: Colors.green,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Card(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.list, color: Colors.blue),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Liste des groupes',
-                                    style: Theme.of(context).textTheme.titleMedium,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            ListView.separated(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: groupes.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
-                              itemBuilder: (context, index) {
-                                final groupe = groupes[index];
-                                return ListTile(
-                                  leading: CircleAvatar(
-                                    child: Text('${index + 1}'),
-                                  ),
-                                  title: Text('${groupe.cours} - ${groupe.numeroGroupe}'),
-                                  subtitle: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text('${groupe.nombreEtudiants} étudiants'),
-                                      Text(
-                                        '${groupe.heuresTheorie}h théo • ${groupe.heuresPratique}h prat',
-                                        style: const TextStyle(fontSize: 12),
-                                      ),
-                                    ],
-                                  ),
-                                  trailing: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      const Text('CI', style: TextStyle(fontSize: 11)),
-                                      Text(
-                                        groupe.ci.toStringAsFixed(2),
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.green,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  isThreeLine: true,
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ],
+                ],
+              );
+            },
           );
         },
       ),
+    );
+  }
+
+  Widget _buildEnseignantsCard(BuildContext context, Tache tache) {
+    final firestoreService = Provider.of<FirestoreService>(context);
+    
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () {
+              setState(() {
+                _enseignantsExpanded = !_enseignantsExpanded;
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.people, color: Colors.blue),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Enseignants (${tache.enseignantEmails.length})',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const Spacer(),
+                  Icon(
+                    _enseignantsExpanded
+                        ? Icons.expand_less
+                        : Icons.expand_more,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_enseignantsExpanded) ...[
+            const Divider(height: 1),
+            FutureBuilder<List<Enseignant>>(
+              future: firestoreService.getEnseignantsByEmails(tache.enseignantEmails),
+              builder: (context, ensSnapshot) {
+                if (ensSnapshot.connectionState == ConnectionState.waiting) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
+                final enseignants = ensSnapshot.data ?? [];
+                
+                // Créer une liste complète avec tous les emails
+                final enseignantsList = tache.enseignantEmails.map((email) {
+                  final enseignant = enseignants.firstWhere(
+                    (e) => e.email == email,
+                    orElse: () => Enseignant(
+                      id: '',
+                      email: email,
+                    ),
+                  );
+                  return enseignant;
+                }).toList();
+                
+                // Trier par nom de famille (dérivé de l'email)
+                enseignantsList.sort((a, b) {
+                  final nameA = a.displayName.split('.').last.toLowerCase();
+                  final nameB = b.displayName.split('.').last.toLowerCase();
+                  return nameA.compareTo(nameB);
+                });
+
+                return Column(
+                  children: [
+                    ...enseignantsList.map((enseignant) {
+                      final isCreated = enseignant.id.isNotEmpty;
+                      return ListTile(
+                        tileColor: !isCreated ? Colors.orange.shade50 : null,
+                        title: Text(enseignant.email),
+                        subtitle: !isCreated 
+                            ? const Text(
+                                'Compte non créé',
+                                style: TextStyle(
+                                  fontStyle: FontStyle.italic,
+                                  color: Colors.orange,
+                                ),
+                              )
+                            : null,
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _confirmRemoveEnseignant(
+                            context,
+                            tache,
+                            enseignant.email,
+                          ),
+                        ),
+                      );
+                    }),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.add),
+                      title: const Text('Ajouter un enseignant'),
+                      onTap: () => _showAddEnseignantDialog(context, tache),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGroupesCard(BuildContext context, Tache tache) {
+    final firestoreService = Provider.of<FirestoreService>(context);
+    
+    return StreamBuilder<List<Groupe>>(
+      stream: firestoreService.getGroupesByTache(widget.tacheId),
+      builder: (context, groupeSnapshot) {
+        if (groupeSnapshot.connectionState == ConnectionState.waiting) {
+          return const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+
+        final groupes = groupeSnapshot.data ?? [];
+        final ciTotale = tache.calculateCITotale(groupes);
+
+        return Column(
+          children: [
+            Card(
+              color: Colors.green.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _StatItem(
+                      icon: Icons.group,
+                      label: 'Groupes',
+                      value: '${groupes.length}',
+                    ),
+                    _StatItem(
+                      icon: Icons.people,
+                      label: 'Étudiants',
+                      value: '${groupes.fold(0, (sum, g) => sum + g.nombreEtudiants)}',
+                    ),
+                    _StatItem(
+                      icon: Icons.assessment,
+                      label: 'CI Totale',
+                      value: ciTotale.toStringAsFixed(2),
+                      valueColor: Colors.green,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.list, color: Colors.blue),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Liste des groupes',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Ajouter un groupe',
+                          icon: const Icon(Icons.add_circle_outline),
+                          onPressed: () => _showAddGroupeDialog(context, widget.tacheId),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: groupes.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final groupe = groupes[index];
+                      return ListTile(
+                        leading: CircleAvatar(
+                          child: Text('${index + 1}'),
+                        ),
+                        title: Text('${groupe.cours} - ${groupe.numeroGroupe}'),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('${groupe.nombreEtudiants} étudiants'),
+                            Text(
+                              '${groupe.heuresTheorie}h théo • ${groupe.heuresPratique}h prat',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${groupe.heuresTheorie.toInt()}T / ${groupe.heuresPratique.toInt()}P',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              tooltip: 'Supprimer',
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => _confirmDeleteGroupe(context, groupe.id),
+                            ),
+                          ],
+                        ),
+                        isThreeLine: true,
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -463,6 +536,140 @@ class _ViewTacheScreenState extends State<ViewTacheScreen> {
               }
             },
             child: const Text('Ajouter'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddGroupeDialog(BuildContext context, String tacheId) {
+    final coursCtrl = TextEditingController();
+    final numeroCtrl = TextEditingController();
+    final etudiantsCtrl = TextEditingController();
+    final theorieCtrl = TextEditingController();
+    final pratiqueCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ajouter un groupe'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: coursCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Code du cours (ex: 420-1B3-EM) ou 420-XXX-EM',
+                ),
+              ),
+              TextField(
+                controller: numeroCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Numéro de groupe (ex: 1010, 1-2, 5a)',
+                ),
+              ),
+              TextField(
+                controller: etudiantsCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Nombre d\'étudiants',
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: theorieCtrl,
+                      decoration: const InputDecoration(labelText: 'Heures théorie'),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: pratiqueCtrl,
+                      decoration: const InputDecoration(labelText: 'Heures pratique'),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final cours = coursCtrl.text.trim();
+              final numero = numeroCtrl.text.trim();
+              final etu = int.tryParse(etudiantsCtrl.text.trim());
+              final th = double.tryParse(theorieCtrl.text.trim().replaceAll(',', '.'));
+              final pr = double.tryParse(pratiqueCtrl.text.trim().replaceAll(',', '.'));
+
+              if (cours.isEmpty || numero.isEmpty || etu == null || th == null || pr == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Veuillez remplir tous les champs correctement')),
+                );
+                return;
+              }
+
+              final id = '${tacheId}_g_${DateTime.now().microsecondsSinceEpoch}';
+              final groupe = Groupe(
+                id: id,
+                cours: cours,
+                numeroGroupe: numero,
+                nombreEtudiants: etu,
+                heuresTheorie: th,
+                heuresPratique: pr,
+                tacheId: tacheId,
+              );
+
+              final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+              await firestoreService.createGroupe(groupe);
+
+              if (context.mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Groupe ajouté')),
+                );
+              }
+            },
+            child: const Text('Ajouter'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteGroupe(BuildContext context, String groupeId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Supprimer le groupe'),
+        content: const Text('Êtes-vous sûr de vouloir supprimer ce groupe ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+              await firestoreService.deleteGroupe(groupeId);
+              if (context.mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Groupe supprimé')),
+                );
+              }
+            },
+            child: const Text('Supprimer'),
           ),
         ],
       ),

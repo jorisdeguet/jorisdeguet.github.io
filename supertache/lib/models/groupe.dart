@@ -17,13 +17,6 @@ class Groupe {
     required this.tacheId,
   });
 
-  // Calcul de la CI (Charge Individuelle) basée sur les heures
-  double get ci {
-    // Formule exemple : CI = (heuresThéorie * 1.0 + heuresPratique * 1.2) / 15
-    // Vous pouvez ajuster cette formule selon vos besoins
-    return ((heuresTheorie * 1.0) + (heuresPratique * 1.2)) / 15;
-  }
-
   String get nomComplet => '$cours - $numeroGroupe';
 
   Map<String, dynamic> toMap() {

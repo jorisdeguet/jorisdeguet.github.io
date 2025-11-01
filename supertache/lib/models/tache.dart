@@ -1,4 +1,5 @@
 import 'groupe.dart';
+import '../services/ci_calculator_service.dart';
 
 class Tache {
   final String id;
@@ -26,7 +27,8 @@ class Tache {
   });
 
   double calculateCITotale(List<Groupe> groupes) {
-    return groupes.fold<double>(0.0, (sum, groupe) => sum + groupe.ci);
+    final ciCalculator = CICalculatorService();
+    return ciCalculator.calculateCI(groupes);
   }
 
   Map<String, dynamic> toMap() {

@@ -1,0 +1,33 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "taches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "professeursEmails",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "dateCreation",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "repartitions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tacheId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dateCreation",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
