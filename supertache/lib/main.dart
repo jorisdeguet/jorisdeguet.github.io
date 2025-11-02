@@ -44,6 +44,7 @@ class MyApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: 'SuperTâche',
+        debugShowCheckedModeBanner: false,
         theme: RetroTheme.theme,
         home: const AuthWrapper(),
         onGenerateRoute: (settings) {

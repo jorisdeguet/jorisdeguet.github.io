@@ -61,14 +61,14 @@ class AppDrawer extends StatelessWidget {
               ),
               ListTile(
                 leading: const Icon(Icons.home),
-                title: const Text('Accueil'),
+                title: const Text('Tâches'),
                 onTap: () {
                   Navigator.of(context).popUntil((route) => route.isFirst);
                 },
               ),
               ListTile(
                 leading: const Icon(Icons.book),
-                title: const Text('Catalogue des cours'),
+                title: const Text('Cours'),
                 onTap: () {
                   Navigator.pop(context);
                   // Vérifier si on n'est pas déjà sur l'écran du catalogue
@@ -102,7 +102,7 @@ class AppDrawer extends StatelessWidget {
               ),
               ListTile(
                 leading: const Icon(Icons.tune),
-                title: const Text('Mes préférences'),
+                title: const Text('Préférences'),
                 onTap: () {
                   Navigator.pop(context);
                   if (ModalRoute.of(context)?.settings.name != '/preferences') {
