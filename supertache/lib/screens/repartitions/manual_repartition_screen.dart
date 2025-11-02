@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/repartition.dart';
 import '../../models/groupe.dart';
 import '../../models/enseignant.dart';
+import '../../models/tache.dart';
 import '../../services/repartition_service.dart';
 import '../../services/groupe_service.dart';
 import '../../services/enseignant_service.dart';
@@ -31,6 +32,7 @@ class _ManualRepartitionScreenState extends State<ManualRepartitionScreen> {
   final CICalculatorService _ciCalculator = CICalculatorService();
 
   Repartition? _repartition;
+  Tache? _tache;
   List<Groupe> _groupes = [];
   List<Enseignant> _enseignants = [];
   bool _isLoading = true;
@@ -48,30 +50,30 @@ class _ManualRepartitionScreenState extends State<ManualRepartitionScreen> {
     final repartition = await _repartitionService.getRepartition(widget.repartitionId);
     final groupes = await _groupeService.getGroupesForTacheFuture(widget.tacheId);
     final tache = await _tacheService.getTache(widget.tacheId);
-    
+
     if (tache != null) {
       final enseignantsFromDb = await _enseignantService.getEnseignantsByEmails(tache.enseignantEmails);
-      
+
       // Créer une liste complète avec tous les emails de la tâche
       final enseignants = tache.enseignantEmails.map((email) {
         final enseignant = enseignantsFromDb.firstWhere(
           (e) => e.email == email,
           orElse: () => Enseignant(
-            id: 'temp_${email.hashCode}', // ID temporaire unique basé sur l'email
+            id: 'temp_${email.hashCode}',
             email: email,
           ),
         );
         return enseignant;
       }).toList();
-      
+
       setState(() {
+        _tache = tache;
         _repartition = repartition;
         _groupes = groupes;
         _enseignants = enseignants;
-        
-        // Initialiser les allocations (toujours mutables et complètes)
+
+        // Initialiser les allocations
         if (repartition != null) {
-          // Copier en profondeur pour obtenir des listes mutables
           _currentAllocations = repartition.allocations.map((k, v) =>
               MapEntry(k, List<String>.from(v)));
           _currentNonAlloues = List<String>.from(repartition.groupesNonAlloues);
@@ -79,11 +81,13 @@ class _ManualRepartitionScreenState extends State<ManualRepartitionScreen> {
           _currentAllocations = {};
           _currentNonAlloues = groupes.map((g) => g.id).toList();
         }
+
         // S'assurer que chaque enseignant a une entrée
         for (var enseignant in enseignants) {
           _currentAllocations.putIfAbsent(enseignant.id, () => <String>[]);
         }
-        // Recalcule des non alloués pour couvrir les cas incohérents
+
+        // Recalculer les non alloués
         final allAllocated = _currentAllocations.values
             .expand((ids) => ids)
             .toSet();
@@ -91,7 +95,7 @@ class _ManualRepartitionScreenState extends State<ManualRepartitionScreen> {
             .where((g) => !allAllocated.contains(g.id))
             .map((g) => g.id)
             .toList();
-        
+
         _isLoading = false;
       });
     }
@@ -224,11 +228,18 @@ class _ManualRepartitionScreenState extends State<ManualRepartitionScreen> {
     return _enseignants.map((enseignant) {
       final groupeIds = _currentAllocations[enseignant.id] ?? [];
       final groupes = _groupes.where((g) => groupeIds.contains(g.id)).toList();
-      final ci = _ciCalculator.calculateCI(groupes);
-      
+      final ciFromGroupes = _ciCalculator.calculateCI(groupes);
+
+      // Calculer la CI fixe pour cet enseignant
+      final ciFixe = _tache?.getCIFixeForEnseignant(enseignant.email) ?? 0.0;
+      final blocsCIFixes = _tache?.getBlocsCIFixesForEnseignant(enseignant.email) ?? [];
+
+      // CI totale = CI des groupes + CI fixe
+      final ciTotale = ciFromGroupes + ciFixe;
+
       // Calculer le nombre total d'étudiants
       final totalEtudiants = groupes.fold(0, (sum, g) => sum + g.nombreEtudiants);
-      
+
       // Calculer les heures totales
       final totalHeuresTheorie = groupes.fold(0.0, (sum, g) => sum + g.heuresTheorie);
       final totalHeuresPratique = groupes.fold(0.0, (sum, g) => sum + g.heuresPratique);
@@ -271,9 +282,9 @@ class _ManualRepartitionScreenState extends State<ManualRepartitionScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              'CI: ${ci.toStringAsFixed(2)}',
+                              'CI: ${ciTotale.toStringAsFixed(2)}',
                               style: TextStyle(
-                                color: ci >= 35 && ci <= 47 ? Colors.green : Colors.red,
+                                color: ciTotale >= 35 && ciTotale <= 47 ? Colors.green : Colors.red,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -281,10 +292,18 @@ class _ManualRepartitionScreenState extends State<ManualRepartitionScreen> {
                             Icon(
                               Icons.info_outline,
                               size: 16,
-                              color: ci >= 35 && ci <= 47 ? Colors.green : Colors.red,
+                              color: ciTotale >= 35 && ciTotale <= 47 ? Colors.green : Colors.red,
                             ),
                           ],
                         ),
+                        if (ciFixe > 0)
+                          Text(
+                            'Fixe: ${ciFixe.toStringAsFixed(1)} | Groupes: ${ciFromGroupes.toStringAsFixed(1)}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[600],
+                            ),
+                          ),
                         Text(
                           '$totalEtudiants ét. • ${totalHeuresTheorie.toInt()}T/${totalHeuresPratique.toInt()}P',
                           style: TextStyle(
@@ -298,6 +317,48 @@ class _ManualRepartitionScreenState extends State<ManualRepartitionScreen> {
                 ],
               ),
               SizedBox(height: 8),
+              // Afficher les blocs de CI fixes
+              if (blocsCIFixes.isNotEmpty) ...[
+                Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue[200]!),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Blocs de CI fixes:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue[900],
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      ...blocsCIFixes.map((bloc) => Padding(
+                        padding: EdgeInsets.only(bottom: 2),
+                        child: Row(
+                          children: [
+                            Icon(Icons.lock, size: 12, color: Colors.blue[700]),
+                            SizedBox(width: 4),
+                            Text(
+                              '${bloc.description}: ${bloc.ci.toStringAsFixed(1)} CI',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.blue[700],
+                              ),
+                            ),
+                          ],
+                        ),
+                      )),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 8),
+              ],
               DragTarget<Groupe>(
                 onWillAccept: (groupe) => groupe != null,
                 onAccept: (groupe) {
@@ -310,8 +371,8 @@ class _ManualRepartitionScreenState extends State<ManualRepartitionScreen> {
                     padding: EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       border: Border.all(
-                        color: candidateData.isNotEmpty 
-                            ? Colors.blue 
+                        color: candidateData.isNotEmpty
+                            ? Colors.blue
                             : Colors.grey[300]!,
                         width: 2,
                       ),
@@ -359,11 +420,17 @@ class _ManualRepartitionScreenState extends State<ManualRepartitionScreen> {
         .where((g) => _currentNonAlloues.contains(g.id))
         .toList();
 
-    if (groupes.isEmpty) {
+    // Grouper par cours
+    final Map<String, List<Groupe>> groupesByCours = {};
+    for (var groupe in groupes) {
+      groupesByCours.putIfAbsent(groupe.cours, () => []).add(groupe);
+    }
+
+    if (groupesByCours.isEmpty) {
       return [
         Center(
           child: Padding(
-            padding: EdgeInsets.all(32),
+            padding: EdgeInsets.all(16),
             child: Text(
               'Tous les groupes sont alloués',
               style: TextStyle(color: Colors.grey),
@@ -373,63 +440,50 @@ class _ManualRepartitionScreenState extends State<ManualRepartitionScreen> {
       ];
     }
 
-    // Grouper par cours
-    final Map<String, List<Groupe>> groupesByCours = {};
-    for (var groupe in groupes) {
-      groupesByCours.putIfAbsent(groupe.cours, () => []).add(groupe);
-    }
-
-    // Trier les cours alphabétiquement
-    final sortedCours = groupesByCours.keys.toList()..sort();
-
-    return sortedCours.map((cours) {
-      final coursGroupes = groupesByCours[cours]!;
-      
-      return Padding(
-        padding: EdgeInsets.only(bottom: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.only(left: 8, bottom: 4),
-              child: Text(
-                cours,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: Colors.grey[700],
-                ),
-              ),
+    final widgets = <Widget>[];
+    groupesByCours.forEach((cours, groupes) {
+      widgets.add(
+        Padding(
+          padding: EdgeInsets.only(bottom: 8, top: 8),
+          child: Text(
+            cours,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
             ),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: coursGroupes.map((groupe) {
-                return Draggable<Groupe>(
-                  data: groupe,
-                  feedback: Material(
-                    elevation: 4,
-                    child: _buildGroupeChip(groupe),
-                  ),
-                  childWhenDragging: Opacity(
-                    opacity: 0.3,
-                    child: _buildGroupeChip(groupe),
-                  ),
-                  child: _buildGroupeChip(groupe),
-                );
-              }).toList(),
-            ),
-          ],
+          ),
         ),
       );
-    }).toList();
+
+      for (var groupe in groupes) {
+        widgets.add(
+          Padding(
+            padding: EdgeInsets.only(bottom: 4),
+            child: Draggable<Groupe>(
+              data: groupe,
+              feedback: Material(
+                elevation: 4,
+                child: _buildGroupeChip(groupe),
+              ),
+              childWhenDragging: Opacity(
+                opacity: 0.3,
+                child: _buildGroupeChip(groupe),
+              ),
+              child: _buildGroupeChip(groupe),
+            ),
+          ),
+        );
+      }
+    });
+
+    return widgets;
   }
 
   Widget _buildGroupeChip(Groupe groupe, {VoidCallback? onDelete}) {
     return Chip(
       label: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             groupe.nomComplet,
@@ -448,15 +502,12 @@ class _ManualRepartitionScreenState extends State<ManualRepartitionScreen> {
 
   void _addGroupeToEnseignant(String enseignantId, String groupeId) {
     setState(() {
-      // Retirer des non alloués
       _currentNonAlloues.remove(groupeId);
-      
-      // Retirer d'un autre enseignant si déjà alloué
+
       _currentAllocations.forEach((key, value) {
         value.remove(groupeId);
       });
-      
-      // Ajouter à l'enseignant
+
       if (!_currentAllocations.containsKey(enseignantId)) {
         _currentAllocations[enseignantId] = [];
       }
@@ -476,14 +527,16 @@ class _ManualRepartitionScreenState extends State<ManualRepartitionScreen> {
   }
 
   Future<void> _saveRepartition() async {
-    // Vérifier la validité
+    // Vérifier la validité (avec CI fixe)
     bool estValide = true;
     for (var enseignant in _enseignants) {
       final groupeIds = _currentAllocations[enseignant.id] ?? [];
       final groupes = _groupes.where((g) => groupeIds.contains(g.id)).toList();
-      final ci = _ciCalculator.calculateCI(groupes);
-      
-      if (ci < 35 || ci > 47) {
+      final ciFromGroupes = _ciCalculator.calculateCI(groupes);
+      final ciFixe = _tache?.getCIFixeForEnseignant(enseignant.email) ?? 0.0;
+      final ciTotale = ciFromGroupes + ciFixe;
+
+      if (ciTotale < 35 || ciTotale > 47) {
         estValide = false;
         break;
       }
@@ -502,7 +555,7 @@ class _ManualRepartitionScreenState extends State<ManualRepartitionScreen> {
         content: Text(
           estValide
               ? 'Répartition valide enregistrée!'
-              : 'Répartition enregistrée (non optimale)',
+              : 'Répartition enregistrée (non valide - vérifiez les CI)',
         ),
         backgroundColor: estValide ? Colors.green : Colors.orange,
       ),
@@ -511,3 +564,4 @@ class _ManualRepartitionScreenState extends State<ManualRepartitionScreen> {
     Navigator.pop(context);
   }
 }
+

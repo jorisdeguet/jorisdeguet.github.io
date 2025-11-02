@@ -18,6 +18,8 @@ void main() {
 
     final ci = ciCalc.calculateCI([g]);
 
+    print('DEBUG CI single group: $ci (expected ~16.5)');
+
     // Calcul attendu:
     // HC = (3+2)*1.2 = 6.0
     // HP = (3+2) * 0.9 = 4.5 (une seule préparation)
@@ -51,6 +53,8 @@ void main() {
 
     final ci = ciCalc.calculateCI([g1, g2]);
 
+    print('DEBUG CI two groups: $ci (expected ~27.5)');
+
     // Calcul attendu:
     // HC = (5+5)*1.2 = 12.0
     // HP = (une préparation unique) => (5) * 0.9 = 4.5
@@ -61,4 +65,3 @@ void main() {
     expect(ci, closeTo(27.5, 1e-3));
   });
 }
-

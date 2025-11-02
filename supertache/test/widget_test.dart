@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // Ne pas importer `main.dart` (évite l'initialisation de Firebase dans les tests)
-import 'package:supertache/main.dart';
+// import 'package:supertache/main.dart';
 
 // Petit widget local pour tester l'incrémentation de compteur sans dépendances externes
 class CounterApp extends StatefulWidget {

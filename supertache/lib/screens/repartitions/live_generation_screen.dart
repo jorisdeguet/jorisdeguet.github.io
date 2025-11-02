@@ -616,10 +616,30 @@ class _LiveGenerationScreenState extends State<LiveGenerationScreen> {
             _buildActionButton(
               label: 'Créer une répart manuelle',
               icon: Icons.add_box,
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Créer répart manuelle - À implémenter')),
+              onPressed: () async {
+                // Créer une répartition vide
+                final repartitionService = RepartitionService();
+                final groupes = await GroupeService().getGroupesForTacheFuture(widget.tacheId);
+
+                final newRepartition = Repartition(
+                  id: 'rep_${DateTime.now().millisecondsSinceEpoch}',
+                  tacheId: widget.tacheId,
+                  nom: 'Répartition manuelle ${DateTime.now().toString().substring(0, 16)}',
+                  dateCreation: DateTime.now(),
+                  allocations: {},
+                  groupesNonAlloues: groupes.map((g) => g.id).toList(),
+                  estValide: false,
+                  methode: 'manuelle',
                 );
+
+                final repartitionId = await repartitionService.createRepartition(newRepartition);
+
+                if (context.mounted) {
+                  Navigator.pushNamed(
+                    context,
+                    '/tache/${widget.tacheId}/repartitions/$repartitionId/edit',
+                  );
+                }
               },
             ),
             const SizedBox(height: 12),
@@ -639,11 +659,15 @@ class _LiveGenerationScreenState extends State<LiveGenerationScreen> {
             _buildActionButton(
               label: 'Modifier cette répartition',
               icon: Icons.edit,
-              onPressed: _existingRepartitions.isEmpty ? null : () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Modifier répart - À implémenter')),
-                );
-              },
+              onPressed: _selectedRepartitionIds.length == 1
+                  ? () {
+                      final selectedId = _selectedRepartitionIds.first;
+                      Navigator.pushNamed(
+                        context,
+                        '/tache/${widget.tacheId}/repartitions/$selectedId/edit',
+                      );
+                    }
+                  : null,
             ),
             const SizedBox(height: 12),
             _buildActionButton(

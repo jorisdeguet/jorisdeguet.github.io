@@ -11,6 +11,7 @@ import '../../models/enseignant.dart';
 import '../../models/repartition.dart';
 import '../../widgets/repartition_summary_card.dart';
 import '../../widgets/app_drawer.dart';
+import 'manage_blocs_ci_screen.dart';
 
 class ViewTacheScreen extends StatefulWidget {
   final String tacheId;
@@ -124,6 +125,17 @@ class _ViewTacheScreenState extends State<ViewTacheScreen> {
                   ),
                 ),
                 // Actions rapides
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ManageBlocsCIScreen(tacheId: widget.tacheId),
+                    ),
+                  ),
+                  icon: const Icon(Icons.lock),
+                  label: const Text('CI fixes'),
+                ),
+                const SizedBox(width: 8),
                 OutlinedButton.icon(
                   onPressed: () => Navigator.pushNamed(context, '/tache/${widget.tacheId}/repartitions/generate'),
                   icon: const Icon(Icons.auto_awesome),

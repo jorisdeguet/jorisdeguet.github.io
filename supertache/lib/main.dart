@@ -13,6 +13,7 @@ import 'screens/taches/view_tache_screen.dart';
 import 'screens/taches/create_tache_screen.dart';
 import 'screens/repartitions/repartition_detail_screen.dart';
 import 'screens/repartitions/create_repartition_screen.dart';
+import 'screens/repartitions/manual_repartition_screen.dart';
 import 'screens/repartitions/generate_repartitions_screen.dart';
 import 'screens/repartitions/live_generation_screen.dart';
 import 'screens/repartitions/view_generated_solutions_screen.dart';
@@ -126,6 +127,22 @@ class MyApp extends StatelessWidget {
               settings: settings,
             );
           }
+          // Route: /tache/:tacheId/repartitions/:repartitionId/edit
+          if (uri.pathSegments.length == 5 &&
+              uri.pathSegments[0] == 'tache' &&
+              uri.pathSegments[2] == 'repartitions' &&
+              uri.pathSegments[4] == 'edit') {
+            final tacheId = uri.pathSegments[1];
+            final repartitionId = uri.pathSegments[3];
+            return MaterialPageRoute(
+              builder: (context) => ManualRepartitionScreen(
+                tacheId: tacheId,
+                repartitionId: repartitionId,
+              ),
+              settings: settings,
+            );
+          }
+
 
           // Route: /tache/:tacheId/repartitions/:repartitionId
           if (uri.pathSegments.length == 4 &&
