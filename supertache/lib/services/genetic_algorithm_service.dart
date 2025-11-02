@@ -4,7 +4,8 @@ import '../models/enseignant.dart';
 import '../models/enseignant_preferences.dart';
 import '../models/repartition.dart';
 import '../models/tache.dart';
-import 'ci_calculator_service.dart';
+import 'score_repartition_service.dart';
+import 'population_generator_service.dart';
 
 /// Solution candidate pour l'algorithme génétique
 class TacheSolution {
@@ -43,37 +44,20 @@ class TacheSolution {
       estAutomatique: true,
     );
   }
-}
 
-/// Poids des différents critères du score de fitness
-class FitnessWeights {
-  final double wCiBonus;
-  final double wCiPenaltyPerUnit;
-  final double wCours2Penalty;
-  final double wCours3Penalty;
-  final double wCours4PlusPenalty;
-  final double wCoursWishBonus;
-  final double wCoursAvoidPenalty;
-  final double wColWishBonus;
-  final double wColAvoidPenalty;
-  final double wUnallocatedPenalty;
-  const FitnessWeights({
-    this.wCiBonus = 30,
-    this.wCiPenaltyPerUnit = 5,
-    this.wCours2Penalty = -10,
-    this.wCours3Penalty = -30,
-    this.wCours4PlusPenalty = -100,
-    this.wCoursWishBonus = 10,
-    this.wCoursAvoidPenalty = -100,
-    this.wColWishBonus = 1,
-    this.wColAvoidPenalty = -5,
-    this.wUnallocatedPenalty = -50,
-  });
+  /// Crée depuis une allocation simple
+  static TacheSolution fromAllocation(Map<String, List<String>> allocation) {
+    return TacheSolution(
+      allocations: allocation,
+      groupesNonAlloues: [],
+    );
+  }
 }
 
 /// Service d'algorithme génétique pour créer des répartitions optimales
 class GeneticAlgorithmService {
-  final CICalculatorService _ciCalculator = CICalculatorService();
+  final ScoreRepartitionService _scoreService = ScoreRepartitionService();
+  final PopulationGeneratorService _popGenerator = PopulationGeneratorService();
   final Random _random = Random();
 
   // Paramètres de l'algorithme
@@ -129,11 +113,19 @@ class GeneticAlgorithmService {
     // Compléter avec population aléatoire
     final needed = populationSize - population.length;
     if (needed > 0) {
-      final randomPop = _createInitialPopulation(groupes, enseignants, needed, preferences, ciMin, ciMax);
-      for (var s in randomPop) {
-        final sig = _getSignature(s);
+      final allocations = _popGenerator.generatePopulationByPreferences(
+        groupes: groupes,
+        enseignants: enseignants,
+        preferences: preferences,
+        ciMin: ciMin,
+        ciMax: ciMax,
+        count: needed,
+      );
+      for (var allocation in allocations) {
+        final solution = TacheSolution(allocations: allocation, groupesNonAlloues: []);
+        final sig = _getSignature(solution);
         if (!signatures.contains(sig)) {
-          population.add(s);
+          population.add(solution);
           signatures.add(sig);
         }
       }
@@ -143,13 +135,15 @@ class GeneticAlgorithmService {
     for (int generation = 0; generation < maxGenerations; generation++) {
       // Calculer le fitness de chaque solution
       for (var solution in population) {
-        solution.fitness ??= _calculateFitness(
-          solution,
-          groupes,
-          enseignants,
-          preferences,
-          ciMin,
-          ciMax,
+        solution.fitness ??= _scoreService.calculateScore(
+          allocations: solution.allocations,
+          groupesNonAlloues: solution.groupesNonAlloues,
+          groupes: groupes,
+          enseignants: enseignants,
+          preferences: preferences,
+          ciMin: ciMin,
+          ciMax: ciMax,
+          weights: weights,
         );
       }
 
@@ -199,13 +193,15 @@ class GeneticAlgorithmService {
 
     // Calculer le fitness final pour toutes les solutions
     for (var solution in population) {
-      solution.fitness ??= _calculateFitness(
-        solution,
-        groupes,
-        enseignants,
-        preferences,
-        ciMin,
-        ciMax,
+      solution.fitness ??= _scoreService.calculateScore(
+        allocations: solution.allocations,
+        groupesNonAlloues: solution.groupesNonAlloues,
+        groupes: groupes,
+        enseignants: enseignants,
+        preferences: preferences,
+        ciMin: ciMin,
+        ciMax: ciMax,
+        weights: weights,
       );
     }
 
@@ -291,147 +287,6 @@ class GeneticAlgorithmService {
     return union > 0 ? intersection / union : 0.0;
   }
 
-  /// Crée une population initiale aléatoire
-  List<TacheSolution> _createInitialPopulation(
-    List<Groupe> groupes,
-    List<Enseignant> enseignants,
-    int size,
-    Map<String, EnseignantPreferences> preferences,
-    double ciMin,
-    double ciMax,
-  ) {
-    final population = <TacheSolution>[];
-    final groupeMap = {for (var g in groupes) g.id: g};
-
-    for (int i = 0; i < size; i++) {
-      final allocations = <String, List<String>>{
-        for (var e in enseignants) e.id: []
-      };
-      final unallocatedGroupes = List<String>.from(groupes.map((g) => g.id));
-      final shuffledEnseignants = List<Enseignant>.from(enseignants)..shuffle(_random);
-
-      final ciCible = (ciMin + ciMax) / 2;
-
-      // Pour chaque prof, allouer les cours préférés
-      for (var enseignant in shuffledEnseignants) {
-        final enseignantPrefs = preferences[enseignant.id];
-        if (enseignantPrefs == null) continue;
-
-        final preferredCours = List<String>.from(enseignantPrefs.coursSouhaites)..shuffle(_random);
-
-        for (var coursCode in preferredCours) {
-          final groupesPourCeCours = unallocatedGroupes
-              .where((gId) => groupeMap[gId]?.cours == coursCode)
-              .toList()..shuffle(_random);
-
-          for (var groupeId in groupesPourCeCours) {
-            final groupe = groupeMap[groupeId]!;
-            final currentCI = _ciCalculator.calculateCI(
-              (allocations[enseignant.id] ?? []).map((gId) => groupeMap[gId]!).toList()
-            );
-            final groupeCI = _ciCalculator.calculateCI([groupe]);
-
-            if (currentCI + groupeCI <= ciCible) {
-              allocations[enseignant.id]!.add(groupeId);
-              unallocatedGroupes.remove(groupeId);
-            }
-          }
-        }
-      }
-
-      // Allouer les groupes restants aléatoirement
-      unallocatedGroupes.shuffle(_random);
-      for (var groupeId in unallocatedGroupes) {
-        if (enseignants.isNotEmpty) {
-          final randomEnseignant = enseignants[_random.nextInt(enseignants.length)];
-          allocations[randomEnseignant.id]!.add(groupeId);
-        }
-      }
-
-      population.add(TacheSolution(
-        allocations: allocations,
-        groupesNonAlloues: [], // Sera recalculé plus tard
-      ));
-    }
-
-    return population;
-  }
-
-  /// Calcule le score de fitness d'une solution
-  double _calculateFitness(
-    TacheSolution solution,
-    List<Groupe> groupes,
-    List<Enseignant> enseignants,
-    Map<String, EnseignantPreferences> preferences,
-    double ciMin,
-    double ciMax,
-  ) {
-    double score = 0.0;
-
-    final groupeMap = {for (var g in groupes) g.id: g};
-    final enseignantsIds = solution.allocations.keys.toSet();
-
-    for (var enseignant in enseignants) {
-      final groupeIds = solution.allocations[enseignant.id] ?? [];
-      final enseignantGroupes = groupeIds
-          .map((id) => groupeMap[id])
-          .whereType<Groupe>()
-          .toList();
-
-      // 1. Score CI
-      final ci = _ciCalculator.calculateCI(enseignantGroupes);
-      if (ci >= ciMin && ci <= ciMax) {
-        score += weights.wCiBonus;
-      } else {
-        final distance = ci < ciMin ? (ciMin - ci) : (ci - ciMax);
-        score += -weights.wCiPenaltyPerUnit * distance;
-      }
-
-      // 2. Nombre de cours distincts à préparer
-      final coursDistincts = enseignantGroupes.map((g) => g.cours).toSet();
-      final nbCoursDistincts = coursDistincts.length;
-      if (nbCoursDistincts == 2) {
-        score += weights.wCours2Penalty;
-      } else if (nbCoursDistincts == 3) {
-        score += weights.wCours3Penalty;
-      } else if (nbCoursDistincts >= 4) {
-        score += weights.wCours4PlusPenalty;
-      }
-
-      // 3. Préférences cours
-      final prefs = preferences[enseignant.id];
-      if (prefs != null) {
-        final coursEnseignant = enseignantGroupes.map((g) => g.cours).toSet();
-        final nbCoursSouhaites = coursEnseignant.where((c) => prefs.coursSouhaites.contains(c)).length;
-        final nbCoursEvites = coursEnseignant.where((c) => prefs.coursEvites.contains(c)).length;
-        if (nbCoursSouhaites > 0 && nbCoursEvites == 0) {
-          score += weights.wCoursWishBonus;
-        } else if (nbCoursSouhaites == 0 && nbCoursEvites > 0) {
-          score += weights.wCoursAvoidPenalty;
-        }
-
-        // 4. Préférences collègues
-        final collegues = enseignantsIds
-            .where((id) => id != enseignant.id)
-            .map((id) => enseignants.firstWhere((e) => e.id == id, orElse: () => Enseignant(id: id, email: '')))
-            .toList();
-        final colleguesEmails = collegues.map((c) => c.email).toSet();
-        final nbColleguesSouhaites = colleguesEmails.where((email) => prefs.colleguesSouhaites.contains(email)).length;
-        final nbColleguesEvites = colleguesEmails.where((email) => prefs.colleguesEvites.contains(email)).length;
-        if (nbColleguesSouhaites > 0 && nbColleguesEvites == 0 && colleguesEmails.isNotEmpty) {
-          score += weights.wColWishBonus;
-        } else if (nbColleguesEvites > 0 && nbColleguesSouhaites == 0 && colleguesEmails.isNotEmpty) {
-          score += weights.wColAvoidPenalty;
-        }
-      }
-    }
-
-    // Pénalité pour les groupes non alloués
-    score += weights.wUnallocatedPenalty * solution.groupesNonAlloues.length;
-
-    return score;
-  }
-
   /// Sélection par tournoi
   TacheSolution _tournamentSelection(List<TacheSolution> population, {int tournamentSize = 3}) {
     final tournament = <TacheSolution>[];
@@ -449,37 +304,12 @@ class GeneticAlgorithmService {
     List<Groupe> groupes,
     List<dynamic> preferences,
   ) async {
-    final solution = TacheSolution(
-      allocations: repartition.allocations,
-      groupesNonAlloues: repartition.groupesNonAlloues,
+    return _scoreService.calculateScoreForRepartition(
+      repartition,
+      tache,
+      groupes,
+      preferences,
     );
-
-    final enseignantIds = repartition.allocations.keys.toList();
-    final enseignants = <Enseignant>[];
-    
-    // Récupérer les enseignants depuis la tâche
-    for (int i = 0; i < tache.enseignantIds.length; i++) {
-      final id = tache.enseignantIds[i];
-      if (enseignantIds.contains(id)) {
-        enseignants.add(Enseignant(
-          id: id,
-          email: i < tache.enseignantEmails.length ? tache.enseignantEmails[i] : id,
-        ));
-      }
-    }
-
-    // Convertir la liste de préférences en Map
-    final prefsMap = <String, EnseignantPreferences>{};
-    for (var pref in preferences) {
-      if (pref is EnseignantPreferences) {
-        prefsMap[pref.enseignantId] = pref;
-      }
-    }
-
-    final ciMin = tache.ciMin;
-    final ciMax = tache.ciMax;
-
-    return _calculateFitness(solution, groupes, enseignants, prefsMap, ciMin, ciMax);
   }
 
   /// Crossover (croisement) entre deux solutions

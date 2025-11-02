@@ -7,8 +7,9 @@ import '../../models/enseignant_preferences.dart';
 import '../../models/repartition.dart';
 import '../../services/firestore_service.dart';
 import '../../services/genetic_algorithm_service.dart';
+import '../../services/population_generator_service.dart';
+import '../../services/score_repartition_service.dart';
 import '../../services/groupe_service.dart';
-import '../../services/enseignant_service.dart';
 import '../../services/repartition_service.dart';
 
 class LiveGenerationScreen extends StatefulWidget {
@@ -76,15 +77,18 @@ class _LiveGenerationScreenState extends State<LiveGenerationScreen> {
   Future<void> _loadData() async {
     final firestoreService = Provider.of<FirestoreService>(context, listen: false);
     final groupeService = GroupeService();
-    final enseignantService = EnseignantService();
     final repartitionService = RepartitionService();
 
     final tache = await firestoreService.getTache(widget.tacheId);
     if (tache == null) return;
 
     final groupes = await groupeService.getGroupesForTacheFuture(widget.tacheId);
-    final enseignants = await enseignantService.getEnseignantsByIds(tache.enseignantIds);
-    final preferencesMap = await firestoreService.getAllEnseignantPreferences(tache.enseignantIds);
+    // Utiliser les emails au lieu des IDs pour récupérer tous les enseignants
+    final enseignants = await firestoreService.getEnseignantsByEmailsForTask(tache.enseignantEmails);
+
+    // Récupérer les IDs réels des enseignants pour les préférences
+    final enseignantIds = enseignants.map((e) => e.id).toList();
+    final preferencesMap = await firestoreService.getAllEnseignantPreferences(enseignantIds);
     final existing = await repartitionService.getRepartitionsForTacheFuture(widget.tacheId);
 
     setState(() {
@@ -175,6 +179,82 @@ class _LiveGenerationScreenState extends State<LiveGenerationScreen> {
     }
   }
 
+  Future<void> _showGenerateByPreferencesDialog(BuildContext context) async {
+    final countController = TextEditingController(text: '5');
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Générer des répartitions par préférences'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Combien de répartitions voulez-vous générer en saturant les préférences des enseignants ?',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: countController,
+              decoration: const InputDecoration(
+                labelText: 'Nombre de répartitions',
+                border: OutlineInputBorder(),
+                hintText: '5',
+              ),
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Générer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final count = int.tryParse(countController.text) ?? 5;
+    if (count <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Veuillez entrer un nombre valide')),
+      );
+      return;
+    }
+
+    if (_tache == null) return;
+
+    // Générer les répartitions
+    final popGenerator = PopulationGeneratorService();
+    final repartitions = popGenerator.createRepartitionsByPreferences(
+      groupes: _groupes,
+      enseignants: _enseignants,
+      preferences: _preferences,
+      tacheId: widget.tacheId,
+      ciMin: _tache!.ciMin,
+      ciMax: _tache!.ciMax,
+      count: count,
+    );
+
+    // Sauvegarder les répartitions
+    final repartitionService = RepartitionService();
+    for (var repartition in repartitions) {
+      await repartitionService.createRepartition(repartition);
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$count répartition(s) générée(s) avec succès !')),
+      );
+      // Recharger les données pour afficher les nouvelles répartitions
+      _loadData();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -359,12 +439,7 @@ class _LiveGenerationScreenState extends State<LiveGenerationScreen> {
             _buildActionButton(
               label: 'Créer en saturant les préférences',
               icon: Icons.favorite,
-              onPressed: () {
-                // TODO: Implémenter saturation des préférences
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Saturation préférences - À implémenter')),
-                );
-              },
+              onPressed: () => _showGenerateByPreferencesDialog(context),
             ),
             const SizedBox(height: 12),
             _buildActionButton(

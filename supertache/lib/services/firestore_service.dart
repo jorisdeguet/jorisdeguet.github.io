@@ -247,11 +247,11 @@ class FirestoreService {
 
   Future<List<Enseignant>> getEnseignantsByIds(List<String> ids) async {
     if (ids.isEmpty) return [];
-    
+
     final enseignants = <Enseignant>[];
     for (var id in ids) {
       final doc = await _db.collection('enseignants').doc(id).get();
-      
+
       if (doc.exists) {
         enseignants.add(Enseignant.fromMap(doc.id, doc.data()!));
       }
@@ -259,6 +259,37 @@ class FirestoreService {
     return enseignants;
   }
 
+  /// Récupère les enseignants par leurs emails
+  /// Crée des objets Enseignant temporaires pour les emails qui n'ont pas encore de compte
+  Future<List<Enseignant>> getEnseignantsByEmailsForTask(List<String> emails) async {
+    if (emails.isEmpty) return [];
+
+    final enseignants = <Enseignant>[];
+
+    for (var email in emails) {
+      // Chercher d'abord dans la collection enseignants par email
+      final snapshot = await _db
+          .collection('enseignants')
+          .where('email', isEqualTo: email)
+          .limit(1)
+          .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        // L'enseignant a un compte
+        enseignants.add(
+          Enseignant.fromMap(snapshot.docs.first.id, snapshot.docs.first.data())
+        );
+      } else {
+        // L'enseignant n'a pas encore de compte, créer un objet temporaire
+        enseignants.add(Enseignant(
+          id: email, // Utiliser l'email comme ID temporaire
+          email: email,
+        ));
+      }
+    }
+
+    return enseignants;
+  }
   // Préférences des enseignants
   Future<void> saveEnseignantPreferences(EnseignantPreferences preferences) async {
     await _db
