@@ -9,6 +9,7 @@ import 'repartition_detail_screen.dart';
 import 'create_repartition_screen.dart';
 import 'generate_repartitions_screen.dart';
 import 'view_generated_solutions_screen.dart';
+import 'live_generation_screen.dart';
 
 class RepartitionListScreen extends StatelessWidget {
   final String tacheId;
@@ -39,28 +40,54 @@ class RepartitionListScreen extends StatelessWidget {
 
           return Column(
             children: [
-              // Bouton pour générer automatiquement
-              Container(
-                width: double.infinity,
+              // Boutons de génération
+              Padding(
                 padding: const EdgeInsets.all(16),
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => GenerateRepartitionsScreen(
-                          tacheId: tacheId,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => GenerateRepartitionsScreen(
+                                tacheId: tacheId,
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.auto_awesome),
+                        label: const Text('Générer'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.purple,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.all(16),
                         ),
                       ),
-                    );
-                  },
-                  icon: const Icon(Icons.auto_awesome),
-                  label: const Text('Générer automatiquement'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.purple,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.all(16),
-                  ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => LiveGenerationScreen(
+                                tacheId: tacheId,
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.science),
+                        label: const Text('Mode Live'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.purple,
+                          padding: const EdgeInsets.all(16),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
 

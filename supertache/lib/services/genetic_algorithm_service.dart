@@ -65,7 +65,7 @@ class GeneticAlgorithmService {
     this.eliteCount = 10,
   });
 
-  /// Génère des solutions optimales
+  /// Génère des solutions optimales avec callback de progression
   Future<List<TacheSolution>> generateSolutions({
     required List<Groupe> groupes,
     required List<Enseignant> enseignants,
@@ -73,6 +73,7 @@ class GeneticAlgorithmService {
     double ciMin = 38.0,
     double ciMax = 46.0,
     int nbSolutionsFinales = 5,
+    Function(int generation, List<TacheSolution> topSolutions)? onProgress,
   }) async {
     if (groupes.isEmpty || enseignants.isEmpty) {
       return [];
@@ -104,6 +105,11 @@ class GeneticAlgorithmService {
       // Trier par fitness (du meilleur au pire)
       population.sort((a, b) => (b.fitness ?? 0).compareTo(a.fitness ?? 0));
 
+      // Appeler le callback de progression avec les 3 meilleures solutions
+      if (onProgress != null && generation % 10 == 0) {
+        onProgress(generation, population.take(3).toList());
+      }
+
       // Élitisme: garder les meilleures solutions
       final elite = population.take(eliteCount).map((s) => s.copy()).toList();
 
@@ -133,7 +139,7 @@ class GeneticAlgorithmService {
 
       population = newPopulation;
 
-      // Log de progression (optionnel)
+      // Log de progression
       if (generation % 50 == 0) {
         final bestFitness = population.first.fitness ?? 0;
         print('Génération $generation: Meilleur fitness = $bestFitness');
@@ -154,10 +160,86 @@ class GeneticAlgorithmService {
       }
     }
 
-    // Trier et retourner les meilleures solutions
+    // Trier et retourner les meilleures solutions DIVERSES
     population.sort((a, b) => (b.fitness ?? 0).compareTo(a.fitness ?? 0));
     
-    return population.take(nbSolutionsFinales).toList();
+    return _selectDiverseSolutions(population, nbSolutionsFinales);
+  }
+
+  /// Sélectionne des solutions diverses parmi les meilleures
+  List<TacheSolution> _selectDiverseSolutions(
+    List<TacheSolution> sortedPopulation,
+    int count,
+  ) {
+    if (sortedPopulation.length <= count) {
+      return sortedPopulation;
+    }
+
+    final selected = <TacheSolution>[];
+    final signatures = <String>{};
+
+    // Toujours prendre la meilleure solution
+    selected.add(sortedPopulation.first);
+    signatures.add(_getSignature(sortedPopulation.first));
+
+    // Pour les autres, privilégier la diversité
+    for (var solution in sortedPopulation.skip(1)) {
+      if (selected.length >= count) break;
+
+      final signature = _getSignature(solution);
+
+      // Vérifier si cette solution est suffisamment différente
+      bool isDifferent = true;
+      for (var existingSignature in signatures) {
+        if (_calculateSimilarity(signature, existingSignature) > 0.8) {
+          isDifferent = false;
+          break;
+        }
+      }
+
+      if (isDifferent) {
+        selected.add(solution);
+        signatures.add(signature);
+      }
+    }
+
+    // Si on n'a pas assez de solutions diverses, prendre les meilleures restantes
+    while (selected.length < count && selected.length < sortedPopulation.length) {
+      for (var solution in sortedPopulation) {
+        if (selected.length >= count) break;
+        if (!selected.contains(solution)) {
+          selected.add(solution);
+        }
+      }
+    }
+
+    return selected;
+  }
+
+  /// Calcule une signature pour une solution
+  String _getSignature(TacheSolution solution) {
+    final sortedKeys = solution.allocations.keys.toList()..sort();
+    final parts = <String>[];
+
+    for (var key in sortedKeys) {
+      final groupes = solution.allocations[key]!.toList()..sort();
+      parts.add('$key:${groupes.join(',')}');
+    }
+
+    return parts.join('|');
+  }
+
+  /// Calcule la similarité entre deux signatures (0.0 = différent, 1.0 = identique)
+  double _calculateSimilarity(String sig1, String sig2) {
+    if (sig1 == sig2) return 1.0;
+
+    final parts1 = sig1.split('|').toSet();
+    final parts2 = sig2.split('|').toSet();
+
+    final intersection = parts1.intersection(parts2).length;
+    final union = parts1.union(parts2).length;
+
+    return union > 0 ? intersection / union : 0.0;
   }
 
   /// Crée une population initiale aléatoire
