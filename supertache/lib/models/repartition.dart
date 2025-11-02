@@ -79,8 +79,8 @@ class Repartition {
   /// Format: "prenom1(cours1-g1 cours1-g2 cours2-g3)prenom2(cours3-g1)"
   /// Les noms sont triés alphabétiquement, les groupes aussi
   String toHumanReadableString(
-    Map<String, String> enseignantIdToName, // enseignantId -> "Prénom Nom"
-    Map<String, String> groupeIdToCours, // groupeId -> code cours (ex: "3N5")
+    Map<String, String> enseignantIdToName, // enseignantId -> "Prénom Nom" ou email prefix
+    Map<String, String> groupeIdToLabel, // groupeId -> label complet ex: "3N5-1" ou "420-1B3-1010"
   ) {
     final parts = <String>[];
 
@@ -95,26 +95,21 @@ class Repartition {
     for (var entry in sortedEntries) {
       final enseignantId = entry.key;
       final groupeIds = entry.value;
-
       if (groupeIds.isEmpty) continue;
 
-      // Obtenir le nom (prénom ou prénom+nom si ambiguïté)
-      final fullName = enseignantIdToName[enseignantId] ?? enseignantId;
-      final firstName = fullName.split(' ').first.toLowerCase();
+      // Obtenir le nom compact (prefix email si dispo)
+      final raw = enseignantIdToName[enseignantId] ?? enseignantId;
+      final firstToken = raw.contains('@') ? raw.split('@').first : raw.split(' ').first;
+      final displayName = firstToken.toLowerCase();
 
-      // Créer la liste des groupes "cours-numero"
+      // Construire la liste label des groupes
       final groupes = <String>[];
       for (var groupeId in groupeIds) {
-        final cours = groupeIdToCours[groupeId] ?? '???';
-        // Extraire le numéro du groupe depuis l'ID
-        final numero = groupeId.split('_').last;
-        groupes.add('$cours-$numero');
+        final label = groupeIdToLabel[groupeId] ?? '???';
+        groupes.add(label);
       }
-
-      // Trier les groupes alphabétiquement
       groupes.sort();
-
-      parts.add('$firstName(${groupes.join(' ')})');
+      parts.add('$displayName(${groupes.join(' ')})');
     }
 
     return parts.join('');

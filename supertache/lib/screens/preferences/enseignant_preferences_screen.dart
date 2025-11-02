@@ -20,7 +20,6 @@ class _EnseignantPreferencesScreenState extends State<EnseignantPreferencesScree
   List<String> _coursEvites = [];
   List<String> _coursNeutres = []; // Cours disponibles mais non classés
   List<String> _colleguesSouhaites = [];
-  List<String> _colleguesEvites = [];
   double? _ciMin;
   double? _ciMax;
   
@@ -31,7 +30,12 @@ class _EnseignantPreferencesScreenState extends State<EnseignantPreferencesScree
   bool _isLoading = true;
   bool _isLoadingCours = true;
   Enseignant? _currentEnseignant;
-  EnseignantPreferences? _preferences;
+
+  // Liste pour l'auto-complétion de tous les collègues (emails)
+  List<String> _allCollegueEmails = [];
+
+  // Ensemble de tous les cours disponibles (codes)
+  Set<String> _allCoursSet = {};
 
   @override
   void initState() {
@@ -64,28 +68,41 @@ class _EnseignantPreferencesScreenState extends State<EnseignantPreferencesScree
 
     // Charger les préférences depuis Firestore
     final prefs = await firestoreService.getEnseignantPreferences(enseignant.id);
-    
     final effectivePrefs = prefs ?? EnseignantPreferences(
       enseignantId: enseignant.id,
       enseignantEmail: enseignant.email,
     );
 
-    // Charger tous les cours disponibles
+    // Charger tous les cours disponibles (remplit _allCoursSet)
     await _loadAllCours(effectivePrefs);
+
+    // Charger tous les collègues possibles (tous les enseignants vus dans la BD)
+    List<String> emails = [];
+    try {
+      emails = await firestoreService.getAllEnseignantEmailsFuture();
+    } catch (_) {
+      emails = [];
+    }
+    // Exclure l'enseignant courant
+    emails.removeWhere((e) => e == enseignant.email.toLowerCase());
+
+    // Sanitize des listes cours: exclusivité et appartenance au catalogue
+    final wishedSet = effectivePrefs.coursSouhaites.where((c) => _allCoursSet.contains(c)).toSet();
+    final avoidedSetRaw = effectivePrefs.coursEvites.where((c) => _allCoursSet.contains(c)).toSet();
+    final avoidedSet = avoidedSetRaw.difference(wishedSet); // priorité aux souhaités
+    final neutralSet = _allCoursSet.difference(wishedSet.union(avoidedSet));
 
     setState(() {
       _currentEnseignant = enseignant;
-      _preferences = effectivePrefs;
-      _coursSouhaites = List.from(effectivePrefs.coursSouhaites);
-      _coursEvites = List.from(effectivePrefs.coursEvites);
+      _coursSouhaites = wishedSet.toList()..sort();
+      _coursEvites = avoidedSet.toList()..sort();
+      _coursNeutres = neutralSet.toList()..sort();
       _colleguesSouhaites = List.from(effectivePrefs.colleguesSouhaites);
-      _colleguesEvites = List.from(effectivePrefs.colleguesEvites);
       _ciMin = effectivePrefs.ciMin;
       _ciMax = effectivePrefs.ciMax;
-      
       if (_ciMin != null) _ciMinController.text = _ciMin.toString();
       if (_ciMax != null) _ciMaxController.text = _ciMax.toString();
-      
+      _allCollegueEmails = emails;
       _isLoading = false;
     });
   }
@@ -94,13 +111,11 @@ class _EnseignantPreferencesScreenState extends State<EnseignantPreferencesScree
     try {
       final firestoreService = Provider.of<FirestoreService>(context, listen: false);
       final allCours = await firestoreService.getAllCoursFuture();
-      
-      // Extraire tous les codes de cours
-      final allCoursSet = allCours.map((c) => c.code).toSet();
+      _allCoursSet = allCours.map((c) => c.code).toSet();
 
-      // Tous les cours qui ne sont ni souhaités ni évités vont dans la zone neutre
-      final neutres = allCoursSet
-          .where((code) => 
+      // Calcul provisoire des neutres (sera finalisé dans _loadData)
+      final neutres = _allCoursSet
+          .where((code) =>
               !prefs.coursSouhaites.contains(code) && 
               !prefs.coursEvites.contains(code))
           .toList()
@@ -129,7 +144,7 @@ class _EnseignantPreferencesScreenState extends State<EnseignantPreferencesScree
       coursSouhaites: _coursSouhaites,
       coursEvites: _coursEvites,
       colleguesSouhaites: _colleguesSouhaites,
-      colleguesEvites: _colleguesEvites,
+      colleguesEvites: const [], // on ne sauve plus d'évitements de collègues
       ciMin: _ciMin,
       ciMax: _ciMax,
     );
@@ -220,37 +235,27 @@ class _EnseignantPreferencesScreenState extends State<EnseignantPreferencesScree
             _buildCoursDragDropZones(),
             const SizedBox(height: 16),
 
-            // Collègues souhaités
+            // Collègues souhaités (avec auto-complétion)
             _buildColleguesSection(
               title: 'Collègues préférés',
-              description: 'Emails des collègues avec qui vous aimeriez travailler',
+              description: 'Sélectionnez un collègue avec qui vous aimeriez travailler (auto-complétion)',
               items: _colleguesSouhaites,
               controller: _collegueController,
               color: Colors.green,
               onAdd: (value) {
-                setState(() => _colleguesSouhaites.add(value.toLowerCase()));
+                final email = value.toLowerCase();
+                if (email.isEmpty) return;
+                setState(() {
+                  if (!_colleguesSouhaites.contains(email)) {
+                    _colleguesSouhaites.add(email);
+                  }
+                });
                 _collegueController.clear();
               },
               onRemove: (value) {
                 setState(() => _colleguesSouhaites.remove(value));
               },
-            ),
-            const SizedBox(height: 16),
-
-            // Collègues évités
-            _buildColleguesSection(
-              title: 'Collègues à éviter',
-              description: 'Emails des collègues que vous préférez éviter',
-              items: _colleguesEvites,
-              controller: _collegueController,
-              color: Colors.red,
-              onAdd: (value) {
-                setState(() => _colleguesEvites.add(value.toLowerCase()));
-                _collegueController.clear();
-              },
-              onRemove: (value) {
-                setState(() => _colleguesEvites.remove(value));
-              },
+              suggestions: _allCollegueEmails,
             ),
             const SizedBox(height: 16),
 
@@ -456,7 +461,7 @@ class _EnseignantPreferencesScreenState extends State<EnseignantPreferencesScree
             const SizedBox(width: 8),
             Chip(
               label: Text('${items.length}'),
-              backgroundColor: color.withOpacity(0.2),
+              backgroundColor: color.withAlpha(51),
               padding: EdgeInsets.zero,
               labelPadding: const EdgeInsets.symmetric(horizontal: 8),
             ),
@@ -473,7 +478,7 @@ class _EnseignantPreferencesScreenState extends State<EnseignantPreferencesScree
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: candidateData.isNotEmpty
-                    ? color.withOpacity(0.1)
+                    ? color.withAlpha(26)
                     : Colors.grey.shade50,
                 border: Border.all(
                   color: candidateData.isNotEmpty
@@ -506,19 +511,19 @@ class _EnseignantPreferencesScreenState extends State<EnseignantPreferencesScree
                             borderRadius: BorderRadius.circular(16),
                             child: Chip(
                               label: Text(cours),
-                              backgroundColor: color.withOpacity(0.3),
+                              backgroundColor: color.withAlpha(77),
                             ),
                           ),
                           childWhenDragging: Opacity(
                             opacity: 0.3,
                             child: Chip(
                               label: Text(cours),
-                              backgroundColor: color.withOpacity(0.1),
+                              backgroundColor: color.withAlpha(26),
                             ),
                           ),
                           child: Chip(
                             label: Text(cours),
-                            backgroundColor: color.withOpacity(0.1),
+                            backgroundColor: color.withAlpha(26),
                             deleteIcon: isNeutralZone ? null : const Icon(Icons.close, size: 16),
                             onDeleted: isNeutralZone ? null : () {
                               setState(() {
@@ -551,6 +556,7 @@ class _EnseignantPreferencesScreenState extends State<EnseignantPreferencesScree
     required Color color,
     required Function(String) onAdd,
     required Function(String) onRemove,
+    List<String>? suggestions,
   }) {
     return Card(
       child: Padding(
@@ -570,7 +576,7 @@ class _EnseignantPreferencesScreenState extends State<EnseignantPreferencesScree
                 ),
                 Chip(
                   label: Text('${items.length}'),
-                  backgroundColor: color.withOpacity(0.2),
+                  backgroundColor: color.withAlpha(51),
                 ),
               ],
             ),
@@ -583,25 +589,41 @@ class _EnseignantPreferencesScreenState extends State<EnseignantPreferencesScree
             Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: controller,
-                    decoration: InputDecoration(
-                      hintText: 'Ex: collegue@college.ca',
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.add_circle),
-                        onPressed: () {
-                          if (controller.text.isNotEmpty && controller.text.contains('@')) {
-                            onAdd(controller.text);
-                          }
-                        },
-                      ),
-                    ),
-                    keyboardType: TextInputType.emailAddress,
-                    onSubmitted: (value) {
-                      if (value.isNotEmpty && value.contains('@')) {
-                        onAdd(value);
+                  child: Autocomplete<String>(
+                    optionsBuilder: (TextEditingValue textEditingValue) {
+                      final query = textEditingValue.text.toLowerCase();
+                      if (query.isEmpty) {
+                        return const Iterable<String>.empty();
                       }
+                      final pool = suggestions ?? const <String>[];
+                      return pool.where((s) => s.toLowerCase().contains(query) && !items.contains(s));
+                    },
+                    fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
+                      return TextField(
+                        controller: textController,
+                        focusNode: focusNode,
+                        decoration: InputDecoration(
+                          hintText: 'Ex: prof@college.ca',
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.add_circle),
+                            onPressed: () {
+                              final value = textController.text.trim();
+                              if (value.isNotEmpty) {
+                                onAdd(value);
+                                textController.clear();
+                              }
+                            },
+                          ),
+                        ),
+                        keyboardType: TextInputType.emailAddress,
+                        onSubmitted: (value) {
+                          if (value.isNotEmpty) onAdd(value);
+                        },
+                      );
+                    },
+                    onSelected: (String selection) {
+                      onAdd(selection);
                     },
                   ),
                 ),
@@ -617,7 +639,7 @@ class _EnseignantPreferencesScreenState extends State<EnseignantPreferencesScree
                     label: Text(item, style: const TextStyle(fontSize: 12)),
                     deleteIcon: const Icon(Icons.close, size: 18),
                     onDeleted: () => onRemove(item),
-                    backgroundColor: color.withOpacity(0.1),
+                    backgroundColor: color.withAlpha(26),
                   );
                 }).toList(),
               ),

@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
-import '../repartitions/repartition_list_screen.dart';
+// import '../repartitions/repartition_list_screen.dart';
 
 import 'package:provider/provider.dart';
 import '../../services/firestore_service.dart';
+import '../../services/repartition_service.dart';
+import '../../services/groupe_service.dart';
 import '../../models/tache.dart';
 import '../../models/groupe.dart';
 import '../../models/enseignant.dart';
+import '../../models/repartition.dart';
+import '../../widgets/repartition_summary_card.dart';
 import '../../widgets/app_drawer.dart';
 
 class ViewTacheScreen extends StatefulWidget {
@@ -19,147 +23,225 @@ class ViewTacheScreen extends StatefulWidget {
 
 class _ViewTacheScreenState extends State<ViewTacheScreen> {
   bool _enseignantsExpanded = false;
+  bool _groupesExpanded = true;
 
   @override
   Widget build(BuildContext context) {
     final firestoreService = Provider.of<FirestoreService>(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () => Scaffold.of(context).openDrawer(),
+    return FutureBuilder<Tache?>(
+      future: firestoreService.getTache(widget.tacheId),
+      builder: (context, snapshot) {
+        final tache = snapshot.data;
+        final title = tache != null
+            ? '${tache.nom} (${tache.type == SessionType.automne ? "Automne" : "Hiver"} ${tache.year})'
+            : 'Chargement...';
+
+        return Scaffold(
+          appBar: AppBar(
+            leading: Builder(
+              builder: (context) => IconButton(
+                icon: const Icon(Icons.menu),
+                onPressed: () => Scaffold.of(context).openDrawer(),
+              ),
+            ),
+            title: Text(title),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.delete),
+                onPressed: () => _confirmDelete(context),
+              ),
+            ],
           ),
-        ),
-        title: const Text('Détails de la tâche'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: () => _confirmDelete(context),
-          ),
-        ],
-      ),
-      drawer: const AppDrawer(),
-      body: FutureBuilder<Tache?>(
-        future: firestoreService.getTache(widget.tacheId),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+          drawer: const AppDrawer(),
+          body: _buildBody(context, snapshot),
+        );
+      },
+    );
+  }
 
-          if (!snapshot.hasData || snapshot.data == null) {
-            return const Center(child: Text('Tâche non trouvée'));
-          }
+  Widget _buildBody(BuildContext context, AsyncSnapshot<Tache?> snapshot) {
+    if (snapshot.connectionState == ConnectionState.waiting) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-          final tache = snapshot.data!;
+    if (!snapshot.hasData || snapshot.data == null) {
+      return const Center(child: Text('Tâche non trouvée'));
+    }
 
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              final isWideScreen = constraints.maxWidth > 600;
-              
-              return ListView(
-                padding: const EdgeInsets.all(16),
+    final tache = snapshot.data!;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWideScreen = constraints.maxWidth > 600;
+
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // NOUVEAU : Répartitions en premier
+            _buildRepartitionsSection(context, tache),
+            const SizedBox(height: 16),
+
+            // Enseignants et Groupes
+            if (isWideScreen)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // En-tête
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            tache.nom,
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: tache.type == SessionType.automne
-                                      ? Colors.orange.shade100
-                                      : Colors.blue.shade100,
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Text(
-                                  '${tache.type == SessionType.automne ? "Automne" : "Hiver"} ${tache.year}',
-                                  style: TextStyle(
-                                    color: tache.type == SessionType.automne
-                                        ? Colors.orange.shade900
-                                        : Colors.blue.shade900,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Text(
-                                'Créée le ${_formatDate(tache.dateCreation)}',
-                                style: TextStyle(color: Colors.grey[600]),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                  Expanded(child: _buildEnseignantsCard(context, tache)),
+                  const SizedBox(width: 16),
+                  Expanded(child: _buildGroupesCard(context, tache)),
+                ],
+              )
+            else ...[
+              _buildEnseignantsCard(context, tache),
+              const SizedBox(height: 16),
+              _buildGroupesCard(context, tache),
+            ],
+          ],
+        );
+      },
+    );
+  }
 
-                  // Bouton pour créer une répartition
-                  Card(
-                    color: Colors.purple.shade50,
-                    child: InkWell(
-                      onTap: () {
-                        Navigator.pushNamed(
-                          context,
-                          '/tache/${widget.tacheId}/repartitions',
+  Widget _buildRepartitionsSection(BuildContext context, Tache tache) {
+    final repartitionService = RepartitionService();
+    final groupeService = GroupeService();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.grid_on, color: Colors.purple),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Répartitions',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                // Actions rapides
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.pushNamed(context, '/tache/${widget.tacheId}/repartitions/generate'),
+                  icon: const Icon(Icons.auto_awesome),
+                  label: const Text('Générer'),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.pushNamed(context, '/tache/${widget.tacheId}/repartitions/live'),
+                  icon: const Icon(Icons.science),
+                  label: const Text('Live'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Liste des répartitions (avec groupes pour le résumé)
+            StreamBuilder<List<Repartition>>(
+              stream: repartitionService.getRepartitionsForTache(widget.tacheId),
+              builder: (context, repSnapshot) {
+                if (repSnapshot.connectionState == ConnectionState.waiting) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
+                final repartitions = repSnapshot.data ?? [];
+
+                if (repartitions.isEmpty) {
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      border: Border.all(color: Theme.of(context).dividerColor),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.grey[600]),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Aucune répartition pour le moment. Utilisez "Générer" ou "Live" pour en créer.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return FutureBuilder<List<Groupe>>(
+                  future: groupeService.getGroupesForTacheFuture(widget.tacheId),
+                  builder: (context, grpSnapshot) {
+                    if (!grpSnapshot.hasData) {
+                      return const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+
+                    final groupes = grpSnapshot.data!;
+
+                    return ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: repartitions.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final r = repartitions[index];
+                        return RepartitionSummaryCard(
+                          repartition: r,
+                          groupes: groupes,
+                          isCompact: false,
+                          onTap: () => Navigator.pushNamed(
+                            context,
+                            '/tache/${widget.tacheId}/repartitions/${r.id}',
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            tooltip: 'Supprimer',
+                            onPressed: () async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text('Supprimer cette répartition ?'),
+                                  content: const Text('Cette action est irréversible.'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, false),
+                                      child: const Text('Annuler'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, true),
+                                      child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true) {
+                                await repartitionService.deleteRepartition(r.id);
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Répartition supprimée')),
+                                  );
+                                }
+                              }
+                            },
+                          ),
                         );
                       },
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.grid_on, color: Colors.purple.shade700),
-                            const SizedBox(width: 12),
-                            Text(
-                              'Gérer les répartitions',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.purple.shade700,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Icon(Icons.arrow_forward, color: Colors.purple.shade700),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Layout en 2 colonnes sur grand écran
-                  if (isWideScreen)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: _buildEnseignantsCard(context, tache)),
-                        const SizedBox(width: 16),
-                        Expanded(child: _buildGroupesCard(context, tache)),
-                      ],
-                    )
-                  else ...[
-                    _buildEnseignantsCard(context, tache),
-                    const SizedBox(height: 16),
-                    _buildGroupesCard(context, tache),
-                  ],
-                ],
-              );
-            },
-          );
-        },
+                    );
+                  },
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -288,111 +370,67 @@ class _ViewTacheScreenState extends State<ViewTacheScreen> {
         }
 
         final groupes = groupeSnapshot.data ?? [];
-        final ciTotale = tache.calculateCITotale(groupes);
 
-        return Column(
-          children: [
-            Card(
-              color: Colors.green.shade50,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _StatItem(
-                      icon: Icons.group,
-                      label: 'Groupes',
-                      value: '${groupes.length}',
-                    ),
-                    _StatItem(
-                      icon: Icons.people,
-                      label: 'Étudiants',
-                      value: '${groupes.fold(0, (sum, g) => sum + g.nombreEtudiants)}',
-                    ),
-                    _StatItem(
-                      icon: Icons.assessment,
-                      label: 'CI Totale',
-                      value: ciTotale.toStringAsFixed(2),
-                      valueColor: Colors.green,
-                    ),
-                  ],
+        return Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              InkWell(
+                onTap: () => setState(() => _groupesExpanded = !_groupesExpanded),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.list, color: Colors.blue),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Liste des groupes (${groupes.length})',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      Icon(_groupesExpanded ? Icons.expand_less : Icons.expand_more),
+                      IconButton(
+                        tooltip: 'Ajouter un groupe',
+                        icon: const Icon(Icons.add_circle_outline),
+                        onPressed: () => _showAddGroupeDialog(context, widget.tacheId),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.list, color: Colors.blue),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Liste des groupes',
-                            style: Theme.of(context).textTheme.titleMedium,
+              if (_groupesExpanded)
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: groupes.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final groupe = groupes[index];
+                    return ListTile(
+                      leading: CircleAvatar(child: Text('${index + 1}')),
+                      title: Text('${groupe.cours} - ${groupe.numeroGroupe}'),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${groupe.nombreEtudiants} étudiants'),
+                          Text(
+                            '${groupe.heuresTheorie}h théo • ${groupe.heuresPratique}h prat',
+                            style: const TextStyle(fontSize: 12),
                           ),
-                        ),
-                        IconButton(
-                          tooltip: 'Ajouter un groupe',
-                          icon: const Icon(Icons.add_circle_outline),
-                          onPressed: () => _showAddGroupeDialog(context, widget.tacheId),
-                        ),
-                      ],
-                    ),
-                  ),
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: groupes.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final groupe = groupes[index];
-                      return ListTile(
-                        leading: CircleAvatar(
-                          child: Text('${index + 1}'),
-                        ),
-                        title: Text('${groupe.cours} - ${groupe.numeroGroupe}'),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('${groupe.nombreEtudiants} étudiants'),
-                            Text(
-                              '${groupe.heuresTheorie}h théo • ${groupe.heuresPratique}h prat',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ],
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '${groupe.heuresTheorie.toInt()}T / ${groupe.heuresPratique.toInt()}P',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              tooltip: 'Supprimer',
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _confirmDeleteGroupe(context, groupe.id),
-                            ),
-                          ],
-                        ),
-                        isThreeLine: true,
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
+                        ],
+                      ),
+                      trailing: IconButton(
+                        tooltip: 'Supprimer',
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _confirmDeleteGroupe(context, groupe.id),
+                      ),
+                      isThreeLine: true,
+                    );
+                  },
+                ),
+            ],
+          ),
         );
       },
     );

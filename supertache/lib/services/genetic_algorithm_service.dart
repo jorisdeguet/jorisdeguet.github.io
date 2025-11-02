@@ -45,6 +45,32 @@ class TacheSolution {
   }
 }
 
+/// Poids des différents critères du score de fitness
+class FitnessWeights {
+  final double wCiBonus;
+  final double wCiPenaltyPerUnit;
+  final double wCours2Penalty;
+  final double wCours3Penalty;
+  final double wCours4PlusPenalty;
+  final double wCoursWishBonus;
+  final double wCoursAvoidPenalty;
+  final double wColWishBonus;
+  final double wColAvoidPenalty;
+  final double wUnallocatedPenalty;
+  const FitnessWeights({
+    this.wCiBonus = 30,
+    this.wCiPenaltyPerUnit = 5,
+    this.wCours2Penalty = -10,
+    this.wCours3Penalty = -30,
+    this.wCours4PlusPenalty = -100,
+    this.wCoursWishBonus = 10,
+    this.wCoursAvoidPenalty = -100,
+    this.wColWishBonus = 1,
+    this.wColAvoidPenalty = -5,
+    this.wUnallocatedPenalty = -50,
+  });
+}
+
 /// Service d'algorithme génétique pour créer des répartitions optimales
 class GeneticAlgorithmService {
   final CICalculatorService _ciCalculator = CICalculatorService();
@@ -56,6 +82,7 @@ class GeneticAlgorithmService {
   final double mutationRate;
   final double crossoverRate;
   final int eliteCount;
+  final FitnessWeights weights;
 
   GeneticAlgorithmService({
     this.populationSize = 100,
@@ -63,6 +90,7 @@ class GeneticAlgorithmService {
     this.mutationRate = 0.3,
     this.crossoverRate = 0.7,
     this.eliteCount = 10,
+    this.weights = const FitnessWeights(),
   });
 
   /// Génère des solutions optimales avec callback de progression
@@ -73,6 +101,7 @@ class GeneticAlgorithmService {
     double ciMin = 38.0,
     double ciMax = 46.0,
     int nbSolutionsFinales = 5,
+    List<TacheSolution>? seedSolutions,
     Function(int generation, List<TacheSolution> topSolutions)? onProgress,
   }) async {
     if (groupes.isEmpty || enseignants.isEmpty) {
@@ -80,33 +109,55 @@ class GeneticAlgorithmService {
     }
 
     // Initialiser la population
-    List<TacheSolution> population = _createInitialPopulation(
-      groupes,
-      enseignants,
-      populationSize,
-    );
+    List<TacheSolution> population = [];
+    final signatures = <String>{};
+
+    // Ajouter les graines (solutions seed) au début
+    if (seedSolutions != null && seedSolutions.isNotEmpty) {
+      for (var s in seedSolutions) {
+        final c = s.copy();
+        _repairSolution(c, s); // s'assurer cohérence
+        final sig = _getSignature(c);
+        if (!signatures.contains(sig)) {
+          population.add(c);
+          signatures.add(sig);
+          if (population.length >= populationSize) break;
+        }
+      }
+    }
+
+    // Compléter avec population aléatoire
+    final needed = populationSize - population.length;
+    if (needed > 0) {
+      final randomPop = _createInitialPopulation(groupes, enseignants, needed);
+      for (var s in randomPop) {
+        final sig = _getSignature(s);
+        if (!signatures.contains(sig)) {
+          population.add(s);
+          signatures.add(sig);
+        }
+      }
+    }
 
     // Évolution
     for (int generation = 0; generation < maxGenerations; generation++) {
       // Calculer le fitness de chaque solution
       for (var solution in population) {
-        if (solution.fitness == null) {
-          solution.fitness = _calculateFitness(
-            solution,
-            groupes,
-            enseignants,
-            preferences,
-            ciMin,
-            ciMax,
-          );
-        }
+        solution.fitness ??= _calculateFitness(
+          solution,
+          groupes,
+          enseignants,
+          preferences,
+          ciMin,
+          ciMax,
+        );
       }
 
       // Trier par fitness (du meilleur au pire)
       population.sort((a, b) => (b.fitness ?? 0).compareTo(a.fitness ?? 0));
 
-      // Appeler le callback de progression avec les 3 meilleures solutions
-      if (onProgress != null && generation % 10 == 0) {
+      // Callback de progression à chaque génération
+      if (onProgress != null) {
         onProgress(generation, population.take(3).toList());
       }
 
@@ -148,16 +199,14 @@ class GeneticAlgorithmService {
 
     // Calculer le fitness final pour toutes les solutions
     for (var solution in population) {
-      if (solution.fitness == null) {
-        solution.fitness = _calculateFitness(
-          solution,
-          groupes,
-          enseignants,
-          preferences,
-          ciMin,
-          ciMax,
-        );
-      }
+      solution.fitness ??= _calculateFitness(
+        solution,
+        groupes,
+        enseignants,
+        preferences,
+        ciMin,
+        ciMax,
+      );
     }
 
     // Trier et retourner les meilleures solutions DIVERSES
@@ -295,10 +344,7 @@ class GeneticAlgorithmService {
   ) {
     double score = 0.0;
 
-    // Map pour accès rapide aux groupes
     final groupeMap = {for (var g in groupes) g.id: g};
-
-    // Enseignants dans cette solution
     final enseignantsIds = solution.allocations.keys.toSet();
 
     for (var enseignant in enseignants) {
@@ -308,86 +354,56 @@ class GeneticAlgorithmService {
           .whereType<Groupe>()
           .toList();
 
-      // 1. Score CI (30 points par enseignant dans la plage)
+      // 1. Score CI
       final ci = _ciCalculator.calculateCI(enseignantGroupes);
       if (ci >= ciMin && ci <= ciMax) {
-        score += 30;
+        score += weights.wCiBonus;
       } else {
-        // Pénalité proportionnelle à la distance de la plage cible
         final distance = ci < ciMin ? (ciMin - ci) : (ci - ciMax);
-        score -= distance * 5; // Pénalité de 5 points par unité de CI hors plage
+        score += -weights.wCiPenaltyPerUnit * distance;
       }
 
-      // 2. Score basé sur le nombre de cours distincts à préparer
+      // 2. Nombre de cours distincts à préparer
       final coursDistincts = enseignantGroupes.map((g) => g.cours).toSet();
       final nbCoursDistincts = coursDistincts.length;
-
-      if (nbCoursDistincts == 1) {
-        // 1 cours à préparer : score neutre (0)
-        score += 0;
-      } else if (nbCoursDistincts == 2) {
-        // 2 cours à préparer : pénalité de -10
-        score -= 10;
+      if (nbCoursDistincts == 2) {
+        score += weights.wCours2Penalty;
       } else if (nbCoursDistincts == 3) {
-        // 3 cours à préparer : pénalité de -30
-        score -= 30;
+        score += weights.wCours3Penalty;
       } else if (nbCoursDistincts >= 4) {
-        // 4+ cours à préparer : pénalité de -100
-        score -= 100;
+        score += weights.wCours4PlusPenalty;
       }
-      // Si 0 cours (pas de groupes), pas de pénalité ni bonus
 
-      // 3. Score de préférences de cours
+      // 3. Préférences cours
       final prefs = preferences[enseignant.id];
       if (prefs != null) {
         final coursEnseignant = enseignantGroupes.map((g) => g.cours).toSet();
-        
-        final nbCoursSouhaites = coursEnseignant
-            .where((c) => prefs.coursSouhaites.contains(c))
-            .length;
-        final nbCoursEvites = coursEnseignant
-            .where((c) => prefs.coursEvites.contains(c))
-            .length;
-
+        final nbCoursSouhaites = coursEnseignant.where((c) => prefs.coursSouhaites.contains(c)).length;
+        final nbCoursEvites = coursEnseignant.where((c) => prefs.coursEvites.contains(c)).length;
         if (nbCoursSouhaites > 0 && nbCoursEvites == 0) {
-          // Que des cours souhaités
-          score += 10;
+          score += weights.wCoursWishBonus;
         } else if (nbCoursSouhaites == 0 && nbCoursEvites > 0) {
-          // Que des cours évités
-          score -= 100;
-        } else if (nbCoursSouhaites > 0 && nbCoursEvites > 0) {
-          // Mix: score neutre (0)
+          score += weights.wCoursAvoidPenalty;
         }
 
-        // 4. Score de préférences de collègues
-        // Collègues = autres enseignants qui ont des groupes
+        // 4. Préférences collègues
         final collegues = enseignantsIds
             .where((id) => id != enseignant.id)
-            .map((id) => enseignants.firstWhere((e) => e.id == id, 
-                orElse: () => Enseignant(id: id, email: '')))
+            .map((id) => enseignants.firstWhere((e) => e.id == id, orElse: () => Enseignant(id: id, email: '')))
             .toList();
-
         final colleguesEmails = collegues.map((c) => c.email).toSet();
-        
-        final nbColleguesSouhaites = colleguesEmails
-            .where((email) => prefs.colleguesSouhaites.contains(email))
-            .length;
-        final nbColleguesEvites = colleguesEmails
-            .where((email) => prefs.colleguesEvites.contains(email))
-            .length;
-
+        final nbColleguesSouhaites = colleguesEmails.where((email) => prefs.colleguesSouhaites.contains(email)).length;
+        final nbColleguesEvites = colleguesEmails.where((email) => prefs.colleguesEvites.contains(email)).length;
         if (nbColleguesSouhaites > 0 && nbColleguesEvites == 0 && colleguesEmails.isNotEmpty) {
-          // Que des collègues souhaités
-          score += 1;
+          score += weights.wColWishBonus;
         } else if (nbColleguesEvites > 0 && nbColleguesSouhaites == 0 && colleguesEmails.isNotEmpty) {
-          // Que des collègues évités
-          score -= 5;
+          score += weights.wColAvoidPenalty;
         }
       }
     }
 
     // Pénalité pour les groupes non alloués
-    score -= solution.groupesNonAlloues.length * 50;
+    score += weights.wUnallocatedPenalty * solution.groupesNonAlloues.length;
 
     return score;
   }

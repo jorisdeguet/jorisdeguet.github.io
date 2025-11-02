@@ -328,4 +328,23 @@ class FirestoreService {
             .map((doc) => TacheVote.fromMap(doc.data()))
             .toList());
   }
+
+  Future<List<String>> getAllEnseignantEmailsFuture() async {
+    final snapshot = await _db.collection('taches').get();
+    final emails = <String>{};
+    for (var doc in snapshot.docs) {
+      final data = doc.data();
+      final list = (data['enseignantEmails'] as List?)?.cast<String>() ?? const <String>[];
+      emails.addAll(list.map((e) => e.toLowerCase()));
+    }
+    // Ajouter aussi ceux présents dans la collection enseignants
+    final ensSnap = await _db.collection('enseignants').get();
+    for (var doc in ensSnap.docs) {
+      final data = doc.data();
+      final email = (data['email'] as String?)?.toLowerCase();
+      if (email != null && email.isNotEmpty) emails.add(email);
+    }
+    final list = emails.toList()..sort();
+    return list;
+  }
 }
