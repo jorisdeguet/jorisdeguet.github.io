@@ -129,7 +129,7 @@ class GeneticAlgorithmService {
     // Compléter avec population aléatoire
     final needed = populationSize - population.length;
     if (needed > 0) {
-      final randomPop = _createInitialPopulation(groupes, enseignants, needed);
+      final randomPop = _createInitialPopulation(groupes, enseignants, needed, preferences, ciMin, ciMax);
       for (var s in randomPop) {
         final sig = _getSignature(s);
         if (!signatures.contains(sig)) {
@@ -296,37 +296,61 @@ class GeneticAlgorithmService {
     List<Groupe> groupes,
     List<Enseignant> enseignants,
     int size,
+    Map<String, EnseignantPreferences> preferences,
+    double ciMin,
+    double ciMax,
   ) {
     final population = <TacheSolution>[];
+    final groupeMap = {for (var g in groupes) g.id: g};
 
     for (int i = 0; i < size; i++) {
-      final allocations = <String, List<String>>{};
-      for (var enseignant in enseignants) {
-        allocations[enseignant.id] = [];
+      final allocations = <String, List<String>>{
+        for (var e in enseignants) e.id: []
+      };
+      final unallocatedGroupes = List<String>.from(groupes.map((g) => g.id));
+      final shuffledEnseignants = List<Enseignant>.from(enseignants)..shuffle(_random);
+
+      final ciCible = (ciMin + ciMax) / 2;
+
+      // Pour chaque prof, allouer les cours préférés
+      for (var enseignant in shuffledEnseignants) {
+        final enseignantPrefs = preferences[enseignant.id];
+        if (enseignantPrefs == null) continue;
+
+        final preferredCours = List<String>.from(enseignantPrefs.coursSouhaites)..shuffle(_random);
+
+        for (var coursCode in preferredCours) {
+          final groupesPourCeCours = unallocatedGroupes
+              .where((gId) => groupeMap[gId]?.cours == coursCode)
+              .toList()..shuffle(_random);
+
+          for (var groupeId in groupesPourCeCours) {
+            final groupe = groupeMap[groupeId]!;
+            final currentCI = _ciCalculator.calculateCI(
+              (allocations[enseignant.id] ?? []).map((gId) => groupeMap[gId]!).toList()
+            );
+            final groupeCI = _ciCalculator.calculateCI([groupe]);
+
+            if (currentCI + groupeCI <= ciCible) {
+              allocations[enseignant.id]!.add(groupeId);
+              unallocatedGroupes.remove(groupeId);
+            }
+          }
+        }
       }
 
-      // Distribuer les groupes de manière plus équitable
-      final groupesCopy = List<String>.from(groupes.map((g) => g.id));
-      groupesCopy.shuffle(_random);
-
-      if (i < size ~/ 2) {
-        // Pour la première moitié: distribution équitable (round-robin)
-        int enseignantIndex = 0;
-        for (var groupeId in groupesCopy) {
-          allocations[enseignants[enseignantIndex].id]!.add(groupeId);
-          enseignantIndex = (enseignantIndex + 1) % enseignants.length;
-        }
-      } else {
-        // Pour la deuxième moitié: distribution aléatoire
-        for (var groupeId in groupesCopy) {
-          final enseignant = enseignants[_random.nextInt(enseignants.length)];
-          allocations[enseignant.id]!.add(groupeId);
+      // Allouer les groupes restants aléatoirement
+      unallocatedGroupes.shuffle(_random);
+      for (var groupeId in unallocatedGroupes) {
+        if (enseignants.isNotEmpty) {
+          final randomEnseignant = enseignants[_random.nextInt(enseignants.length)];
+          allocations[randomEnseignant.id]!.add(groupeId);
         }
       }
 
       population.add(TacheSolution(
         allocations: allocations,
-        groupesNonAlloues: [],
+        groupesNonAlloues: [], // Sera recalculé plus tard
       ));
     }
 
@@ -452,8 +476,8 @@ class GeneticAlgorithmService {
       }
     }
 
-    final ciMin = tache.ciMin ?? 38.0;
-    final ciMax = tache.ciMax ?? 46.0;
+    final ciMin = tache.ciMin;
+    final ciMax = tache.ciMax;
 
     return _calculateFitness(solution, groupes, enseignants, prefsMap, ciMin, ciMax);
   }
