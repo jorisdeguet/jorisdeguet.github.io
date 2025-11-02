@@ -23,7 +23,7 @@ class ViewTacheScreen extends StatefulWidget {
 
 class _ViewTacheScreenState extends State<ViewTacheScreen> {
   bool _enseignantsExpanded = false;
-  bool _groupesExpanded = true;
+  bool _groupesExpanded = false;
 
   @override
   Widget build(BuildContext context) {
@@ -275,78 +275,80 @@ class _ViewTacheScreenState extends State<ViewTacheScreen> {
                         ? Icons.expand_less
                         : Icons.expand_more,
                   ),
+                  IconButton(
+                    tooltip: 'Ajouter un enseignant',
+                    icon: const Icon(Icons.add_circle_outline),
+                    onPressed: () => _showAddEnseignantDialog(context, tache),
+                  ),
                 ],
               ),
             ),
           ),
           if (_enseignantsExpanded) ...[
             const Divider(height: 1),
-            FutureBuilder<List<Enseignant>>(
-              future: firestoreService.getEnseignantsByEmails(tache.enseignantEmails),
-              builder: (context, ensSnapshot) {
-                if (ensSnapshot.connectionState == ConnectionState.waiting) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
+            Container(
+              color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+              padding: const EdgeInsets.all(16),
+              child: FutureBuilder<List<Enseignant>>(
+                future: firestoreService.getEnseignantsByEmails(tache.enseignantEmails),
+                builder: (context, ensSnapshot) {
+                  if (ensSnapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-                final enseignants = ensSnapshot.data ?? [];
-                
-                // Créer une liste complète avec tous les emails
-                final enseignantsList = tache.enseignantEmails.map((email) {
-                  final enseignant = enseignants.firstWhere(
-                    (e) => e.email == email,
-                    orElse: () => Enseignant(
-                      id: '',
-                      email: email,
-                    ),
-                  );
-                  return enseignant;
-                }).toList();
-                
-                // Trier par nom de famille (dérivé de l'email)
-                enseignantsList.sort((a, b) {
-                  final nameA = a.displayName.split('.').last.toLowerCase();
-                  final nameB = b.displayName.split('.').last.toLowerCase();
-                  return nameA.compareTo(nameB);
-                });
+                  final enseignants = ensSnapshot.data ?? [];
 
-                return Column(
-                  children: [
-                    ...enseignantsList.map((enseignant) {
-                      final isCreated = enseignant.id.isNotEmpty;
-                      return ListTile(
-                        tileColor: !isCreated ? Colors.orange.shade50 : null,
-                        title: Text(enseignant.email),
-                        subtitle: !isCreated 
-                            ? const Text(
-                                'Compte non créé',
-                                style: TextStyle(
-                                  fontStyle: FontStyle.italic,
-                                  color: Colors.orange,
-                                ),
-                              )
-                            : null,
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _confirmRemoveEnseignant(
+                  // Créer une liste complète avec tous les emails
+                  final enseignantsList = tache.enseignantEmails.map((email) {
+                    final enseignant = enseignants.firstWhere(
+                      (e) => e.email == email,
+                      orElse: () => Enseignant(
+                        id: '',
+                        email: email,
+                      ),
+                    );
+                    return enseignant;
+                  }).toList();
+
+                  // Trier par nom de famille (dérivé de l'email)
+                  enseignantsList.sort((a, b) {
+                    final nameA = a.displayName.split('.').last.toLowerCase();
+                    final nameB = b.displayName.split('.').last.toLowerCase();
+                    return nameA.compareTo(nameB);
+                  });
+
+                  return Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ...enseignantsList.map((enseignant) {
+                        final isCreated = enseignant.id.isNotEmpty;
+                        return Chip(
+                          backgroundColor: !isCreated
+                              ? Colors.orange.shade100
+                              : Theme.of(context).colorScheme.secondaryContainer,
+                          label: Text(
+                            enseignant.email,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: !isCreated
+                                  ? Colors.orange.shade900
+                                  : Theme.of(context).colorScheme.onSecondaryContainer,
+                            ),
+                          ),
+                          deleteIcon: const Icon(Icons.delete, size: 18),
+                          deleteIconColor: Colors.red,
+                          onDeleted: () => _confirmRemoveEnseignant(
                             context,
                             tache,
                             enseignant.email,
                           ),
-                        ),
-                      );
-                    }),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.add),
-                      title: const Text('Ajouter un enseignant'),
-                      onTap: () => _showAddEnseignantDialog(context, tache),
-                    ),
-                  ],
-                );
-              },
+                        );
+                      }),
+                    ],
+                  );
+                },
+              ),
             ),
           ],
         ],
@@ -399,7 +401,7 @@ class _ViewTacheScreenState extends State<ViewTacheScreen> {
                   ),
                 ),
               ),
-              if (_groupesExpanded)
+              if (_groupesExpanded) ...[
                 ListView.separated(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -429,6 +431,7 @@ class _ViewTacheScreenState extends State<ViewTacheScreen> {
                     );
                   },
                 ),
+              ],
             ],
           ),
         );
