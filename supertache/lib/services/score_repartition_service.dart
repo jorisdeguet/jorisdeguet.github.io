@@ -113,6 +113,53 @@ class ScoreRepartitionService {
     return score;
   }
 
+  /// Évalue le score d'une allocation pour la génération de population
+  /// Utilisé par l'algorithme de backtracking pour trouver la meilleure combinaison
+  double evaluateAllocationScore({
+    required double ci,
+    required double ciCible,
+    required double ciMin,
+    required double ciMax,
+    required int nbGroupes,
+    required int nbCoursDistincts,
+    required int nbCoursPreferred,
+  }) {
+    double score = 0;
+
+    // Pénalité si hors de la plage
+    if (ci < ciMin) {
+      score -= (ciMin - ci) * 10;
+    } else if (ci > ciMax) {
+      score -= (ci - ciMax) * 10;
+    }
+
+    // Bonus si proche de la cible
+    final distanceCible = (ci - ciCible).abs();
+    score += 100 - distanceCible * 5;
+
+    // Bonus pour nombre de groupes raisonnable (3-6)
+    if (nbGroupes >= 3 && nbGroupes <= 6) {
+      score += 20;
+    }
+
+    // Grand bonus pour minimiser le nombre de cours distincts
+    // On veut idéalement 1-2 cours, acceptable jusqu'à 3
+    if (nbCoursDistincts == 1) {
+      score += 50; // Parfait !
+    } else if (nbCoursDistincts == 2) {
+      score += 30; // Très bien
+    } else if (nbCoursDistincts == 3) {
+      score += 10; // Acceptable
+    } else {
+      score -= (nbCoursDistincts - 3) * 20; // Pénalité croissante
+    }
+
+    // Bonus pour les cours préférés
+    score += nbCoursPreferred * 15;
+
+    return score;
+  }
+
   /// Calcule le score pour une répartition existante
   Future<double> calculateScoreForRepartition(
     Repartition repartition,

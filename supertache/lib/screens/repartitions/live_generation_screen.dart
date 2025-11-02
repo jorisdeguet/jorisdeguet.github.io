@@ -34,6 +34,10 @@ class _LiveGenerationScreenState extends State<LiveGenerationScreen> {
   Map<String, EnseignantPreferences> _preferences = {};
   List<Repartition> _existingRepartitions = [];
 
+  // NOUVEAU: Sélection multiple et tracking des répartitions sauvegardées
+  final Set<String> _selectedRepartitionIds = {};
+  final Set<String> _savedRepartitionIds = {};
+
   // Controllers pour différents actions
   final _generationsController = TextEditingController(text: '100');
   final _populationController = TextEditingController(text: '100');
@@ -91,12 +95,17 @@ class _LiveGenerationScreenState extends State<LiveGenerationScreen> {
     final preferencesMap = await firestoreService.getAllEnseignantPreferences(enseignantIds);
     final existing = await repartitionService.getRepartitionsForTacheFuture(widget.tacheId);
 
+    // Identifier les répartitions sauvegardées
+    final savedIds = existing.map((r) => r.id).toSet();
+
     setState(() {
       _tache = tache;
       _groupes = groupes;
       _enseignants = enseignants;
       _preferences = preferencesMap;
       _existingRepartitions = existing;
+      _savedRepartitionIds.clear();
+      _savedRepartitionIds.addAll(savedIds);
     });
   }
 
@@ -256,6 +265,151 @@ class _LiveGenerationScreenState extends State<LiveGenerationScreen> {
     }
   }
 
+  /// Démarre la génération depuis les répartitions sélectionnées
+  Future<void> _startGenerationFromSelected() async {
+    if (_tache == null || _selectedRepartitionIds.isEmpty) return;
+
+    final generations = int.tryParse(_generationsController.text) ?? 100;
+    final popSize = int.tryParse(_populationController.text) ?? 100;
+
+    setState(() {
+      _isGenerating = true;
+      _topSolutions = [];
+    });
+
+    // Construire les poids depuis les champs
+    final weights = FitnessWeights(
+      wCiBonus: double.tryParse(_wCiController.text) ?? 30,
+      wCiPenaltyPerUnit: double.tryParse(_wCiPenaltyController.text) ?? 5,
+      wCours2Penalty: double.tryParse(_wCours2Controller.text) ?? -10,
+      wCours3Penalty: double.tryParse(_wCours3Controller.text) ?? -30,
+      wCours4PlusPenalty: double.tryParse(_wCours4pController.text) ?? -100,
+      wCoursWishBonus: double.tryParse(_wCoursWishController.text) ?? 10,
+      wCoursAvoidPenalty: double.tryParse(_wCoursAvoidController.text) ?? -100,
+      wColWishBonus: double.tryParse(_wColWishController.text) ?? 1,
+      wColAvoidPenalty: double.tryParse(_wColAvoidController.text) ?? -5,
+      wUnallocatedPenalty: double.tryParse(_wUnallocController.text) ?? -50,
+    );
+
+    // Construire des seeds depuis les répartitions sélectionnées
+    final seeds = <TacheSolution>[];
+    for (var r in _existingRepartitions) {
+      if (_selectedRepartitionIds.contains(r.id)) {
+        seeds.add(TacheSolution(allocations: r.allocations, groupesNonAlloues: r.groupesNonAlloues));
+      }
+    }
+
+    final geneticService = GeneticAlgorithmService(
+      maxGenerations: generations,
+      populationSize: popSize,
+      weights: weights,
+    );
+
+    try {
+      await geneticService.generateSolutions(
+        groupes: _groupes,
+        enseignants: _enseignants,
+        preferences: _preferences,
+        ciMin: _tache!.ciMin,
+        ciMax: _tache!.ciMax,
+        nbSolutionsFinales: 5,
+        seedSolutions: seeds,
+        onProgress: (generation, topSolutions) {
+          if (mounted) {
+            setState(() {
+              _topSolutions = topSolutions;
+            });
+          }
+        },
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Génération terminée à partir de ${seeds.length} répartition(s) !'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGenerating = false);
+      }
+    }
+  }
+
+  /// Affiche la représentation string d'une répartition
+  void _showRepartitionStringDialog(Repartition repartition, String representation) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(repartition.nom),
+        content: SingleChildScrollView(
+          child: SelectableText(
+            representation,
+            style: const TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 14,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Fermer'),
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.content_copy, size: 18),
+            label: const Text('Copier'),
+            onPressed: () {
+              // TODO: Implémenter copie dans le presse-papier
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Répartition "${repartition.nom}" copiée')),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Sauvegarde une répartition dans Firebase
+  Future<void> _saveRepartition(Repartition repartition) async {
+    try {
+      final repartitionService = RepartitionService();
+      await repartitionService.createRepartition(repartition);
+
+      setState(() {
+        _savedRepartitionIds.add(repartition.id);
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Répartition "${repartition.nom}" sauvegardée !')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de la sauvegarde: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -354,23 +508,61 @@ class _LiveGenerationScreenState extends State<LiveGenerationScreen> {
 
     final repartitionString = repartition.toHumanReadableString(enseignantIdToName, groupeIdToLabel);
     final nbGroupesNonAlloues = repartition.groupesNonAlloues.length;
+    final isSelected = _selectedRepartitionIds.contains(repartition.id);
+    final isSaved = _savedRepartitionIds.contains(repartition.id);
 
     return Card(
-      elevation: 2,
+      elevation: isSelected ? 4 : 2,
+      color: isSelected ? theme.colorScheme.primaryContainer.withOpacity(0.3) : null,
       child: InkWell(
         onTap: () {
-          // Action: modifier cette répartition
+          setState(() {
+            if (isSelected) {
+              _selectedRepartitionIds.remove(repartition.id);
+            } else {
+              _selectedRepartitionIds.add(repartition.id);
+            }
+          });
         },
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                repartition.nom,
-                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              Row(
+                children: [
+                  // Checkbox de sélection
+                  Checkbox(
+                    value: isSelected,
+                    onChanged: (value) {
+                      setState(() {
+                        if (value == true) {
+                          _selectedRepartitionIds.add(repartition.id);
+                        } else {
+                          _selectedRepartitionIds.remove(repartition.id);
+                        }
+                      });
+                    },
+                  ),
+                  Expanded(
+                    child: Text(
+                      repartition.nom,
+                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  // Icône de sauvegarde si non sauvegardée
+                  if (!isSaved)
+                    IconButton(
+                      icon: const Icon(Icons.save, size: 18),
+                      color: Colors.grey[600],
+                      tooltip: 'Sauvegarder',
+                      onPressed: () => _saveRepartition(repartition),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                ],
               ),
               const SizedBox(height: 8),
               Expanded(
@@ -378,7 +570,7 @@ class _LiveGenerationScreenState extends State<LiveGenerationScreen> {
                   child: Text(
                     repartitionString,
                     style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
-                    maxLines: 5,
+                    maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -392,14 +584,10 @@ class _LiveGenerationScreenState extends State<LiveGenerationScreen> {
                     style: theme.textTheme.bodySmall,
                   ),
                   Tooltip(
-                    message: 'Copier la répartition',
+                    message: 'Voir la représentation',
                     child: IconButton(
-                      icon: const Icon(Icons.content_copy, size: 16),
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Répartition "${repartition.nom}" copiée')),
-                        );
-                      },
+                      icon: const Icon(Icons.visibility, size: 16),
+                      onPressed: () => _showRepartitionStringDialog(repartition, repartitionString),
                       constraints: const BoxConstraints(),
                       padding: EdgeInsets.zero,
                     ),
@@ -429,7 +617,6 @@ class _LiveGenerationScreenState extends State<LiveGenerationScreen> {
               label: 'Créer une répart manuelle',
               icon: Icons.add_box,
               onPressed: () {
-                // TODO: Implémenter création manuelle
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Créer répart manuelle - À implémenter')),
                 );
@@ -453,7 +640,6 @@ class _LiveGenerationScreenState extends State<LiveGenerationScreen> {
               label: 'Modifier cette répartition',
               icon: Icons.edit,
               onPressed: _existingRepartitions.isEmpty ? null : () {
-                // TODO: Implémenter modification
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Modifier répart - À implémenter')),
                 );
@@ -463,11 +649,23 @@ class _LiveGenerationScreenState extends State<LiveGenerationScreen> {
             _buildActionButton(
               label: 'Démarrer algo depuis ces répart',
               icon: Icons.repeat,
-              onPressed: _existingRepartitions.isEmpty ? null : () {
-                // TODO: Implémenter démarrage depuis répartitions existantes
-                _startGeneration();
+              onPressed: _selectedRepartitionIds.isEmpty ? null : () {
+                _startGenerationFromSelected();
               },
             ),
+            if (_selectedRepartitionIds.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  '${_selectedRepartitionIds.length} répartition(s) sélectionnée(s)',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.primary,
+                    fontStyle: FontStyle.italic,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
             if (_topSolutions.isNotEmpty) ...[
               const SizedBox(height: 24),
               const Divider(),
