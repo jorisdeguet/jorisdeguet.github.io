@@ -211,162 +211,167 @@ class PopulationGeneratorService {
     _AllocationSolution? bestSolution;
     double bestScore = double.negativeInfinity;
 
+    // Fallback si on ne trouve pas de solution dans la plage CI mais avec >= 3 groupes
+    _AllocationSolution? fallbackSolution;
+    double fallbackScore = double.negativeInfinity;
+
     print('  🔍 Exploration des combinaisons possibles...');
 
-    // Stratégie simple: essayer d'allouer les cours un par un
-    // en privilégiant ceux qui complètent des cours déjà commencés
+    // Construire une map cours -> groupes disponibles
+    final Map<String, List<String>> courseToGroups = {};
+    for (var gId in unallocatedGroupes) {
+      final g = groupeMap[gId];
+      if (g == null) continue;
+      courseToGroups.putIfAbsent(g.cours, () => []).add(gId);
+    }
+
+    if (courseToGroups.isEmpty) return null;
+
+    // Séparer les cours préférés et neutres et les classifier par taille (heures)
+    final preferredHeavy = <String>[]; // >= 5h
+    final preferredMedium = <String>[]; // 4h
+    final preferredSmall = <String>[]; // 3h
+
+    final otherHeavy = <String>[];
+    final otherMedium = <String>[];
+    final otherSmall = <String>[];
+
+    for (var cours in courseToGroups.keys) {
+      final firstGroupId = courseToGroups[cours]!.first;
+      final grp = groupeMap[firstGroupId]!;
+      final double heures = grp.heuresTheorie + grp.heuresPratique;
+
+      final bool pref = isPreferredCours(cours);
+      if (heures >= 5.0) {
+        if (pref) preferredHeavy.add(cours); else otherHeavy.add(cours);
+      } else if (heures >= 4.0) {
+        if (pref) preferredMedium.add(cours); else otherMedium.add(cours);
+      } else {
+        if (pref) preferredSmall.add(cours); else otherSmall.add(cours);
+      }
+    }
+
+    // Ordre de priorité: préférés lourds -> préférés 4h -> préférés 3h -> neutres lourds -> neutres 4h -> neutres 3h
+    final orderedCourses = [
+      ...preferredHeavy,
+      ...preferredMedium,
+      ...preferredSmall,
+      ...otherHeavy,
+      ...otherMedium,
+      ...otherSmall,
+    ];
+
+    // Limiter la recherche: nombre max de groupes à tester par prof
+    const int maxTotalGroups = 6;
+
     final currentAllocation = <String>[];
     double currentCI = 0.0;
     final usedCours = <String>{};
 
-    // 1. D'abord, essayer de prendre des cours préférés complets
-    for (var coursCode in preferredCours) {
-      if (!isPreferredCours(coursCode)) continue; // Sauter les cours non préférés pour l'instant
-
-      final groupesPourCeCours = unallocatedGroupes
-          .where((gId) =>
-            groupeMap[gId]?.cours == coursCode &&
-            !currentAllocation.contains(gId))
-          .toList();
-
-      if (groupesPourCeCours.isEmpty) continue;
-
-      print('    ⭐ Évaluation du cours préféré $coursCode (${groupesPourCeCours.length} groupe(s))');
-
-      // Calculer la CI si on prend TOUS les groupes de ce cours
-      double ciAvecTousCours = currentCI;
-      for (var gId in groupesPourCeCours) {
-        ciAvecTousCours += _ciCalculator.calculateCI([groupeMap[gId]!]);
+    double computeCIForAdded(List<String> addedGroupIds) {
+      double sum = 0.0;
+      for (var id in addedGroupIds) {
+        final g = groupeMap[id];
+        if (g != null) sum += _ciCalculator.calculateCI([g]);
       }
+      return sum;
+    }
 
-      // Si on peut prendre tous les groupes sans trop dépasser
-      if (ciAvecTousCours <= ciMax + 5) {
-        // Ajouter tous les groupes de ce cours
-        currentAllocation.addAll(groupesPourCeCours);
-        currentCI = ciAvecTousCours;
-        usedCours.add(coursCode);
-        print('      ✓ Tous les groupes de $coursCode ajoutés (CI: ${currentCI.toStringAsFixed(1)})');
+    void evaluateCurrent(bool preferInRange) {
+      final nbGroupes = currentAllocation.length;
+      final nbCoursDistincts = usedCours.length;
+      final nbCoursPreferred = usedCours.where((c) => isPreferredCours(c)).length;
 
-        // Si on est dans la plage cible, évaluer cette solution
-        if (currentCI >= ciMin && currentCI <= ciMax) {
-          final score = _scoreService.evaluateAllocationScore(
-            ci: currentCI,
-            ciCible: ciCible,
-            ciMin: ciMin,
-            ciMax: ciMax,
-            nbGroupes: currentAllocation.length,
-            nbCoursDistincts: usedCours.length,
-            nbCoursPreferred: usedCours.where((c) => isPreferredCours(c)).length,
-          );
+      final score = _scoreService.evaluateAllocationScore(
+        ci: currentCI,
+        ciCible: ciCible,
+        ciMin: ciMin,
+        ciMax: ciMax,
+        nbGroupes: nbGroupes,
+        nbCoursDistincts: nbCoursDistincts,
+        nbCoursPreferred: nbCoursPreferred,
+      );
 
-          if (score > bestScore) {
-            bestScore = score;
-            bestSolution = _AllocationSolution(
-              groupeIds: List.from(currentAllocation),
-              ci: currentCI,
-            );
-            print('    💡 Nouvelle meilleure solution: ${currentAllocation.length} groupe(s), ${usedCours.length} cours, CI: ${currentCI.toStringAsFixed(1)}, Score: ${score.toStringAsFixed(2)}');
-          }
+      if (currentCI >= ciMin && currentCI <= ciMax && nbGroupes >= 3) {
+        if (score > bestScore) {
+          bestScore = score;
+          bestSolution = _AllocationSolution(groupeIds: List.from(currentAllocation), ci: currentCI);
+          print('    💡 Nouvelle meilleure solution (dans plage CI): ${currentAllocation.length} groupe(s), ${usedCours.length} cours, CI: ${currentCI.toStringAsFixed(1)}, Score: ${score.toStringAsFixed(2)}');
         }
-
-        // Si on a atteint la cible, on peut s'arrêter
-        if (currentCI >= ciMin) {
-          break;
-        }
-      } else {
-        // Essayer de prendre seulement une partie des groupes
-        double ciPartiel = currentCI;
-        final groupesPartiels = <String>[];
-
-        for (var gId in groupesPourCeCours) {
-          final ciGroupe = _ciCalculator.calculateCI([groupeMap[gId]!]);
-          if (ciPartiel + ciGroupe <= ciMax + 5) {
-            groupesPartiels.add(gId);
-            ciPartiel += ciGroupe;
-          } else {
-            break;
-          }
-        }
-
-        if (groupesPartiels.isNotEmpty) {
-          currentAllocation.addAll(groupesPartiels);
-          currentCI = ciPartiel;
-          usedCours.add(coursCode);
-          print('      ✓ ${groupesPartiels.length}/${groupesPourCeCours.length} groupes de $coursCode ajoutés (CI: ${currentCI.toStringAsFixed(1)})');
+      } else if (nbGroupes >= 3) {
+        // Garder un fallback si on n'a rien de valide
+        if (score > fallbackScore) {
+          fallbackScore = score;
+          fallbackSolution = _AllocationSolution(groupeIds: List.from(currentAllocation), ci: currentCI);
+          print('    ⚠️ Nouvelle solution de repli (>=3 groupes, hors CI): ${currentAllocation.length} groupe(s), ${usedCours.length} cours, CI: ${currentCI.toStringAsFixed(1)}, Score: ${score.toStringAsFixed(2)}');
         }
       }
     }
 
-    // 2. Si on n'a pas atteint ciMin, compléter avec d'autres cours
-    if (currentCI < ciMin) {
-      print('    🔸 CI insuffisante (${currentCI.toStringAsFixed(1)}), ajout d\'autres cours...');
+    // Recherche DFS limitée
+    void dfs(int startIndex) {
+      // Évaluer la solution courante
+      evaluateCurrent(true);
 
-      for (var coursCode in preferredCours) {
-        if (usedCours.contains(coursCode)) continue; // Déjà utilisé
+      if (currentAllocation.length >= maxTotalGroups) return;
 
-        final groupesPourCeCours = unallocatedGroupes
-            .where((gId) =>
-              groupeMap[gId]?.cours == coursCode &&
-              !currentAllocation.contains(gId))
+      for (int i = startIndex; i < orderedCourses.length; i++) {
+        final coursCode = orderedCourses[i];
+        final groupesDisponibles = courseToGroups[coursCode]!
+            .where((gId) => !currentAllocation.contains(gId))
             .toList();
 
-        if (groupesPourCeCours.isEmpty) continue;
+        if (groupesDisponibles.isEmpty) continue;
 
-        final isPreferred = isPreferredCours(coursCode);
-        final marker = isPreferred ? '⭐' : '  ';
-        print('    $marker Évaluation du cours $coursCode (${groupesPourCeCours.length} groupe(s))');
+        // Autoriser jusqu'à 3 groupes par cours (ou le nombre disponible)
+        final maxTake = min(3, groupesDisponibles.length);
 
-        // Essayer d'ajouter ce cours
-        double ciAvecCours = currentCI;
-        final groupesACours = <String>[];
+        for (int take = 1; take <= maxTake; take++) {
+          final toAdd = groupesDisponibles.take(take).toList();
+          final addedCI = computeCIForAdded(toAdd);
 
-        for (var gId in groupesPourCeCours) {
-          final ciGroupe = _ciCalculator.calculateCI([groupeMap[gId]!]);
-          if (ciAvecCours + ciGroupe <= ciMax + 5) {
-            groupesACours.add(gId);
-            ciAvecCours += ciGroupe;
-          } else {
-            break;
+          // Si l'ajout dépasse trop la limite, sauter
+          if (currentCI + addedCI > ciMax + 5) {
+            // tenter une quantité moindre
+            continue;
           }
-        }
 
-        if (groupesACours.isNotEmpty) {
-          currentAllocation.addAll(groupesACours);
-          currentCI = ciAvecCours;
+          // Appliquer l'ajout
+          currentAllocation.addAll(toAdd);
+          currentCI += addedCI;
           usedCours.add(coursCode);
-          print('      ✓ ${groupesACours.length} groupe(s) de $coursCode ajoutés (CI: ${currentCI.toStringAsFixed(1)})');
 
-          // Évaluer la solution
-          if (currentCI >= ciMin && currentCI <= ciMax) {
-            final score = _scoreService.evaluateAllocationScore(
-              ci: currentCI,
-              ciCible: ciCible,
-              ciMin: ciMin,
-              ciMax: ciMax,
-              nbGroupes: currentAllocation.length,
-              nbCoursDistincts: usedCours.length,
-              nbCoursPreferred: usedCours.where((c) => isPreferredCours(c)).length,
-            );
+          // Évaluer
+          evaluateCurrent(true);
 
-            if (score > bestScore) {
-              bestScore = score;
-              bestSolution = _AllocationSolution(
-                groupeIds: List.from(currentAllocation),
-                ci: currentCI,
-              );
-              print('    💡 Nouvelle meilleure solution: ${currentAllocation.length} groupe(s), ${usedCours.length} cours, CI: ${currentCI.toStringAsFixed(1)}, Score: ${score.toStringAsFixed(2)}');
+          // Si on est déjà dans la plage CI et au moins 3 groupes, on peut tenter d'enregistrer et ne pas explorer plus profond
+          if (currentCI >= ciMin && currentCI <= ciMax && currentAllocation.length >= 3) {
+            // On continue quand même pour trouver éventuellement une meilleure solution
+            dfs(i + 1);
+          } else {
+            // Continuer la recherche en ajoutant d'autres cours
+            if (currentAllocation.length < maxTotalGroups) {
+              dfs(i + 1);
             }
           }
 
-          // Si on a atteint la cible, on s'arrête
-          if (currentCI >= ciMin) {
-            break;
+          // Annuler l'ajout
+          for (var id in toAdd) {
+            currentAllocation.remove(id);
+          }
+          currentCI -= addedCI;
+          // retirer le cours des utilisés si plus aucun groupe de ce cours n'est présent
+          if (!currentAllocation.any((gId) => groupeMap[gId]?.cours == coursCode)) {
+            usedCours.remove(coursCode);
           }
         }
       }
     }
 
-    return bestSolution;
+    dfs(0);
+
+    if (bestSolution != null) return bestSolution;
+    return fallbackSolution;
   }
 
 
