@@ -8,6 +8,9 @@ import 'services/firestore_service.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/voting/vote_repartitions_screen.dart';
+import 'screens/taches/view_tache_screen.dart';
+import 'screens/repartitions/repartition_list_screen.dart';
+import 'screens/repartitions/view_generated_solutions_screen.dart';
 import 'theme/retro_theme.dart';
 
 void main() async {
@@ -39,14 +42,54 @@ class MyApp extends StatelessWidget {
         theme: RetroTheme.theme,
         home: const AuthWrapper(),
         onGenerateRoute: (settings) {
-          // Route pour l'écran de vote des répartitions
-          if (settings.name == '/vote/repartitions') {
-            final tacheId = settings.arguments as String;
+          // Extraire les paramètres de l'URL
+          final uri = Uri.parse(settings.name ?? '');
+
+          // Route: /tache/:tacheId
+          if (uri.pathSegments.length == 2 && uri.pathSegments[0] == 'tache') {
+            final tacheId = uri.pathSegments[1];
+            return MaterialPageRoute(
+              builder: (context) => ViewTacheScreen(tacheId: tacheId),
+              settings: settings,
+            );
+          }
+
+          // Route: /tache/:tacheId/repartitions
+          if (uri.pathSegments.length == 3 &&
+              uri.pathSegments[0] == 'tache' &&
+              uri.pathSegments[2] == 'repartitions') {
+            final tacheId = uri.pathSegments[1];
+            return MaterialPageRoute(
+              builder: (context) => RepartitionListScreen(tacheId: tacheId),
+              settings: settings,
+            );
+          }
+
+          // Route: /tache/:tacheId/compare
+          if (uri.pathSegments.length == 3 &&
+              uri.pathSegments[0] == 'tache' &&
+              uri.pathSegments[2] == 'compare') {
+            final tacheId = uri.pathSegments[1];
+            return MaterialPageRoute(
+              builder: (context) => ViewGeneratedSolutionsScreen(
+                tacheId: tacheId,
+                generationId: 'latest',
+              ),
+              settings: settings,
+            );
+          }
+
+          // Route: /tache/:tacheId/vote
+          if (uri.pathSegments.length == 3 &&
+              uri.pathSegments[0] == 'tache' &&
+              uri.pathSegments[2] == 'vote') {
+            final tacheId = uri.pathSegments[1];
             return MaterialPageRoute(
               builder: (context) => VoteRepartitionsScreen(
                 tacheId: tacheId,
-                generationId: 'latest', // Utiliser la dernière génération
+                generationId: 'latest',
               ),
+              settings: settings,
             );
           }
 

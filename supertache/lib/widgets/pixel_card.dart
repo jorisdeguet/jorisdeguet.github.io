@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import '../theme/retro_theme.dart';
 
-/// Card avec style pixelisé 8-bits
+/// Card avec style sobre
 class PixelCard extends StatelessWidget {
   final Widget child;
   final Color? color;
@@ -23,8 +22,8 @@ class PixelCard extends StatelessWidget {
     final card = Container(
       margin: margin ?? const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: color ?? Colors.white,
-        border: Border.all(color: Colors.black, width: 3),
+        color: color ?? const Color(0xFF2A2A2A),
+        border: Border.all(color: const Color(0xFF666666), width: 1),
       ),
       child: Padding(
         padding: padding ?? const EdgeInsets.all(16),
@@ -43,7 +42,7 @@ class PixelCard extends StatelessWidget {
   }
 }
 
-/// Bouton pixelisé avec effet d'ombre rétro
+/// Bouton sobre avec effet subtil
 class PixelButton extends StatefulWidget {
   final String text;
   final VoidCallback? onPressed;
@@ -69,8 +68,8 @@ class _PixelButtonState extends State<PixelButton> {
 
   @override
   Widget build(BuildContext context) {
-    final bgColor = widget.backgroundColor ?? Colors.black;
-    final fgColor = widget.textColor ?? Colors.white;
+    final bgColor = widget.backgroundColor ?? Colors.white;
+    final fgColor = widget.textColor ?? Colors.black;
 
     return GestureDetector(
       onTapDown: widget.onPressed != null ? (_) => setState(() => _isPressed = true) : null,
@@ -81,21 +80,9 @@ class _PixelButtonState extends State<PixelButton> {
       onTapCancel: widget.onPressed != null ? () => setState(() => _isPressed = false) : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 100),
-        margin: EdgeInsets.only(
-          left: _isPressed ? 4 : 0,
-          top: _isPressed ? 4 : 0,
-          right: _isPressed ? 0 : 4,
-          bottom: _isPressed ? 0 : 4,
-        ),
         decoration: BoxDecoration(
-          color: bgColor,
-          border: Border.all(color: Colors.black, width: 3),
-          boxShadow: _isPressed ? null : [
-            const BoxShadow(
-              color: Colors.black,
-              offset: Offset(4, 4),
-            ),
-          ],
+          color: _isPressed ? bgColor.withOpacity(0.8) : bgColor,
+          border: Border.all(color: const Color(0xFF666666), width: 1),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         child: Row(
@@ -103,16 +90,15 @@ class _PixelButtonState extends State<PixelButton> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (widget.icon != null) ...[
-              Icon(widget.icon, color: fgColor, size: 16),
+              Icon(widget.icon, color: fgColor, size: 20),
               const SizedBox(width: 12),
             ],
             Text(
               widget.text,
               style: TextStyle(
                 color: fgColor,
-                fontSize: 10,
+                fontSize: 14,
                 fontWeight: FontWeight.bold,
-                height: 1.5,
               ),
             ),
           ],
@@ -122,7 +108,7 @@ class _PixelButtonState extends State<PixelButton> {
   }
 }
 
-/// Conteneur avec bordure pixelisée et titre
+/// Conteneur avec bordure sobre et titre
 class PixelSection extends StatelessWidget {
   final String title;
   final Widget child;
@@ -141,29 +127,24 @@ class PixelSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.black,
-            border: Border.all(color: Colors.black, width: 3),
+            color: Colors.white,
+            border: Border.all(color: const Color(0xFF666666), width: 1),
           ),
           child: Text(
             title.toUpperCase(),
             style: const TextStyle(
-              color: Colors.white,
-              fontSize: 8,
+              color: Colors.black,
+              fontSize: 12,
               fontWeight: FontWeight.bold,
-              height: 1.5,
             ),
           ),
         ),
         Container(
           decoration: BoxDecoration(
-            color: backgroundColor ?? Colors.white,
-            border: Border.all(color: Colors.black, width: 3),
-            borderRadius: const BorderRadius.only(
-              bottomLeft: Radius.circular(0),
-              bottomRight: Radius.circular(0),
-            ),
+            color: backgroundColor ?? const Color(0xFF2A2A2A),
+            border: Border.all(color: const Color(0xFF666666), width: 1),
           ),
           padding: const EdgeInsets.all(16),
           child: child,
@@ -173,7 +154,7 @@ class PixelSection extends StatelessWidget {
   }
 }
 
-/// Badge pixelisé
+/// Badge sobre
 class PixelBadge extends StatelessWidget {
   final String text;
   final Color backgroundColor;
@@ -182,32 +163,31 @@ class PixelBadge extends StatelessWidget {
   const PixelBadge({
     Key? key,
     required this.text,
-    this.backgroundColor = Colors.black,
-    this.textColor = Colors.white,
+    this.backgroundColor = Colors.white,
+    this.textColor = Colors.black,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: backgroundColor,
-        border: Border.all(color: Colors.black, width: 2),
+        border: Border.all(color: const Color(0xFF666666), width: 1),
       ),
       child: Text(
         text.toUpperCase(),
         style: TextStyle(
           color: textColor,
-          fontSize: 7,
+          fontSize: 10,
           fontWeight: FontWeight.bold,
-          height: 1.5,
         ),
       ),
     );
   }
 }
 
-/// Indicateur de progression pixelisé
+/// Indicateur de progression sobre
 class PixelProgressBar extends StatelessWidget {
   final double value; // 0.0 à 1.0
   final double height;
@@ -227,8 +207,8 @@ class PixelProgressBar extends StatelessWidget {
     return Container(
       height: height,
       decoration: BoxDecoration(
-        color: backgroundColor ?? Colors.white,
-        border: Border.all(color: Colors.black, width: 3),
+        color: backgroundColor ?? const Color(0xFF2A2A2A),
+        border: Border.all(color: const Color(0xFF666666), width: 1),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -236,7 +216,7 @@ class PixelProgressBar extends StatelessWidget {
             children: [
               Container(
                 width: constraints.maxWidth * value.clamp(0.0, 1.0),
-                color: fillColor ?? Colors.black,
+                color: fillColor ?? Colors.white,
               ),
             ],
           );

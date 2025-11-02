@@ -198,31 +198,41 @@ class _ViewGeneratedSolutionsScreenState extends State<ViewGeneratedSolutionsScr
     final sortedSolutions = List<Repartition>.from(_solutions)
       ..sort((a, b) => (_solutionScores[b.id] ?? 0).compareTo(_solutionScores[a.id] ?? 0));
 
+    final theme = Theme.of(context);
+
     return Container(
-      color: Colors.grey.shade50,
+      color: theme.scaffoldBackgroundColor,
       child: Column(
         children: [
           // En-tête
           Container(
             padding: const EdgeInsets.all(16),
-            color: Colors.blue.shade700,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary,
+              border: Border(
+                bottom: BorderSide(
+                  color: theme.dividerColor,
+                  width: 1,
+                ),
+              ),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Solutions générées',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: theme.colorScheme.onPrimary,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '${sortedSolutions.length} solution(s)',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Colors.white70,
+                    color: theme.colorScheme.onPrimary.withAlpha(178),
                   ),
                 ),
               ],
@@ -245,8 +255,18 @@ class _ViewGeneratedSolutionsScreenState extends State<ViewGeneratedSolutionsScr
                     });
                   },
                   child: Container(
-                    color: isSelected ? Colors.blue.shade100 : null,
+                    color: isSelected
+                        ? theme.colorScheme.primary.withAlpha(51)
+                        : null,
                     padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color: theme.dividerColor,
+                          width: 1,
+                        ),
+                      ),
+                    ),
                     child: Row(
                       children: [
                         // Badge de rang
@@ -260,7 +280,7 @@ class _ViewGeneratedSolutionsScreenState extends State<ViewGeneratedSolutionsScr
                                     ? Colors.grey.shade400
                                     : rank == 3
                                         ? Colors.brown.shade300
-                                        : Colors.grey.shade300,
+                                        : theme.colorScheme.secondary,
                             shape: BoxShape.circle,
                           ),
                           child: Center(
@@ -282,9 +302,8 @@ class _ViewGeneratedSolutionsScreenState extends State<ViewGeneratedSolutionsScr
                             children: [
                               Text(
                                 solution.nom,
-                                style: const TextStyle(
+                                style: theme.textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 14,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -296,10 +315,9 @@ class _ViewGeneratedSolutionsScreenState extends State<ViewGeneratedSolutionsScr
                                   const SizedBox(width: 4),
                                   Text(
                                     score.toStringAsFixed(1),
-                                    style: TextStyle(
-                                      fontSize: 16,
+                                    style: theme.textTheme.bodyLarge?.copyWith(
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.blue.shade700,
+                                      color: theme.colorScheme.primary,
                                     ),
                                   ),
                                   const Spacer(),
@@ -657,7 +675,7 @@ class _ViewGeneratedSolutionsScreenState extends State<ViewGeneratedSolutionsScr
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withAlpha(26),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(

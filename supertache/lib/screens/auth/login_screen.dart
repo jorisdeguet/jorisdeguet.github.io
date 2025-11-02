@@ -79,7 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Icon(Icons.school, size: 100, color: Colors.blue),
+                  const Icon(Icons.school, size: 100, color: Colors.white),
                   const SizedBox(height: 24),
                   Text(
                     'SuperTâche',

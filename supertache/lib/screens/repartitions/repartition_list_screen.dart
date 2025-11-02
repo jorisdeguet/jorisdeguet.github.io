@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/repartition.dart';
+import '../../models/groupe.dart';
 import '../../services/repartition_service.dart';
+import '../../services/groupe_service.dart';
+import '../../widgets/repartition_summary_card.dart';
 import 'repartition_detail_screen.dart';
 import 'create_repartition_screen.dart';
 import 'generate_repartitions_screen.dart';
@@ -10,6 +13,7 @@ import 'view_generated_solutions_screen.dart';
 class RepartitionListScreen extends StatelessWidget {
   final String tacheId;
   final RepartitionService _repartitionService = RepartitionService();
+  final GroupeService _groupeService = GroupeService();
 
   RepartitionListScreen({required this.tacheId});
 
@@ -121,69 +125,7 @@ class RepartitionListScreen extends StatelessWidget {
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     itemBuilder: (context, index) {
                       final repartition = repartitions[index];
-                      return Card(
-                        child: ListTile(
-                          leading: Icon(
-                            repartition.estAutomatique
-                                ? Icons.auto_awesome
-                                : repartition.estValide 
-                                    ? Icons.check_circle 
-                                    : Icons.warning,
-                            color: repartition.estAutomatique
-                                ? Colors.purple
-                                : repartition.estValide 
-                                    ? Colors.green 
-                                    : Colors.orange,
-                          ),
-                          title: Text(repartition.nom),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Créée le ${_formatDate(repartition.dateCreation)}',
-                              ),
-                              if (repartition.estAutomatique)
-                                Text(
-                                  'Générée automatiquement',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontStyle: FontStyle.italic,
-                                    color: Colors.purple,
-                                  ),
-                                ),
-                              if (repartition.methode != null)
-                                Text(
-                                  'Méthode: ${repartition.methode}',
-                                  style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-                                ),
-                              Text(
-                                '${repartition.groupesNonAlloues.length} groupe(s) non alloué(s)',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                            ],
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _deleteRepartition(context, repartition),
-                              ),
-                            ],
-                          ),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => RepartitionDetailScreen(
-                                  tacheId: tacheId,
-                                  repartitionId: repartition.id,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      );
+                      return _buildRepartitionCard(context, repartition);
                     },
                   ),
                 ),
@@ -267,8 +209,46 @@ class RepartitionListScreen extends StatelessWidget {
   }
 
   String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
+
+  Widget _buildRepartitionCard(BuildContext context, Repartition repartition) {
+    return FutureBuilder<List<Groupe>>(
+      future: _groupeService.getGroupesForTacheFuture(tacheId),
+      builder: (context, groupeSnapshot) {
+        if (!groupeSnapshot.hasData) {
+          return Card(
+            child: ListTile(
+              title: Text(repartition.nom),
+              subtitle: const Text('Chargement...'),
+            ),
+          );
+        }
+
+        return RepartitionSummaryCard(
+          repartition: repartition,
+          groupes: groupeSnapshot.data!,
+          isCompact: false,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => RepartitionDetailScreen(
+                  tacheId: tacheId,
+                  repartitionId: repartition.id,
+                ),
+              ),
+            );
+          },
+          trailing: IconButton(
+            icon: const Icon(Icons.delete, color: Colors.red),
+            onPressed: () => _deleteRepartition(context, repartition),
+          ),
+        );
+      },
+    );
+  }
+
 
   Future<void> _deleteRepartition(BuildContext context, Repartition repartition) async {
     final confirm = await showDialog<bool>(

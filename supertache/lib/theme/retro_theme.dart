@@ -2,253 +2,257 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class RetroTheme {
-  // Couleurs 8-bits noir et blanc
+  // Couleurs mode sombre
   static const Color black = Color(0xFF000000);
   static const Color white = Color(0xFFFFFFFF);
+  static const Color darkBg = Color(0xFF1A1A1A);
+  static const Color darkCard = Color(0xFF2A2A2A);
   static const Color darkGray = Color(0xFF333333);
   static const Color mediumGray = Color(0xFF666666);
   static const Color lightGray = Color(0xFFCCCCCC);
 
   static ThemeData get theme {
     return ThemeData(
-      brightness: Brightness.light,
-      scaffoldBackgroundColor: white,
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: darkBg,
 
-      // Police rétro 8-bits
-      textTheme: GoogleFonts.pressStart2pTextTheme().copyWith(
-        displayLarge: GoogleFonts.pressStart2p(
+      // Police monospace sobre (Roboto Mono comme alternative à Courier)
+      textTheme: GoogleFonts.robotoMonoTextTheme(ThemeData.dark().textTheme).copyWith(
+        displayLarge: GoogleFonts.robotoMono(
           fontSize: 32,
-          color: black,
-          height: 1.5,
-        ),
-        displayMedium: GoogleFonts.pressStart2p(
-          fontSize: 24,
-          color: black,
-          height: 1.5,
-        ),
-        displaySmall: GoogleFonts.pressStart2p(
-          fontSize: 20,
-          color: black,
-          height: 1.5,
-        ),
-        headlineMedium: GoogleFonts.pressStart2p(
-          fontSize: 16,
-          color: black,
-          height: 1.5,
-        ),
-        titleLarge: GoogleFonts.pressStart2p(
-          fontSize: 14,
-          color: black,
-          height: 1.5,
-        ),
-        titleMedium: GoogleFonts.pressStart2p(
-          fontSize: 12,
-          color: black,
-          height: 1.5,
-        ),
-        bodyLarge: GoogleFonts.pressStart2p(
-          fontSize: 10,
-          color: black,
-          height: 1.5,
-        ),
-        bodyMedium: GoogleFonts.pressStart2p(
-          fontSize: 8,
-          color: black,
-          height: 1.5,
-        ),
-        bodySmall: GoogleFonts.pressStart2p(
-          fontSize: 7,
-          color: mediumGray,
-          height: 1.5,
-        ),
-        labelLarge: GoogleFonts.pressStart2p(
-          fontSize: 10,
           color: white,
-          height: 1.5,
+          fontWeight: FontWeight.bold,
+        ),
+        displayMedium: GoogleFonts.robotoMono(
+          fontSize: 24,
+          color: white,
+          fontWeight: FontWeight.bold,
+        ),
+        displaySmall: GoogleFonts.robotoMono(
+          fontSize: 20,
+          color: white,
+          fontWeight: FontWeight.w600,
+        ),
+        headlineMedium: GoogleFonts.robotoMono(
+          fontSize: 16,
+          color: white,
+          fontWeight: FontWeight.w600,
+        ),
+        titleLarge: GoogleFonts.robotoMono(
+          fontSize: 14,
+          color: white,
+          fontWeight: FontWeight.w500,
+        ),
+        titleMedium: GoogleFonts.robotoMono(
+          fontSize: 12,
+          color: white,
+          fontWeight: FontWeight.w500,
+        ),
+        bodyLarge: GoogleFonts.robotoMono(
+          fontSize: 14,
+          color: white,
+        ),
+        bodyMedium: GoogleFonts.robotoMono(
+          fontSize: 12,
+          color: lightGray,
+        ),
+        bodySmall: GoogleFonts.robotoMono(
+          fontSize: 10,
+          color: mediumGray,
+        ),
+        labelLarge: GoogleFonts.robotoMono(
+          fontSize: 14,
+          color: white,
+          fontWeight: FontWeight.w500,
         ),
       ),
 
-      // AppBar avec style pixelisé
+      // AppBar sombre
       appBarTheme: AppBarTheme(
         backgroundColor: black,
         foregroundColor: white,
         elevation: 0,
-        titleTextStyle: GoogleFonts.pressStart2p(
-          fontSize: 12,
+        titleTextStyle: GoogleFonts.robotoMono(
+          fontSize: 16,
           color: white,
-          height: 1.5,
+          fontWeight: FontWeight.bold,
         ),
         iconTheme: const IconThemeData(color: white, size: 24),
       ),
 
-      // Cards avec bordures pixelisées
+      // Cards sombres avec bordures simples
       cardTheme: const CardThemeData(
-        color: white,
+        color: darkCard,
         elevation: 0,
-        shape: PixelBorder(),
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: mediumGray, width: 1),
+          borderRadius: BorderRadius.zero,
+        ),
         margin: EdgeInsets.all(8),
       ),
 
-      // Boutons avec style rétro
+      // Boutons avec style sobre
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: black,
-          foregroundColor: white,
+          backgroundColor: white,
+          foregroundColor: black,
           elevation: 0,
-          shape: const PixelBorder(),
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.zero,
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          textStyle: GoogleFonts.pressStart2p(
-            fontSize: 10,
-            height: 1.5,
+          textStyle: GoogleFonts.robotoMono(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ),
 
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: black,
-          side: const BorderSide(color: black, width: 3),
-          shape: const PixelBorder(),
+          foregroundColor: white,
+          side: const BorderSide(color: white, width: 1),
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.zero,
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          textStyle: GoogleFonts.pressStart2p(
-            fontSize: 10,
-            height: 1.5,
+          textStyle: GoogleFonts.robotoMono(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ),
 
-      // Input fields
+      // Input fields sombres
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: white,
+        fillColor: darkCard,
         border: const OutlineInputBorder(
-          borderSide: BorderSide(color: black, width: 3),
+          borderSide: BorderSide(color: mediumGray, width: 1),
           borderRadius: BorderRadius.zero,
         ),
         enabledBorder: const OutlineInputBorder(
-          borderSide: BorderSide(color: black, width: 3),
+          borderSide: BorderSide(color: mediumGray, width: 1),
           borderRadius: BorderRadius.zero,
         ),
         focusedBorder: const OutlineInputBorder(
-          borderSide: BorderSide(color: black, width: 4),
+          borderSide: BorderSide(color: white, width: 2),
           borderRadius: BorderRadius.zero,
         ),
         errorBorder: const OutlineInputBorder(
-          borderSide: BorderSide(color: darkGray, width: 3),
+          borderSide: BorderSide(color: mediumGray, width: 1),
           borderRadius: BorderRadius.zero,
         ),
-        labelStyle: GoogleFonts.pressStart2p(
-          fontSize: 8,
-          color: mediumGray,
-          height: 1.5,
-        ),
-        hintStyle: GoogleFonts.pressStart2p(
-          fontSize: 8,
+        labelStyle: GoogleFonts.robotoMono(
+          fontSize: 12,
           color: lightGray,
-          height: 1.5,
+        ),
+        hintStyle: GoogleFonts.robotoMono(
+          fontSize: 12,
+          color: mediumGray,
         ),
       ),
 
-      // Drawer
+      // Drawer sombre
       drawerTheme: const DrawerThemeData(
-        backgroundColor: white,
+        backgroundColor: darkBg,
         elevation: 0,
       ),
 
       // Dividers
       dividerTheme: const DividerThemeData(
-        color: black,
-        thickness: 2,
+        color: mediumGray,
+        thickness: 1,
         space: 16,
       ),
 
       // ListTile
       listTileTheme: ListTileThemeData(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        shape: const PixelBorder(),
-        textColor: black,
-        iconColor: black,
-        titleTextStyle: GoogleFonts.pressStart2p(
-          fontSize: 10,
-          color: black,
-          height: 1.5,
+        textColor: white,
+        iconColor: white,
+        titleTextStyle: GoogleFonts.robotoMono(
+          fontSize: 14,
+          color: white,
         ),
-        subtitleTextStyle: GoogleFonts.pressStart2p(
-          fontSize: 7,
-          color: mediumGray,
-          height: 1.5,
+        subtitleTextStyle: GoogleFonts.robotoMono(
+          fontSize: 12,
+          color: lightGray,
         ),
       ),
 
       // Icons
       iconTheme: const IconThemeData(
-        color: black,
+        color: white,
         size: 24,
       ),
 
       // Progress indicators
       progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: black,
+        color: white,
       ),
 
       // Sliders
       sliderTheme: const SliderThemeData(
-        activeTrackColor: black,
-        inactiveTrackColor: lightGray,
-        thumbColor: black,
-        overlayColor: Color(0x33000000),
+        activeTrackColor: white,
+        inactiveTrackColor: mediumGray,
+        thumbColor: white,
+        overlayColor: Color(0x33FFFFFF),
       ),
 
       // Snackbar
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: black,
-        contentTextStyle: GoogleFonts.pressStart2p(
-          fontSize: 8,
+        backgroundColor: darkCard,
+        contentTextStyle: GoogleFonts.robotoMono(
+          fontSize: 12,
           color: white,
-          height: 1.5,
         ),
-        shape: const PixelBorder(),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.zero,
+        ),
         behavior: SnackBarBehavior.floating,
       ),
 
       // Dialogs
       dialogTheme: DialogThemeData(
-        backgroundColor: white,
+        backgroundColor: darkCard,
         elevation: 0,
-        shape: const PixelBorder(),
-        titleTextStyle: GoogleFonts.pressStart2p(
-          fontSize: 12,
-          color: black,
-          height: 1.5,
+        shape: const RoundedRectangleBorder(
+          side: BorderSide(color: mediumGray, width: 1),
+          borderRadius: BorderRadius.zero,
         ),
-        contentTextStyle: GoogleFonts.pressStart2p(
-          fontSize: 8,
-          color: black,
-          height: 1.5,
+        titleTextStyle: GoogleFonts.robotoMono(
+          fontSize: 16,
+          color: white,
+          fontWeight: FontWeight.bold,
+        ),
+        contentTextStyle: GoogleFonts.robotoMono(
+          fontSize: 12,
+          color: lightGray,
         ),
       ),
 
-      colorScheme: const ColorScheme.light(
-        primary: black,
-        secondary: darkGray,
-        surface: white,
+      colorScheme: const ColorScheme.dark(
+        primary: white,
+        secondary: lightGray,
+        surface: darkCard,
         error: mediumGray,
-        onPrimary: white,
-        onSecondary: white,
-        onSurface: black,
+        onPrimary: black,
+        onSecondary: black,
+        onSurface: white,
         onError: white,
       ),
 
-      useMaterial3: false, // Pour un look plus rétro
+      useMaterial3: false,
     );
   }
 }
 
-/// Bordure pixelisée personnalisée
+/// Bordure simple (conservée pour compatibilité mais simplifiée)
 class PixelBorder extends OutlinedBorder {
   const PixelBorder({
-    this.pixelSize = 4.0,
-    super.side = const BorderSide(color: Color(0xFF000000), width: 3),
+    this.pixelSize = 0.0,
+    super.side = const BorderSide(color: Color(0xFF666666), width: 1),
   });
 
   final double pixelSize;
@@ -266,44 +270,12 @@ class PixelBorder extends OutlinedBorder {
 
   @override
   Path getInnerPath(Rect rect, {TextDirection? textDirection}) {
-    return _createPixelPath(rect.deflate(side.width));
+    return Path()..addRect(rect.deflate(side.width));
   }
 
   @override
   Path getOuterPath(Rect rect, {TextDirection? textDirection}) {
-    return _createPixelPath(rect);
-  }
-
-  Path _createPixelPath(Rect rect) {
-    final path = Path();
-    final corners = pixelSize;
-
-    // Haut gauche avec coin pixelisé
-    path.moveTo(rect.left + corners, rect.top);
-
-    // Ligne du haut
-    path.lineTo(rect.right - corners, rect.top);
-
-    // Coin haut droit
-    path.lineTo(rect.right, rect.top + corners);
-
-    // Ligne droite
-    path.lineTo(rect.right, rect.bottom - corners);
-
-    // Coin bas droit
-    path.lineTo(rect.right - corners, rect.bottom);
-
-    // Ligne du bas
-    path.lineTo(rect.left + corners, rect.bottom);
-
-    // Coin bas gauche
-    path.lineTo(rect.left, rect.bottom - corners);
-
-    // Ligne gauche
-    path.lineTo(rect.left, rect.top + corners);
-
-    path.close();
-    return path;
+    return Path()..addRect(rect);
   }
 
   @override
@@ -315,7 +287,7 @@ class PixelBorder extends OutlinedBorder {
       ..strokeWidth = side.width
       ..style = PaintingStyle.stroke;
 
-    canvas.drawPath(getOuterPath(rect, textDirection: textDirection), paint);
+    canvas.drawRect(rect.deflate(side.width / 2), paint);
   }
 
   @override

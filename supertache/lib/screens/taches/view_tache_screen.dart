@@ -111,11 +111,9 @@ class _ViewTacheScreenState extends State<ViewTacheScreen> {
                     color: Colors.purple.shade50,
                     child: InkWell(
                       onTap: () {
-                        Navigator.push(
+                        Navigator.pushNamed(
                           context,
-                          MaterialPageRoute(
-                            builder: (context) => RepartitionListScreen(tacheId: widget.tacheId),
-                          ),
+                          '/tache/${widget.tacheId}/repartitions',
                         );
                       },
                       child: Padding(

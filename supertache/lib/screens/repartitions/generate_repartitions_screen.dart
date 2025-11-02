@@ -179,13 +179,13 @@ class _GenerateRepartitionsScreenState extends State<GenerateRepartitionsScreen>
           ),
         );
 
-        // Navigation automatique vers l'écran de comparaison
+        // Navigation vers le détail de la tâche
         Future.delayed(const Duration(milliseconds: 500), () {
           if (mounted) {
-            Navigator.pushReplacementNamed(
+            Navigator.pushNamedAndRemoveUntil(
               context,
-              '/vote/repartitions',
-              arguments: widget.tacheId,
+              '/tache/${widget.tacheId}',
+              (route) => route.isFirst,
             );
           }
         });

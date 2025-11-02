@@ -28,7 +28,8 @@ class VoteRepartitionsScreen extends StatefulWidget {
 class _VoteRepartitionsScreenState extends State<VoteRepartitionsScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
-  
+  bool _tacheExpanded = false;
+
   Tache? _tache;
   List<Repartition> _repartitions = [];
   List<Groupe> _groupes = [];
@@ -153,17 +154,104 @@ class _VoteRepartitionsScreenState extends State<VoteRepartitionsScreen> {
       drawer: const AppDrawer(),
       body: Column(
         children: [
+          // Section dépliable pour les détails de la tâche
+          Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              border: Border(
+                bottom: BorderSide(
+                  color: Theme.of(context).dividerColor,
+                  width: 1,
+                ),
+              ),
+            ),
+            child: Column(
+              children: [
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _tacheExpanded = !_tacheExpanded;
+                    });
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _tacheExpanded ? Icons.expand_less : Icons.expand_more,
+                          color: Colors.blue,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _tache?.nom ?? 'Tâche',
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Cliquez pour voir les détails',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_tacheExpanded && _tache != null)
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Divider(),
+                        _buildTacheInfoRow(
+                          Icons.calendar_today,
+                          'Session',
+                          '${_tache!.type == SessionType.automne ? "Automne" : "Hiver"} ${_tache!.year}',
+                        ),
+                        const SizedBox(height: 8),
+                        _buildTacheInfoRow(
+                          Icons.people,
+                          'Enseignants',
+                          '${_tache!.enseignantEmails.length}',
+                        ),
+                        const SizedBox(height: 8),
+                        _buildTacheInfoRow(
+                          Icons.class_,
+                          'Groupes',
+                          '${_groupes.length}',
+                        ),
+                        const SizedBox(height: 8),
+                        _buildTacheInfoRow(
+                          Icons.analytics,
+                          'Plage CI cible',
+                          '${_tache!.ciMin.toStringAsFixed(1)} - ${_tache!.ciMax.toStringAsFixed(1)}',
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
           // Instructions
           Container(
             width: double.infinity,
-            color: Colors.blue.shade50,
+            color: Theme.of(context).colorScheme.primary.withAlpha(26),
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.info_outline, color: Colors.blue),
+                    Icon(Icons.info_outline, color: Theme.of(context).colorScheme.primary),
                     const SizedBox(width: 8),
                     Text(
                       'Instructions',
@@ -179,9 +267,9 @@ class _VoteRepartitionsScreenState extends State<VoteRepartitionsScreen> {
                 const SizedBox(height: 4),
                 Text(
                   '${_repartitions.length} répartitions à classer',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Colors.blue,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
               ],
@@ -220,10 +308,10 @@ class _VoteRepartitionsScreenState extends State<VoteRepartitionsScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Theme.of(context).cardColor,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withAlpha(26),
                   blurRadius: 4,
                   offset: const Offset(0, -2),
                 ),
@@ -292,11 +380,6 @@ class _VoteRepartitionsScreenState extends State<VoteRepartitionsScreen> {
         leading: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.drag_handle,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 4),
             CircleAvatar(
               radius: 16,
               backgroundColor: badgeColor,
@@ -305,13 +388,14 @@ class _VoteRepartitionsScreenState extends State<VoteRepartitionsScreen> {
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
+                  fontSize: 12,
                 ),
               ),
             ),
           ],
         ),
         title: Text(
-          'Répartition ${index + 1}',
+          repartition.nom,
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: Column(
@@ -321,7 +405,7 @@ class _VoteRepartitionsScreenState extends State<VoteRepartitionsScreen> {
               margin: const EdgeInsets.only(top: 4),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: badgeColor.withOpacity(0.2),
+                color: badgeColor.withAlpha(51),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
@@ -342,18 +426,74 @@ class _VoteRepartitionsScreenState extends State<VoteRepartitionsScreen> {
                       ? Colors.green
                       : Colors.red,
                   fontWeight: FontWeight.bold,
+                  fontSize: 12,
                 ),
               ),
             ],
           ],
         ),
-        trailing: IconButton(
-          icon: const Icon(Icons.visibility),
-          onPressed: () {
-            _showRepartitionDetails(repartition);
-          },
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Flèche pour monter
+            IconButton(
+              icon: const Icon(Icons.arrow_upward),
+              iconSize: 20,
+              onPressed: index > 0
+                  ? () {
+                      setState(() {
+                        final item = _orderedRepartitionIds.removeAt(index);
+                        _orderedRepartitionIds.insert(index - 1, item);
+                      });
+                    }
+                  : null,
+              tooltip: 'Monter',
+              color: index > 0 ? Colors.blue : Colors.grey,
+            ),
+            // Flèche pour descendre
+            IconButton(
+              icon: const Icon(Icons.arrow_downward),
+              iconSize: 20,
+              onPressed: index < _orderedRepartitionIds.length - 1
+                  ? () {
+                      setState(() {
+                        final item = _orderedRepartitionIds.removeAt(index);
+                        _orderedRepartitionIds.insert(index + 1, item);
+                      });
+                    }
+                  : null,
+              tooltip: 'Descendre',
+              color: index < _orderedRepartitionIds.length - 1 ? Colors.blue : Colors.grey,
+            ),
+            // Icône pour voir les détails
+            IconButton(
+              icon: const Icon(Icons.visibility),
+              iconSize: 20,
+              onPressed: () {
+                _showRepartitionDetails(repartition);
+              },
+              tooltip: 'Voir détails',
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildTacheInfoRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: Colors.grey[600]),
+        const SizedBox(width: 8),
+        Text(
+          '$label: ',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.grey[700],
+          ),
+        ),
+        Text(value),
+      ],
     );
   }
 
