@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
     <head>
+        <meta charset="UTF-8">
         <title>Code de César</title>
 
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.2/css/bulma.min.css" integrity="sha512-byErQdWdTqREz6DLAA9pCnLbdoGGhXfU6gm1c8bkf7F51JVmUBlayGe2A31VpXWQP+eiJ3ilTAZHCR3vmMyybA==" crossorigin="anonymous" />
@@ -68,19 +69,21 @@
             <div class="tile is-parent is-vertical is-8">
                 
                 <article class="tile is-child notification is-dark">
-                        <p class="subtitle">Zone encryption</p>
+                        <p class="subtitle">Zone encryption / décryption</p>
                         <div class="content">
+                            <h2 class="has-text-light">Message clair</h2>
                             <input v-model="clair" class="input is-info" type="text" placeholder="texte à chiffrer" v-on:input="encrypter">
-                            <div v-if="clair.length > 0">
+                            <br><br>
+                            <h2 class="has-text-light">Message encrypté</h2>
+                            <input v-model="chiffre" class="input is-warning" type="text" placeholder="texte à décrypter" v-on:input="decrypter">
+                            <div v-if="clair.length > 0 || chiffre.length > 0">
                                 <br>
-                                <h2 class="has-text-light">↓ message original ↓</h2>
                                 <div class="courierr">
                                     {{clair}}
                                 </div>
                                 <div class="courierr">
                                     {{chiffre}}
                                 </div>
-                                <h2 class="has-text-light">↑ message encrypté ↑</h2>
                             </div>
                             
                         </div>
@@ -163,7 +166,18 @@
                     alphabet: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz0123456789.,',
                 },
                 methods: {
+                    filtrer: function(texte) {
+                        var lettres = texte.split('');
+                        var resultat = '';
+                        for (var i = 0; i < lettres.length; i++) {
+                            if (this.alphabet.indexOf(lettres[i]) >= 0) {
+                                resultat += lettres[i];
+                            }
+                        }
+                        return resultat;
+                    },
                     encrypter: function () {
+                        this.clair = this.filtrer(this.clair);
                         var lettres = this.clair.split('');
                         var resultat = '';
                         for (var i = 0 ; i < lettres.length ; i++) {
@@ -174,13 +188,24 @@
                         }
                         this.chiffre = resultat;
                     },
+                    decrypter: function () {
+                        this.chiffre = this.filtrer(this.chiffre);
+                        var lettres = this.chiffre.split('');
+                        var resultat = '';
+                        for (var i = 0 ; i < lettres.length ; i++) {
+                            var lettre = lettres[i];
+                            var lettreDecodee = 
+                                this.chiffrerLettre(lettre, -this.decalage, this.alphabet);
+                            resultat += lettreDecodee;
+                        }
+                        this.clair = resultat;
+                    },
                     chiffrerLettre: function(lettre, decalage, alphabet) {
                         var index = alphabet.indexOf(lettre);
                         if (index < 0) {
-                            alert('lettre absente de alphabet');
+                            return '';
                         } else {
                             var indexDecale = (index + decalage+alphabet.length) % alphabet.length;
-                            console.log(this.decalage+' '+indexDecale);
                             return alphabet[indexDecale];
                         }
                     },
