@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "449858051942",
+    "project_id": "onetime-bf68b",
+    "storage_bucket": "onetime-bf68b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:449858051942:android:d606cb0ee54bb4834532a7",
+        "android_client_info": {
+          "package_name": "com.example.onetime"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDyJd8qO-TW35RvokH9c1jXmHiD8esf2ZU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
