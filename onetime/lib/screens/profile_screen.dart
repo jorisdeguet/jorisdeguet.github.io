@@ -117,59 +117,61 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      // Avatar
+                      // Avatar avec numéro
                       CircleAvatar(
                         radius: 50,
-                        backgroundImage: profile.photoUrl != null
-                            ? NetworkImage(profile.photoUrl!)
-                            : null,
-                        child: profile.photoUrl == null
-                            ? Text(
-                                profile.initials,
-                                style: const TextStyle(fontSize: 32),
-                              )
-                            : null,
+                        backgroundColor: Theme.of(context).primaryColor,
+                        child: Text(
+                          profile.initials,
+                          style: const TextStyle(
+                            fontSize: 32,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 16),
 
-                      // Nom
-                      Text(
-                        profile.name,
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      const SizedBox(height: 4),
-
-                      // Email
-                      if (profile.email != null)
-                        Text(
-                          profile.email!,
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            color: Colors.grey[600],
+                      // Numéro de téléphone
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.phone,
+                            color: Theme.of(context).primaryColor,
                           ),
-                        ),
+                          const SizedBox(width: 8),
+                          Text(
+                            profile.formattedPhoneNumber,
+                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 8),
 
-                      // Provider badge
+                      // Badge identifiant unique
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).primaryColor.withOpacity(0.1),
+                          color: Theme.of(context).primaryColor.withAlpha(25),
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                              _getProviderIcon(profile.provider),
+                              Icons.verified_user,
                               size: 16,
                               color: Theme.of(context).primaryColor,
                             ),
                             const SizedBox(width: 6),
                             Text(
-                              'Connecté via ${profile.provider.displayName}',
+                              'Identifiant vérifié',
                               style: TextStyle(
                                 color: Theme.of(context).primaryColor,
                                 fontSize: 12,
@@ -185,9 +187,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         title: 'Informations du compte',
                         children: [
                           _InfoRow(
-                            icon: Icons.badge_outlined,
-                            label: 'ID',
-                            value: profile.uid.substring(0, 8) + '...',
+                            icon: Icons.fingerprint,
+                            label: 'ID interne',
+                            value: '${profile.uid.substring(0, 8)}...',
                           ),
                           _InfoRow(
                             icon: Icons.calendar_today,
@@ -199,12 +201,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             label: 'Dernière connexion',
                             value: _formatDate(profile.lastSignIn),
                           ),
-                          if (profile.phoneNumber != null)
-                            _InfoRow(
-                              icon: Icons.phone,
-                              label: 'Téléphone',
-                              value: profile.phoneNumber!,
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Explication sécurité
+                      _InfoCard(
+                        title: 'Sécurité',
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(Icons.shield, size: 20, color: Colors.green[600]),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'Votre numéro de téléphone est votre seul identifiant. '
+                                    'Les clés de chiffrement sont échangées en personne via QR code. '
+                                    'Aucune donnée sensible ne transite sur le réseau.',
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 24),
@@ -234,23 +259,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
     );
-  }
-
-  IconData _getProviderIcon(AppAuthProvider provider) {
-    switch (provider) {
-      case AppAuthProvider.google:
-        return Icons.g_mobiledata;
-      case AppAuthProvider.apple:
-        return Icons.apple;
-      case AppAuthProvider.facebook:
-        return Icons.facebook;
-      case AppAuthProvider.microsoft:
-        return Icons.window;
-      case AppAuthProvider.github:
-        return Icons.code;
-      case AppAuthProvider.email:
-        return Icons.email;
-    }
   }
 
   String _formatDate(DateTime date) {

@@ -39,8 +39,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
     final query = _searchQuery.toLowerCase();
     return _contacts.where((c) {
       return c.displayName.toLowerCase().contains(query) ||
-             (c.email?.toLowerCase().contains(query) ?? false) ||
-             (c.phoneNumber?.contains(query) ?? false);
+             c.phoneNumber.contains(query);
     }).toList();
   }
 
@@ -254,7 +253,7 @@ class _ContactTile extends StatelessWidget {
         ],
       ),
       subtitle: Text(
-        contact.email ?? contact.phoneNumber ?? '',
+        contact.formattedPhoneNumber,
         style: TextStyle(color: Colors.grey[600]),
       ),
       trailing: Row(
@@ -339,10 +338,7 @@ class _ContactDetailsSheet extends StatelessWidget {
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 24),
-            if (contact.email != null)
-              _DetailRow(icon: Icons.email, value: contact.email!),
-            if (contact.phoneNumber != null)
-              _DetailRow(icon: Icons.phone, value: contact.phoneNumber!),
+            _DetailRow(icon: Icons.phone, value: contact.formattedPhoneNumber),
             _DetailRow(
               icon: Icons.calendar_today,
               value: 'Ajouté le ${_formatDate(contact.addedAt)}',

@@ -26,16 +26,18 @@ class KeyExchangeService {
   /// 
   /// [totalBits] - Taille totale de la clé à partager
   /// [peerIds] - Liste des IDs des pairs qui recevront la clé
+  /// [sessionId] - ID de session optionnel (si non fourni, un ID est généré)
   KeyExchangeSession createSourceSession({
     required int totalBits,
     required List<String> peerIds,
     required String sourceId,
+    String? sessionId,
   }) {
     // Inclure le source dans la liste des peers
     final allPeers = [sourceId, ...peerIds]..sort();
     
     return KeyExchangeSession(
-      sessionId: _generateSessionId(),
+      sessionId: sessionId ?? _generateSessionId(),
       role: KeyExchangeRole.source,
       totalBits: totalBits,
       peerIds: allPeers,
@@ -68,7 +70,9 @@ class KeyExchangeService {
       throw StateError('Only source can generate segments');
     }
     
-    final startBit = session.currentSegmentIndex * segmentSizeBits;
+    // Capturer l'index AVANT de modifier la session
+    final segmentIndex = session.currentSegmentIndex;
+    final startBit = segmentIndex * segmentSizeBits;
     final endBit = min(startBit + segmentSizeBits, session.totalBits);
     
     if (startBit >= session.totalBits) {
@@ -79,12 +83,12 @@ class KeyExchangeService {
     final segmentBits = endBit - startBit;
     final keyData = _keyGenerator.generateKey(segmentBits);
     
-    // Stocker le segment dans la session
+    // Stocker le segment dans la session (ceci incrémente currentSegmentIndex)
     session.addSegmentData(startBit, keyData);
     
     return KeySegmentQrData(
       sessionId: session.sessionId,
-      segmentIndex: session.currentSegmentIndex,
+      segmentIndex: segmentIndex, // Utiliser l'index capturé avant l'incrémentation
       startBit: startBit,
       endBit: endBit,
       keyData: keyData,
@@ -134,8 +138,10 @@ class KeyExchangeService {
   }
 
   /// Finalise l'échange et crée la clé partagée.
-  SharedKey finalizeExchange(KeyExchangeSession session, {String? conversationName}) {
-    if (!session.isComplete && session.role == KeyExchangeRole.source) {
+  /// [force] permet de forcer la finalisation même si tous les peers n'ont pas confirmé localement
+  /// (utile quand la vérification est faite via Firestore)
+  SharedKey finalizeExchange(KeyExchangeSession session, {String? conversationName, bool force = false}) {
+    if (!force && !session.isComplete && session.role == KeyExchangeRole.source) {
       throw StateError('Exchange is not complete, not all peers confirmed');
     }
     
@@ -202,7 +208,10 @@ class KeyExchangeSession {
 
   int get currentSegmentIndex => _currentSegmentIndex;
   
-  int get totalSegments => (totalBits + KeyExchangeService.segmentSizeBits - 1) ~/ 
+  /// Nombre de segments lus (pour le reader)
+  int get readSegmentsCount => _peerReadSegments[localPeerId]?.length ?? 0;
+
+  int get totalSegments => (totalBits + KeyExchangeService.segmentSizeBits - 1) ~/
                            KeyExchangeService.segmentSizeBits;
 
   void addSegmentData(int startBit, Uint8List data) {
@@ -217,6 +226,15 @@ class KeyExchangeSession {
 
   void markSegmentAsRead(int segmentIndex) {
     _peerReadSegments[localPeerId]?.add(segmentIndex);
+    // Pour le reader, mettre à jour currentSegmentIndex
+    if (role == KeyExchangeRole.reader) {
+      _currentSegmentIndex = _peerReadSegments[localPeerId]?.length ?? 0;
+    }
+  }
+
+  /// Vérifie si le participant local a déjà scanné un segment donné
+  bool hasScannedSegment(int segmentIndex) {
+    return _peerReadSegments[localPeerId]?.contains(segmentIndex) ?? false;
   }
 
   void markPeerHasSegment(String peerId, int segmentIndex) {

@@ -45,14 +45,18 @@ class EncryptedMessage {
     this.isCompressed = false,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  /// Index du premier bit utilisé (du premier segment)
-  int get startBit => keySegments.first.startBit;
+  /// Indique si le message est chiffré (a des segments de clé)
+  bool get isEncrypted => keySegments.isNotEmpty;
+
+  /// Index du premier bit utilisé (du premier segment), ou 0 si non chiffré
+  int get startBit => keySegments.isNotEmpty ? keySegments.first.startBit : 0;
   
-  /// Index du dernier bit utilisé (du dernier segment)
-  int get endBit => keySegments.last.endBit;
+  /// Index du dernier bit utilisé (du dernier segment), ou 0 si non chiffré
+  int get endBit => keySegments.isNotEmpty ? keySegments.last.endBit : 0;
   
   /// Longueur totale des segments utilisés en bits
   int get totalBitsUsed {
+    if (keySegments.isEmpty) return 0;
     return keySegments.fold(0, (sum, seg) => sum + (seg.endBit - seg.startBit));
   }
 

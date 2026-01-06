@@ -1,22 +1,17 @@
 /// Modèle représentant un contact de l'application.
+/// Le numéro de téléphone est l'identifiant principal pour contacter quelqu'un.
 class Contact {
-  /// ID unique du contact
+  /// ID unique du contact (basé sur le numéro de téléphone normalisé)
   final String id;
   
   /// Nom d'affichage
   final String displayName;
   
-  /// Email du contact (pour retrouver sur Firebase)
-  final String? email;
-  
-  /// Numéro de téléphone
-  final String? phoneNumber;
-  
+  /// Numéro de téléphone (identifiant principal)
+  final String phoneNumber;
+
   /// URL de la photo
   final String? photoUrl;
-  
-  /// UID Firebase si le contact est un utilisateur de l'app
-  final String? firebaseUid;
   
   /// Le contact est-il un utilisateur de l'app ?
   final bool isAppUser;
@@ -30,14 +25,53 @@ class Contact {
   Contact({
     required this.id,
     required this.displayName,
-    this.email,
-    this.phoneNumber,
+    required this.phoneNumber,
     this.photoUrl,
-    this.firebaseUid,
     this.isAppUser = false,
     DateTime? addedAt,
     this.sharedKeyId,
   }) : addedAt = addedAt ?? DateTime.now();
+
+  /// Crée un ID normalisé à partir du numéro de téléphone
+  static String normalizePhoneNumber(String phone) {
+    // Supprimer tous les espaces, tirets, parenthèses et autres caractères de formatage
+    String cleaned = phone.replaceAll(RegExp(r'[\s\-\(\)\.]'), '');
+
+    // Vérifier si le numéro commence par +
+    final hasPlus = cleaned.startsWith('+');
+
+    // Garder uniquement les chiffres
+    final digitsOnly = cleaned.replaceAll(RegExp(r'[^\d]'), '');
+
+    // Si le numéro original commençait par +, le remettre
+    if (hasPlus) {
+      return '+$digitsOnly';
+    }
+
+    // Si commence par 00, remplacer par +
+    if (digitsOnly.startsWith('00')) {
+      return '+${digitsOnly.substring(2)}';
+    }
+
+    // Si commence par 0 (numéro local français), remplacer par +33
+    if (digitsOnly.startsWith('0') && digitsOnly.length >= 10) {
+      return '+33${digitsOnly.substring(1)}';
+    }
+
+    // Sinon, ajouter + devant (numéro international sans +)
+    return '+$digitsOnly';
+  }
+
+  /// Numéro formaté pour affichage
+  String get formattedPhoneNumber {
+    final cleaned = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+    if (cleaned.startsWith('+') && cleaned.length > 10) {
+      final country = cleaned.substring(0, cleaned.length - 9);
+      final rest = cleaned.substring(cleaned.length - 9);
+      return '$country ${rest.substring(0, 1)} ${rest.substring(1, 3)} ${rest.substring(3, 5)} ${rest.substring(5, 7)} ${rest.substring(7)}';
+    }
+    return phoneNumber;
+  }
 
   /// Initiales pour avatar
   String get initials {
@@ -55,10 +89,8 @@ class Contact {
     return {
       'id': id,
       'displayName': displayName,
-      'email': email,
       'phoneNumber': phoneNumber,
       'photoUrl': photoUrl,
-      'firebaseUid': firebaseUid,
       'isAppUser': isAppUser,
       'addedAt': addedAt.toIso8601String(),
       'sharedKeyId': sharedKeyId,
@@ -69,10 +101,8 @@ class Contact {
     return Contact(
       id: json['id'] as String,
       displayName: json['displayName'] as String,
-      email: json['email'] as String?,
-      phoneNumber: json['phoneNumber'] as String?,
+      phoneNumber: json['phoneNumber'] as String,
       photoUrl: json['photoUrl'] as String?,
-      firebaseUid: json['firebaseUid'] as String?,
       isAppUser: json['isAppUser'] as bool? ?? false,
       addedAt: DateTime.parse(json['addedAt'] as String),
       sharedKeyId: json['sharedKeyId'] as String?,
@@ -81,20 +111,16 @@ class Contact {
 
   Contact copyWith({
     String? displayName,
-    String? email,
     String? phoneNumber,
     String? photoUrl,
-    String? firebaseUid,
     bool? isAppUser,
     String? sharedKeyId,
   }) {
     return Contact(
       id: id,
       displayName: displayName ?? this.displayName,
-      email: email ?? this.email,
       phoneNumber: phoneNumber ?? this.phoneNumber,
       photoUrl: photoUrl ?? this.photoUrl,
-      firebaseUid: firebaseUid ?? this.firebaseUid,
       isAppUser: isAppUser ?? this.isAppUser,
       addedAt: addedAt,
       sharedKeyId: sharedKeyId ?? this.sharedKeyId,
@@ -115,27 +141,32 @@ class Contact {
 class PhoneContact {
   final String id;
   final String displayName;
-  final List<String> emails;
   final List<String> phones;
   final String? photoUrl;
 
   PhoneContact({
     required this.id,
     required this.displayName,
-    this.emails = const [],
     this.phones = const [],
     this.photoUrl,
   });
 
+  /// Le contact a-t-il un numéro de téléphone ?
+  bool get hasPhone => phones.isNotEmpty;
+
+  /// Premier numéro de téléphone disponible
+  String? get primaryPhone => phones.isNotEmpty ? phones.first : null;
+
   /// Convertit en Contact de l'app
-  Contact toAppContact({String? firebaseUid, bool isAppUser = false}) {
+  Contact? toAppContact({bool isAppUser = false}) {
+    if (!hasPhone) return null;
+
+    final normalizedPhone = Contact.normalizePhoneNumber(phones.first);
     return Contact(
-      id: 'phone_$id',
+      id: normalizedPhone, // Le numéro normalisé est l'ID
       displayName: displayName,
-      email: emails.isNotEmpty ? emails.first : null,
-      phoneNumber: phones.isNotEmpty ? phones.first : null,
+      phoneNumber: normalizedPhone,
       photoUrl: photoUrl,
-      firebaseUid: firebaseUid,
       isAppUser: isAppUser,
     );
   }

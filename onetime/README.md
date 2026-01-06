@@ -1,56 +1,77 @@
-# One-Time Pad - Secure Messaging Application
+# OneTime - Messagerie Chiffrée
 
-Application Flutter pour chiffrement One-Time Pad avec échange de clé local.
+OneTime est une application pour s'envoyer des messages via un numéro de téléphone.
+Ces messages sont chiffrés avec une clé partagée avant. 
+
+**On partage une clé avant, on communique secrètement après.**
+
+## Principe de fonctionnement
+
+1. **Identification par téléphone** : Ton numéro de téléphone est ton unique identifiant (pas de compte, pas de mot de passe)
+2. **Échange de clé en personne** : Tu génères une clé aléatoire et la partages via QR code (en présence physique)
+3. **Chiffrement One-Time Pad** : Les messages sont chiffrés avec la clé partagée (chiffrement parfait, mathématiquement inviolable)
+4. **Clé à usage unique** : Chaque bit de clé n'est utilisé qu'une seule fois, puis détruit
 
 ## Architecture
 
 ### Services
 
-#### 1. RandomKeyGeneratorService
+#### 1. AuthService
+Authentification Firebase par numéro de téléphone.
+- Envoi de code OTP par SMS
+- Vérification du code et connexion
+- Auto-vérification sur Android
+- Aucun mot de passe, aucune donnée personnelle stockée
+
+#### 2. RandomKeyGeneratorService
 Génération de clés aléatoires avec source d'entropie caméra.
 - Utilise les variations RGB entre pixels comme source d'entropie
 - XOR avec CSPRNG pour renforcer l'aléatoire
 - Tests statistiques intégrés (Chi², fréquence, runs)
 - Capacité QR code: ~23200 bits max, 8192 bits recommandé
 
-#### 2. KeyExchangeService
+#### 3. KeyExchangeService
 Échange local de clé via QR code.
 - Source affiche les QR codes avec les bits de clé
 - Lecteurs scannent et confirment via réseau (index uniquement)
 - Les bits de clé ne transitent JAMAIS sur le réseau
 - Support de l'agrandissement de clé existante
 
-#### 3. CryptoService
+#### 4. CryptoService
 Chiffrement/déchiffrement One-Time Pad.
 - XOR du message avec la clé
 - Gestion automatique des segments par peer
 - Support des longs messages (multi-segments)
 - Mode ultra-secure avec suppression après lecture
 
-#### 4. FirebaseMessageService
+#### 5. FirebaseMessageService
 Communication cloud sécurisée.
 - Locks transactionnels avant envoi
 - Synchronisation des segments utilisés
 - Confirmation d'échange de clé (indices seulement)
 - Support du mode suppression après lecture
 
-#### 5. AuthService
-Authentification fédérée Firebase.
-- Google Sign-In
-- Apple Sign-In
-- Facebook Login
-- Microsoft Authentication
-- GitHub OAuth
-- Gestion du profil et déconnexion
-
 #### 6. ContactsService
-Gestion des contacts.
-- Import depuis le répertoire téléphone
-- Vérification des utilisateurs OneTime
+Gestion des contacts par numéro de téléphone.
+- Import depuis le répertoire téléphone (uniquement contacts avec numéro)
+- Vérification des utilisateurs OneTime par numéro
 - Stockage local des contacts
 - Association avec les clés partagées
 
 ### Modèles
+
+#### UserProfile
+Profil utilisateur identifié par son numéro de téléphone.
+- Numéro de téléphone (identifiant unique)
+- Nom d'affichage optionnel
+- Dates de création/connexion
+
+#### Contact
+Contact de l'application.
+- Numéro de téléphone normalisé (identifiant)
+- Nom d'affichage
+- Statut utilisateur OneTime
+- Association clé partagée
 
 #### SharedKey
 Clé partagée avec métadonnées.
@@ -68,26 +89,13 @@ Message chiffré prêt pour transmission.
 - Support multi-segments pour longs messages
 - Métadonnées pour déchiffrement
 
-#### UserProfile
-Profil utilisateur authentifié.
-- Informations du provider
-- Gestion des initiales/avatar
-
-#### Contact
-Contact de l'application.
-- Lien avec contacts téléphone
-- Statut utilisateur OneTime
-- Association clé partagée
-
 ### Écrans
 
 #### LoginScreen
-Écran de connexion avec boutons pour chaque provider OAuth:
-- Google (blanc/gris)
-- Apple (noir)
-- Facebook (bleu)
-- Microsoft (bleu clair)
-- GitHub (gris foncé)
+Écran de connexion par numéro de téléphone:
+- Sélection du code pays
+- Saisie du numéro
+- Envoi et vérification du code OTP
 
 #### HomeScreen
 Écran principal avec:
@@ -97,9 +105,9 @@ Contact de l'application.
 
 #### ProfileScreen
 Gestion du profil:
-- Avatar et informations
-- Badge du provider utilisé
+- Numéro de téléphone (identifiant vérifié)
 - Dates de création/connexion
+- Informations de sécurité
 - Bouton déconnexion
 - Suppression de compte
 
@@ -113,8 +121,8 @@ Liste des contacts:
 #### ContactPickerScreen
 Import de contacts téléphone:
 - Demande de permission
+- Affiche uniquement les contacts avec numéro
 - Mise en avant des utilisateurs OneTime
-- Recherche
 - Import en un tap
 
 ## Protocole d'échange de clé
@@ -158,10 +166,29 @@ Créer le fichier avec FlutterFire CLI:
 flutterfire configure
 ```
 
-### Providers à activer dans Firebase Console
-1. Authentication > Sign-in method
-2. Activer: Google, Apple, Facebook, Microsoft, GitHub
-3. Configurer les Client IDs pour chaque provider
+### Activer l'authentification par téléphone
+1. Firebase Console > Authentication > Sign-in method
+2. Activer "Téléphone"
+3. Ajouter les numéros de test si besoin (pour le développement)
+
+### Règles Firestore
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Utilisateurs identifiés par leur UID Firebase
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Messages chiffrés
+    match /messages/{messageId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+```
 
 ## Tests
 
@@ -196,11 +223,6 @@ dependencies:
   firebase_auth: ^5.3.4
   cloud_firestore: ^5.6.0
   
-  # Auth providers
-  google_sign_in: ^6.2.2
-  sign_in_with_apple: ^6.1.4
-  flutter_facebook_auth: ^7.1.1
-  
   # Contacts
   flutter_contacts: ^1.1.9+2
   
@@ -214,3 +236,22 @@ dependencies:
   # Local storage
   shared_preferences: ^2.3.4
 ```
+
+## Sécurité
+
+### Pourquoi c'est sécurisé ?
+- **Chiffrement One-Time Pad** : Mathématiquement prouvé inviolable si la clé est vraiment aléatoire et utilisée une seule fois
+- **Échange de clé hors-ligne** : Les bits de clé ne transitent jamais sur Internet, uniquement via QR code en présence physique
+- **Pas de serveur de clés** : Le serveur ne voit que des messages chiffrés, il ne peut pas les déchiffrer
+- **Identité minimale** : Seul le numéro de téléphone est utilisé, pas d'email, pas de mot de passe
+
+### Ce que le serveur voit
+- Les numéros de téléphone des utilisateurs
+- Les messages chiffrés (illisibles sans la clé)
+- Les timestamps et métadonnées de livraison
+
+### Ce que le serveur ne voit PAS
+- Le contenu des messages
+- Les clés de chiffrement
+- Aucune information permettant de déchiffrer les messages
+

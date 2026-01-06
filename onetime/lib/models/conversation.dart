@@ -24,7 +24,7 @@ class Conversation {
   /// ID de l'expéditeur du dernier message
   String? lastMessageSenderId;
   
-  /// Taille de la clé partagée en bits
+  /// Taille de la clé partagée en bits (0 = pas de clé)
   final int totalKeyBits;
   
   /// Bits de clé utilisés
@@ -49,6 +49,12 @@ class Conversation {
        createdAt = createdAt ?? DateTime.now(),
        lastMessageAt = lastMessageAt ?? DateTime.now();
 
+  /// La conversation a-t-elle une clé de chiffrement ?
+  bool get hasKey => totalKeyBits > 0;
+
+  /// La conversation est-elle non chiffrée ?
+  bool get isUnencrypted => totalKeyBits == 0;
+
   /// Nom à afficher (nom personnalisé ou liste des pairs)
   String get displayName {
     if (name != null && name!.isNotEmpty) return name!;
@@ -71,6 +77,7 @@ class Conversation {
   
   /// Clé restante formatée (KB ou MB)
   String get remainingKeyFormatted {
+    if (!hasKey) return 'Pas de clé';
     final bytes = remainingKeyBytes;
     if (bytes >= 1024 * 1024) {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
@@ -81,10 +88,10 @@ class Conversation {
   }
 
   /// Pourcentage de clé utilisée
-  double get keyUsagePercent => (usedKeyBits / totalKeyBits) * 100;
-  
+  double get keyUsagePercent => hasKey ? (usedKeyBits / totalKeyBits) * 100 : 0;
+
   /// Pourcentage de clé restante
-  double get keyRemainingPercent => 100 - keyUsagePercent;
+  double get keyRemainingPercent => hasKey ? 100 - keyUsagePercent : 0;
 
   /// Aperçu du dernier message avec expéditeur
   String get lastMessageDisplay {

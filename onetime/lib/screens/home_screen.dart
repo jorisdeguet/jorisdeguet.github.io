@@ -4,7 +4,6 @@ import '../services/auth_service.dart';
 import '../services/conversation_service.dart';
 import '../models/conversation.dart';
 import 'profile_screen.dart';
-import 'contacts_screen.dart';
 import 'new_conversation_screen.dart';
 import 'conversation_detail_screen.dart';
 
@@ -18,71 +17,66 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final AuthService _authService = AuthService();
-  int _currentIndex = 0;
+  final GlobalKey<_ConversationsListScreenState> _conversationsKey = GlobalKey();
 
   @override
   Widget build(BuildContext context) {
-    final profile = _authService.currentUserProfile;
+    // Utiliser le numéro de téléphone comme identifiant principal
+    final phoneNumber = _authService.currentPhoneNumber ?? '';
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('OneTime Pad'),
+        title: Row(
+          children: [
+            const Text(
+              '1 time',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            if (phoneNumber.isNotEmpty) ...[
+              Text(
+                ' : ',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+              Flexible(
+                child: Text(
+                  phoneNumber,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.normal,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ],
+        ),
         actions: [
-          // Avatar / Profil
-          GestureDetector(
-            onTap: () => Navigator.push(
+          // Bouton de rafraîchissement
+          IconButton(
+            onPressed: () => _conversationsKey.currentState?.refresh(),
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Rafraîchir',
+          ),
+          // Icône de profil
+          IconButton(
+            onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const ProfileScreen()),
             ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: CircleAvatar(
-                radius: 18,
-                backgroundImage: profile?.photoUrl != null
-                    ? NetworkImage(profile!.photoUrl!)
-                    : null,
-                child: profile?.photoUrl == null
-                    ? Text(
-                        profile?.initials ?? '?',
-                        style: const TextStyle(fontSize: 14),
-                      )
-                    : null,
-              ),
-            ),
+            icon: const Icon(Icons.account_circle_outlined),
+            tooltip: 'Profil',
           ),
         ],
       ),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          ConversationsListScreen(userId: _authService.currentUser?.uid ?? ''),
-          const ContactsScreen(),
-        ],
+      body: ConversationsListScreen(key: _conversationsKey, userId: phoneNumber),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _createNewConversation(context),
+        child: const Icon(Icons.edit),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) => setState(() => _currentIndex = index),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.chat_outlined),
-            selectedIcon: Icon(Icons.chat),
-            label: 'Messages',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
-            label: 'Contacts',
-          ),
-        ],
-      ),
-      floatingActionButton: _currentIndex == 0
-          ? FloatingActionButton(
-              onPressed: () => _createNewConversation(context),
-              child: const Icon(Icons.edit),
-            )
-          : null,
     );
   }
+
 
   void _createNewConversation(BuildContext context) {
     Navigator.push(
@@ -103,12 +97,25 @@ class ConversationsListScreen extends StatefulWidget {
 }
 
 class _ConversationsListScreenState extends State<ConversationsListScreen> {
-  late final ConversationService _conversationService;
-  
+  late ConversationService _conversationService;
+  Stream<List<Conversation>>? _conversationsStream;
+
   @override
   void initState() {
     super.initState();
+    _initService();
+  }
+
+  void _initService() {
     _conversationService = ConversationService(localUserId: widget.userId);
+    _conversationsStream = _conversationService.watchUserConversations();
+  }
+
+  /// Méthode publique pour rafraîchir les conversations
+  void refresh() {
+    setState(() {
+      _initService();
+    });
   }
 
   @override
@@ -117,44 +124,59 @@ class _ConversationsListScreenState extends State<ConversationsListScreen> {
       return const Center(child: Text('Non connecté'));
     }
 
-    return StreamBuilder<List<Conversation>>(
-      stream: _conversationService.watchUserConversations(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (snapshot.hasError) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                const SizedBox(height: 16),
-                Text('Erreur: ${snapshot.error}'),
-              ],
-            ),
-          );
-        }
-
-        final conversations = snapshot.data ?? [];
-
-        if (conversations.isEmpty) {
-          return const _EmptyConversations();
-        }
-
-        return ListView.builder(
-          itemCount: conversations.length,
-          itemBuilder: (context, index) {
-            final conversation = conversations[index];
-            return _ConversationTile(
-              conversation: conversation,
-              currentUserId: widget.userId,
-              onTap: () => _openConversation(context, conversation),
-            );
-          },
-        );
+    return RefreshIndicator(
+      onRefresh: () async {
+        refresh();
       },
+      child: StreamBuilder<List<Conversation>>(
+        stream: _conversationsStream,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                  const SizedBox(height: 16),
+                  Text('Erreur: ${snapshot.error}'),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: refresh,
+                    child: const Text('Réessayer'),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final conversations = snapshot.data ?? [];
+
+          if (conversations.isEmpty) {
+            return ListView(
+              children: const [
+                SizedBox(height: 200),
+                _EmptyConversations(),
+              ],
+            );
+          }
+
+          return ListView.builder(
+            itemCount: conversations.length,
+            itemBuilder: (context, index) {
+              final conversation = conversations[index];
+              return _ConversationTile(
+                conversation: conversation,
+                currentUserId: widget.userId,
+                onTap: () => _openConversation(context, conversation),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
@@ -214,14 +236,18 @@ class _ConversationTile extends StatelessWidget {
     
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: Theme.of(context).primaryColor.withAlpha(30),
-        child: Text(
-          conversation.displayName.substring(0, 1).toUpperCase(),
-          style: TextStyle(
-            color: Theme.of(context).primaryColor,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        backgroundColor: conversation.hasKey
+            ? Theme.of(context).primaryColor.withAlpha(30)
+            : Colors.orange.withAlpha(30),
+        child: conversation.hasKey
+            ? Text(
+                conversation.displayName.substring(0, 1).toUpperCase(),
+                style: TextStyle(
+                  color: Theme.of(context).primaryColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              )
+            : const Icon(Icons.lock_open, color: Colors.orange),
       ),
       title: Row(
         children: [
@@ -231,20 +257,32 @@ class _ConversationTile extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          // Clé restante
+          // Indicateur de clé
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: _getKeyColor(conversation.keyRemainingPercent),
+              color: conversation.hasKey
+                  ? _getKeyColor(conversation.keyRemainingPercent)
+                  : Colors.orange,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Text(
-              conversation.remainingKeyFormatted,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!conversation.hasKey)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 4),
+                    child: Icon(Icons.warning, size: 12, color: Colors.white),
+                  ),
+                Text(
+                  conversation.remainingKeyFormatted,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
             ),
           ),
         ],

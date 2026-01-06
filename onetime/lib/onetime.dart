@@ -17,13 +17,17 @@ export 'models/encrypted_message.dart';
 export 'models/user_profile.dart';
 export 'models/contact.dart';
 export 'models/conversation.dart';
+export 'models/key_exchange_session.dart';
 
 // Services
 export 'services/random_key_generator_service.dart';
 export 'services/key_exchange_service.dart';
+export 'services/key_exchange_sync_service.dart';
+export 'services/key_storage_service.dart';
 export 'services/crypto_service.dart';
 export 'services/firebase_message_service.dart';
 export 'services/auth_service.dart';
+export 'services/user_service.dart';
 export 'services/contacts_service.dart';
 export 'services/compression_service.dart';
 export 'services/conversation_service.dart';

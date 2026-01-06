@@ -1,17 +1,19 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:sign_in_with_apple/sign_in_with_apple.dart';
-import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 
 import '../models/user_profile.dart';
+import 'user_service.dart';
 
-/// Service d'authentification avec Firebase Auth et providers fédérés.
+/// Service d'authentification avec Firebase Phone Auth.
+/// Le numéro de téléphone est l'unique identifiant de l'utilisateur.
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final UserService _userService = UserService();
+
+  // Stockage temporaire du verification ID pour la vérification OTP
+  String? _verificationId;
+  int? _resendToken;
 
   /// Stream des changements d'état d'authentification
   Stream<User?> get authStateChanges => _auth.authStateChanges();
@@ -22,6 +24,9 @@ class AuthService {
   /// Vérifie si un utilisateur est connecté
   bool get isSignedIn => currentUser != null;
 
+  /// Numéro de téléphone de l'utilisateur connecté
+  String? get currentPhoneNumber => currentUser?.phoneNumber;
+
   /// Obtient le profil de l'utilisateur actuel
   UserProfile? get currentUserProfile {
     final user = currentUser;
@@ -29,157 +34,138 @@ class AuthService {
 
     return UserProfile(
       uid: user.uid,
-      email: user.email,
-      displayName: user.displayName,
-      photoUrl: user.photoURL,
-      provider: _getProviderFromUser(user),
-      phoneNumber: user.phoneNumber,
+      phoneNumber: user.phoneNumber ?? '',
       createdAt: user.metadata.creationTime ?? DateTime.now(),
       lastSignIn: user.metadata.lastSignInTime ?? DateTime.now(),
     );
   }
 
-  // ==================== GOOGLE ====================
+  // ==================== PHONE AUTH ====================
 
-  /// Connexion avec Google
-  Future<UserCredential?> signInWithGoogle() async {
+  /// Envoie un code de vérification au numéro de téléphone
+  Future<void> sendVerificationCode({
+    required String phoneNumber,
+    required Function(String verificationId) onCodeSent,
+    required Function(String error) onError,
+    required Function(PhoneAuthCredential credential) onAutoVerify,
+    Duration timeout = const Duration(seconds: 60),
+  }) async {
     try {
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) return null;
+      await _auth.verifyPhoneNumber(
+        phoneNumber: phoneNumber,
+        timeout: timeout,
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          // Auto-vérification sur Android (si le SMS est détecté automatiquement)
+          onAutoVerify(credential);
+        },
+        verificationFailed: (FirebaseAuthException e) {
+          String message;
+          switch (e.code) {
+            case 'invalid-phone-number':
+              message = 'Numéro de téléphone invalide';
+              break;
+            case 'too-many-requests':
+              message = 'Trop de tentatives. Réessayez plus tard.';
+              break;
+            case 'quota-exceeded':
+              message = 'Quota dépassé. Réessayez plus tard.';
+              break;
+            default:
+              message = e.message ?? 'Erreur d\'envoi du code';
+          }
+          onError(message);
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          _verificationId = verificationId;
+          _resendToken = resendToken;
+          onCodeSent(verificationId);
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
+          _verificationId = verificationId;
+        },
+        forceResendingToken: _resendToken,
+      );
+    } catch (e) {
+      onError('Erreur: $e');
+    }
+  }
 
-      final GoogleSignInAuthentication googleAuth = 
-          await googleUser.authentication;
+  /// Vérifie le code OTP et connecte l'utilisateur
+  Future<UserCredential> verifyOtpAndSignIn(String smsCode) async {
+    if (_verificationId == null) {
+      throw AuthException('Aucune vérification en cours. Demandez un nouveau code.');
+    }
 
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
+    try {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: _verificationId!,
+        smsCode: smsCode,
       );
 
-      return await _auth.signInWithCredential(credential);
-    } catch (e) {
-      throw AuthException('Erreur Google Sign-In: $e');
+      final userCredential = await _auth.signInWithCredential(credential);
+
+      // Sauvegarder l'utilisateur dans Firestore
+      await _saveUserToFirestore(userCredential.user);
+
+      return userCredential;
+    } on FirebaseAuthException catch (e) {
+      String message;
+      switch (e.code) {
+        case 'invalid-verification-code':
+          message = 'Code invalide. Vérifiez et réessayez.';
+          break;
+        case 'session-expired':
+          message = 'Session expirée. Demandez un nouveau code.';
+          break;
+        default:
+          message = e.message ?? 'Erreur de vérification';
+      }
+      throw AuthException(message);
     }
   }
 
-  // ==================== APPLE ====================
+  /// Sauvegarde l'utilisateur dans Firestore
+  Future<void> _saveUserToFirestore(User? user) async {
+    if (user == null || user.phoneNumber == null) return;
 
-  /// Connexion avec Apple (iOS 13+, macOS)
-  Future<UserCredential?> signInWithApple() async {
     try {
-      final appleCredential = await SignInWithApple.getAppleIDCredential(
-        scopes: [
-          AppleIDAuthorizationScopes.email,
-          AppleIDAuthorizationScopes.fullName,
-        ],
+      final userProfile = UserProfile(
+        uid: user.uid,
+        phoneNumber: user.phoneNumber!,
+        createdAt: user.metadata.creationTime ?? DateTime.now(),
+        lastSignIn: user.metadata.lastSignInTime ?? DateTime.now(),
       );
-
-      final oauthCredential = OAuthProvider('apple.com').credential(
-        idToken: appleCredential.identityToken,
-        accessToken: appleCredential.authorizationCode,
-      );
-
-      return await _auth.signInWithCredential(oauthCredential);
+      await _userService.saveUser(userProfile);
     } catch (e) {
-      throw AuthException('Erreur Apple Sign-In: $e');
+      // Ne pas bloquer la connexion si l'enregistrement échoue
+      print('Failed to save user to Firestore: $e');
     }
   }
 
-  // ==================== FACEBOOK ====================
-
-  /// Connexion avec Facebook
-  Future<UserCredential?> signInWithFacebook() async {
+  /// Connexion avec credential (utilisé pour l'auto-vérification)
+  Future<UserCredential> signInWithCredential(PhoneAuthCredential credential) async {
     try {
-      final LoginResult result = await FacebookAuth.instance.login();
-      
-      if (result.status != LoginStatus.success) {
-        return null;
-      }
+      final userCredential = await _auth.signInWithCredential(credential);
 
-      final OAuthCredential credential = 
-          FacebookAuthProvider.credential(result.accessToken!.tokenString);
+      // Sauvegarder l'utilisateur dans Firestore
+      await _saveUserToFirestore(userCredential.user);
 
-      return await _auth.signInWithCredential(credential);
-    } catch (e) {
-      throw AuthException('Erreur Facebook Sign-In: $e');
-    }
-  }
-
-  // ==================== MICROSOFT ====================
-
-  /// Connexion avec Microsoft
-  Future<UserCredential?> signInWithMicrosoft() async {
-    try {
-      final microsoftProvider = OAuthProvider('microsoft.com');
-      microsoftProvider.addScope('email');
-      microsoftProvider.addScope('profile');
-
-      if (Platform.isAndroid || Platform.isIOS) {
-        return await _auth.signInWithProvider(microsoftProvider);
-      } else {
-        return await _auth.signInWithPopup(microsoftProvider);
-      }
-    } catch (e) {
-      throw AuthException('Erreur Microsoft Sign-In: $e');
-    }
-  }
-
-  // ==================== GITHUB ====================
-
-  /// Connexion avec GitHub
-  Future<UserCredential?> signInWithGitHub() async {
-    try {
-      final githubProvider = OAuthProvider('github.com');
-      githubProvider.addScope('read:user');
-      githubProvider.addScope('user:email');
-
-      if (Platform.isAndroid || Platform.isIOS) {
-        return await _auth.signInWithProvider(githubProvider);
-      } else {
-        return await _auth.signInWithPopup(githubProvider);
-      }
-    } catch (e) {
-      throw AuthException('Erreur GitHub Sign-In: $e');
+      return userCredential;
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(e.message ?? 'Erreur de connexion');
     }
   }
 
   // ==================== DÉCONNEXION ====================
 
-  /// Déconnexion de tous les providers
+  /// Déconnexion
   Future<void> signOut() async {
-    // Déconnexion Google si connecté
-    if (await _googleSignIn.isSignedIn()) {
-      await _googleSignIn.signOut();
-    }
-
-    // Déconnexion Facebook si connecté
-    await FacebookAuth.instance.logOut();
-
-    // Déconnexion Firebase
+    _verificationId = null;
+    _resendToken = null;
     await _auth.signOut();
   }
 
-  // ==================== UTILITAIRES ====================
-
-  /// Détermine le provider utilisé
-  AppAuthProvider _getProviderFromUser(User user) {
-    if (user.providerData.isEmpty) return AppAuthProvider.email;
-
-    final providerId = user.providerData.first.providerId;
-    switch (providerId) {
-      case 'google.com':
-        return AppAuthProvider.google;
-      case 'facebook.com':
-        return AppAuthProvider.facebook;
-      case 'apple.com':
-        return AppAuthProvider.apple;
-      case 'microsoft.com':
-        return AppAuthProvider.microsoft;
-      case 'github.com':
-        return AppAuthProvider.github;
-      default:
-        return AppAuthProvider.email;
-    }
-  }
+  // ==================== GESTION DU COMPTE ====================
 
   /// Supprime le compte utilisateur
   Future<void> deleteAccount() async {
@@ -189,13 +175,10 @@ class AuthService {
     await user.delete();
   }
 
-  /// Met à jour le profil utilisateur
-  Future<void> updateProfile({String? displayName, String? photoUrl}) async {
-    final user = currentUser;
-    if (user == null) throw AuthException('Aucun utilisateur connecté');
-
-    await user.updateDisplayName(displayName);
-    await user.updatePhotoURL(photoUrl);
+  /// Réinitialise l'état de vérification
+  void resetVerification() {
+    _verificationId = null;
+    _resendToken = null;
   }
 }
 

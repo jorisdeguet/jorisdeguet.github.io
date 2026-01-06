@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 import '../models/conversation.dart';
 import '../models/encrypted_message.dart';
@@ -84,13 +85,21 @@ class ConversationService {
     required String senderId,
     required int bitsUsed,
   }) async {
-    await _conversationsRef.doc(conversationId).update({
-      'lastMessageAt': DateTime.now().toIso8601String(),
-      'lastMessagePreview': messagePreview,
-      'lastMessageSenderId': senderId,
-      'usedKeyBits': FieldValue.increment(bitsUsed),
-      'messageCount': FieldValue.increment(1),
-    });
+    debugPrint('[ConversationService] updateConversationWithMessage: conversationId=$conversationId');
+    try {
+      await _conversationsRef.doc(conversationId).update({
+        'lastMessageAt': DateTime.now().toIso8601String(),
+        'lastMessagePreview': messagePreview,
+        'lastMessageSenderId': senderId,
+        'usedKeyBits': FieldValue.increment(bitsUsed),
+        'messageCount': FieldValue.increment(1),
+      });
+      debugPrint('[ConversationService] updateConversationWithMessage: SUCCESS');
+    } catch (e, stackTrace) {
+      debugPrint('[ConversationService] updateConversationWithMessage ERROR: $e');
+      debugPrint('[ConversationService] Stack trace: $stackTrace');
+      rethrow;
+    }
   }
 
   /// Renomme une conversation
@@ -120,18 +129,32 @@ class ConversationService {
     required EncryptedMessage message,
     required String messagePreview,
   }) async {
-    // Ajouter le message
-    await _messagesRef(conversationId).doc(message.id).set(message.toJson());
-    
-    // Mettre à jour la conversation
-    await updateConversationWithMessage(
-      conversationId: conversationId,
-      messagePreview: messagePreview.length > 50 
-          ? '${messagePreview.substring(0, 47)}...'
-          : messagePreview,
-      senderId: message.senderId,
-      bitsUsed: message.totalBitsUsed,
-    );
+    debugPrint('[ConversationService] sendMessage: conversationId=$conversationId');
+    debugPrint('[ConversationService] sendMessage: messageId=${message.id}');
+    debugPrint('[ConversationService] sendMessage: senderId=${message.senderId}');
+
+    try {
+      // Ajouter le message
+      debugPrint('[ConversationService] Adding message to Firestore...');
+      await _messagesRef(conversationId).doc(message.id).set(message.toJson());
+      debugPrint('[ConversationService] Message added successfully');
+
+      // Mettre à jour la conversation
+      debugPrint('[ConversationService] Updating conversation...');
+      await updateConversationWithMessage(
+        conversationId: conversationId,
+        messagePreview: messagePreview.length > 50
+            ? '${messagePreview.substring(0, 47)}...'
+            : messagePreview,
+        senderId: message.senderId,
+        bitsUsed: message.totalBitsUsed,
+      );
+      debugPrint('[ConversationService] Conversation updated successfully');
+    } catch (e, stackTrace) {
+      debugPrint('[ConversationService] ERROR in sendMessage: $e');
+      debugPrint('[ConversationService] Stack trace: $stackTrace');
+      rethrow;
+    }
   }
 
   /// Récupère les messages d'une conversation
