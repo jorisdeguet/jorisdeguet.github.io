@@ -39,31 +39,46 @@ class MyApp extends StatelessWidget {
 }
 
 /// Wrapper qui redirige selon l'état d'authentification
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
 
   @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  final AuthService _authService = AuthService();
+  bool _isLoading = true;
+  bool _isSignedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuth();
+  }
+
+  Future<void> _checkAuth() async {
+    final isSignedIn = await _authService.initialize();
+    if (mounted) {
+      setState(() {
+        _isSignedIn = isSignedIn;
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final authService = AuthService();
-    
-    return StreamBuilder(
-      stream: authService.authStateChanges,
-      builder: (context, snapshot) {
-        // En attente de vérification
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        
-        // Utilisateur connecté
-        if (snapshot.hasData && snapshot.data != null) {
-          return const HomeScreen();
-        }
-        
-        // Non connecté
-        return const LoginScreen();
-      },
-    );
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_isSignedIn) {
+      return const HomeScreen();
+    }
+
+    return const LoginScreen();
   }
 }

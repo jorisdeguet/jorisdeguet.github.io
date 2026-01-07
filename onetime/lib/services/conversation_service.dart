@@ -23,13 +23,16 @@ class ConversationService {
 
   // ==================== CONVERSATIONS ====================
 
-  /// Crée une nouvelle conversation
+  /// Crée une nouvelle conversation (en état "joining")
   Future<Conversation> createConversation({
     required List<String> peerIds,
     required Map<String, String> peerNames,
-    required int totalKeyBits,
+    int totalKeyBits = 0,
     String? name,
+    ConversationState state = ConversationState.joining,
   }) async {
+    debugPrint('[ConversationService] createConversation: peerIds=$peerIds, state=$state');
+
     // S'assurer que l'utilisateur local est inclus
     final allPeers = {...peerIds, localUserId}.toList()..sort();
     
@@ -40,12 +43,36 @@ class ConversationService {
       peerIds: allPeers,
       peerNames: peerNames,
       name: name,
+      state: state,
       totalKeyBits: totalKeyBits,
     );
 
     await _conversationsRef.doc(conversationId).set(conversation.toFirestore());
-    
+    debugPrint('[ConversationService] Conversation created: $conversationId');
+
     return conversation;
+  }
+
+  /// Change l'état d'une conversation
+  Future<void> setConversationState(String conversationId, ConversationState state) async {
+    debugPrint('[ConversationService] setConversationState: $conversationId -> $state');
+    await _conversationsRef.doc(conversationId).update({
+      'state': state.name,
+    });
+  }
+
+  /// Passe la conversation en mode "exchanging" (échange de clé en cours)
+  Future<void> startKeyExchange(String conversationId) async {
+    await setConversationState(conversationId, ConversationState.exchanging);
+  }
+
+  /// Passe la conversation en mode "ready" (prête à utiliser)
+  Future<void> markConversationReady(String conversationId, int totalKeyBits) async {
+    debugPrint('[ConversationService] markConversationReady: $conversationId, totalKeyBits=$totalKeyBits');
+    await _conversationsRef.doc(conversationId).update({
+      'state': ConversationState.ready.name,
+      'totalKeyBits': totalKeyBits,
+    });
   }
 
   /// Récupère une conversation par ID
@@ -78,6 +105,14 @@ class ConversationService {
             .toList());
   }
 
+  /// Stream d'une conversation spécifique
+  Stream<Conversation?> watchConversation(String conversationId) {
+    return _conversationsRef.doc(conversationId).snapshots().map((doc) {
+      if (!doc.exists) return null;
+      return Conversation.fromFirestore(doc.data()!);
+    });
+  }
+
   /// Met à jour une conversation après envoi de message
   Future<void> updateConversationWithMessage({
     required String conversationId,
@@ -107,8 +142,35 @@ class ConversationService {
     await _conversationsRef.doc(conversationId).update({'name': newName});
   }
 
-  /// Supprime une conversation
+  /// Met à jour les bits de clé d'une conversation existante
+  /// Met à jour les bits de clé d'une conversation existante et la marque comme prête
+  Future<void> updateConversationKey({
+    required String conversationId,
+    required int totalKeyBits,
+    bool addToExisting = false,
+  }) async {
+    debugPrint('[ConversationService] updateConversationKey: $conversationId, $totalKeyBits bits, addToExisting=$addToExisting');
+
+    if (addToExisting) {
+      // Ajouter aux bits existants (extension de clé)
+      await _conversationsRef.doc(conversationId).update({
+        'totalKeyBits': FieldValue.increment(totalKeyBits),
+        'state': ConversationState.ready.name,
+      });
+    } else {
+      // Remplacer les bits (premier échange)
+      await _conversationsRef.doc(conversationId).update({
+        'totalKeyBits': totalKeyBits,
+        'usedKeyBits': 0,
+        'state': ConversationState.ready.name,
+      });
+    }
+  }
+
+  /// Supprime une conversation (et tous ses messages)
   Future<void> deleteConversation(String conversationId) async {
+    debugPrint('[ConversationService] deleteConversation: $conversationId');
+
     // Supprimer tous les messages d'abord
     final messages = await _messagesRef(conversationId).get();
     final batch = _firestore.batch();
@@ -117,8 +179,19 @@ class ConversationService {
     }
     await batch.commit();
     
+    // Supprimer les sessions d'échange de clé associées
+    final sessions = await _firestore
+        .collection('key_exchange_sessions')
+        .where('conversationId', isEqualTo: conversationId)
+        .get();
+    for (final doc in sessions.docs) {
+      await doc.reference.delete();
+    }
+
     // Supprimer la conversation
     await _conversationsRef.doc(conversationId).delete();
+
+    debugPrint('[ConversationService] Conversation deleted: $conversationId');
   }
 
   // ==================== MESSAGES ====================

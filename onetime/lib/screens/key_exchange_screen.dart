@@ -18,12 +18,14 @@ class KeyExchangeScreen extends StatefulWidget {
   final List<String> peerIds;
   final Map<String, String> peerNames;
   final String? conversationName;
+  final String? existingConversationId;
 
   const KeyExchangeScreen({
     super.key,
     required this.peerIds,
     required this.peerNames,
     this.conversationName,
+    this.existingConversationId,
   });
 
   @override
@@ -74,7 +76,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     super.dispose();
   }
 
-  String get _currentUserId => _authService.currentPhoneNumber ?? '';
+  String get _currentUserId => _authService.currentUserId ?? '';
 
   Future<void> _startAsSource() async {
     if (_currentUserId.isEmpty) return;
@@ -337,22 +339,35 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         force: true,
       );
 
-      // Créer la conversation dans Firebase
       if (_currentUserId.isEmpty) return;
 
       final conversationService = ConversationService(localUserId: _currentUserId);
-
-      final conversation = await conversationService.createConversation(
-        peerIds: sharedKey.peerIds,
-        peerNames: widget.peerNames,
-        totalKeyBits: sharedKey.lengthInBits,
-        name: widget.conversationName,
-      );
-      debugPrint('[KeyExchange] Conversation created: ${conversation.id}');
+      
+      // Utiliser la conversation existante ou en créer une nouvelle
+      String conversationId;
+      if (widget.existingConversationId != null) {
+        // Mettre à jour la conversation existante avec les bits de clé
+        conversationId = widget.existingConversationId!;
+        await conversationService.updateConversationKey(
+          conversationId: conversationId,
+          totalKeyBits: sharedKey.lengthInBits,
+        );
+        debugPrint('[KeyExchange] Existing conversation updated: $conversationId');
+      } else {
+        // Créer une nouvelle conversation
+        final conversation = await conversationService.createConversation(
+          peerIds: sharedKey.peerIds,
+          peerNames: widget.peerNames,
+          totalKeyBits: sharedKey.lengthInBits,
+          name: widget.conversationName,
+        );
+        conversationId = conversation.id;
+        debugPrint('[KeyExchange] New conversation created: $conversationId');
+      }
 
       // Mettre à jour la session Firestore avec le conversationId AVANT de la terminer
       if (_firestoreSession != null) {
-        await _syncService.setConversationId(_firestoreSession!.id, conversation.id);
+        await _syncService.setConversationId(_firestoreSession!.id, conversationId);
         debugPrint('[KeyExchange] Session updated with conversationId');
 
         // Marquer la session comme terminée
@@ -361,12 +376,16 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       }
 
       // Sauvegarder la clé localement
-      debugPrint('[KeyExchange] Saving shared key locally for conversation ${conversation.id}');
-      await _keyStorageService.saveKey(conversation.id, sharedKey);
+      debugPrint('[KeyExchange] Saving shared key locally for conversation $conversationId');
+      await _keyStorageService.saveKey(conversationId, sharedKey);
       debugPrint('[KeyExchange] Shared key saved successfully');
 
-      // Note: On ne supprime PAS la session ici pour que le reader puisse obtenir le conversationId
-      // La session sera supprimée par le reader ou après un délai
+      // Récupérer la conversation pour naviguer
+      final conversation = await conversationService.getConversation(conversationId);
+      if (conversation == null) {
+        setState(() => _errorMessage = 'Conversation non trouvée');
+        return;
+      }
 
       if (mounted) {
         Navigator.pushReplacement(
@@ -434,6 +453,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           const SizedBox(height: 8),
           DropdownButtonFormField<int>(
             value: _keySizeBits,
+            isExpanded: true,
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.data_usage),
@@ -441,13 +461,15 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
             items: _keySizeOptions.map((size) {
               final segments = (size + KeyExchangeService.segmentSizeBits - 1) ~/ KeyExchangeService.segmentSizeBits;
               final kb = size ~/ 8 ~/ 1024;
-              final messages = size ~/ 8 ~/ 100; // ~100 bytes par message
               final label = segments <= 2
-                  ? '🧪 TEST: $segments segments'
-                  : '$kb KB (~$messages messages, $segments segments)';
+                  ? '🧪 TEST: $segments seg.'
+                  : '$kb KB ($segments seg.)';
               return DropdownMenuItem(
                 value: size,
-                child: Text(label),
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                ),
               );
             }).toList(),
             onChanged: (value) {

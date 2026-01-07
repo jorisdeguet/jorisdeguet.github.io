@@ -6,6 +6,7 @@ import '../models/conversation.dart';
 import 'profile_screen.dart';
 import 'new_conversation_screen.dart';
 import 'conversation_detail_screen.dart';
+import 'join_conversation_screen.dart';
 
 /// Écran d'accueil après connexion.
 class HomeScreen extends StatefulWidget {
@@ -21,8 +22,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Utiliser le numéro de téléphone comme identifiant principal
-    final phoneNumber = _authService.currentPhoneNumber ?? '';
+    final userId = _authService.currentUserId ?? '';
+    final pseudo = _authService.currentPseudo ?? '';
 
     return Scaffold(
       appBar: AppBar(
@@ -32,14 +33,14 @@ class _HomeScreenState extends State<HomeScreen> {
               '1 time',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
-            if (phoneNumber.isNotEmpty) ...[
+            if (pseudo.isNotEmpty) ...[
               Text(
                 ' : ',
                 style: TextStyle(color: Colors.grey[600]),
               ),
               Flexible(
                 child: Text(
-                  phoneNumber,
+                  pseudo,
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.grey[600],
@@ -52,6 +53,12 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
+          // Bouton pour rejoindre une conversation (scanner QR)
+          IconButton(
+            onPressed: () => _joinConversation(context),
+            icon: const Icon(Icons.qr_code_scanner),
+            tooltip: 'Rejoindre une conversation',
+          ),
           // Bouton de rafraîchissement
           IconButton(
             onPressed: () => _conversationsKey.currentState?.refresh(),
@@ -69,19 +76,26 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: ConversationsListScreen(key: _conversationsKey, userId: phoneNumber),
+      body: ConversationsListScreen(key: _conversationsKey, userId: userId),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _createNewConversation(context),
-        child: const Icon(Icons.edit),
+        tooltip: 'Créer une conversation',
+        child: const Icon(Icons.add),
       ),
     );
   }
-
 
   void _createNewConversation(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const NewConversationScreen()),
+    );
+  }
+
+  void _joinConversation(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const JoinConversationScreen()),
     );
   }
 }

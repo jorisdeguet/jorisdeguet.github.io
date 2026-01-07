@@ -1,3 +1,13 @@
+/// État d'une conversation
+enum ConversationState {
+  /// En attente que les participants rejoignent
+  joining,
+  /// Échange de clé en cours
+  exchanging,
+  /// Prête à utiliser (clé échangée)
+  ready,
+}
+
 /// Représente une conversation entre plusieurs pairs.
 class Conversation {
   /// ID unique de la conversation (= ID de la clé partagée)
@@ -12,6 +22,9 @@ class Conversation {
   /// Nom de la conversation (optionnel)
   final String? name;
   
+  /// État actuel de la conversation
+  ConversationState state;
+
   /// Date de création
   final DateTime createdAt;
   
@@ -25,8 +38,8 @@ class Conversation {
   String? lastMessageSenderId;
   
   /// Taille de la clé partagée en bits (0 = pas de clé)
-  final int totalKeyBits;
-  
+  int totalKeyBits;
+
   /// Bits de clé utilisés
   int usedKeyBits;
   
@@ -38,11 +51,12 @@ class Conversation {
     required this.peerIds,
     Map<String, String>? peerNames,
     this.name,
+    this.state = ConversationState.joining,
     DateTime? createdAt,
     DateTime? lastMessageAt,
     this.lastMessagePreview,
     this.lastMessageSenderId,
-    required this.totalKeyBits,
+    this.totalKeyBits = 0,
     this.usedKeyBits = 0,
     this.messageCount = 0,
   }) : peerNames = peerNames ?? {},
@@ -54,6 +68,21 @@ class Conversation {
 
   /// La conversation est-elle non chiffrée ?
   bool get isUnencrypted => totalKeyBits == 0;
+
+  /// La conversation est-elle prête à utiliser ?
+  bool get isReady => state == ConversationState.ready;
+
+  /// L'échange de clé est-il en cours ?
+  bool get isExchanging => state == ConversationState.exchanging;
+
+  /// Est-ce que des participants peuvent encore rejoindre ?
+  bool get isJoining => state == ConversationState.joining;
+
+  /// La clé est-elle presque épuisée (< 10%) ?
+  bool get isKeyLow => hasKey && keyRemainingPercent < 10;
+
+  /// La clé est-elle épuisée ?
+  bool get isKeyExhausted => hasKey && remainingKeyBits <= 0;
 
   /// Nom à afficher (nom personnalisé ou liste des pairs)
   String get displayName {
@@ -131,6 +160,7 @@ class Conversation {
       'peerIds': peerIds,
       'peerNames': peerNames,
       'name': name,
+      'state': state.name,
       'createdAt': createdAt.toIso8601String(),
       'lastMessageAt': lastMessageAt.toIso8601String(),
       'lastMessagePreview': lastMessagePreview,
@@ -148,11 +178,15 @@ class Conversation {
       peerIds: List<String>.from(data['peerIds'] as List),
       peerNames: Map<String, String>.from(data['peerNames'] as Map? ?? {}),
       name: data['name'] as String?,
+      state: ConversationState.values.firstWhere(
+        (s) => s.name == data['state'],
+        orElse: () => ConversationState.joining,
+      ),
       createdAt: DateTime.parse(data['createdAt'] as String),
       lastMessageAt: DateTime.parse(data['lastMessageAt'] as String),
       lastMessagePreview: data['lastMessagePreview'] as String?,
       lastMessageSenderId: data['lastMessageSenderId'] as String?,
-      totalKeyBits: data['totalKeyBits'] as int,
+      totalKeyBits: data['totalKeyBits'] as int? ?? 0,
       usedKeyBits: data['usedKeyBits'] as int? ?? 0,
       messageCount: data['messageCount'] as int? ?? 0,
     );

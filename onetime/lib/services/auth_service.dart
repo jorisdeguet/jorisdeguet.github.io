@@ -1,184 +1,168 @@
-import 'dart:async';
-
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/user_profile.dart';
-import 'user_service.dart';
 
-/// Service d'authentification avec Firebase Phone Auth.
-/// Le numéro de téléphone est l'unique identifiant de l'utilisateur.
+/// Service d'authentification simplifié (Singleton).
+/// Pas de connexion téléphone - juste un pseudo et un ID unique.
 class AuthService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final UserService _userService = UserService();
+  // Singleton instance
+  static final AuthService _instance = AuthService._internal();
+  factory AuthService() => _instance;
+  AuthService._internal();
 
-  // Stockage temporaire du verification ID pour la vérification OTP
-  String? _verificationId;
-  int? _resendToken;
+  static const String _userIdKey = 'user_id';
+  static const String _userPseudoKey = 'user_pseudo';
 
-  /// Stream des changements d'état d'authentification
-  Stream<User?> get authStateChanges => _auth.authStateChanges();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  UserProfile? _currentUser;
 
   /// Utilisateur actuellement connecté
-  User? get currentUser => _auth.currentUser;
+  UserProfile? get currentUser => _currentUser;
 
   /// Vérifie si un utilisateur est connecté
-  bool get isSignedIn => currentUser != null;
+  bool get isSignedIn => _currentUser != null;
 
-  /// Numéro de téléphone de l'utilisateur connecté
-  String? get currentPhoneNumber => currentUser?.phoneNumber;
+  /// ID de l'utilisateur connecté
+  String? get currentUserId => _currentUser?.id;
 
-  /// Obtient le profil de l'utilisateur actuel
-  UserProfile? get currentUserProfile {
-    final user = currentUser;
-    if (user == null) return null;
+  /// Pseudo de l'utilisateur connecté
+  String? get currentPseudo => _currentUser?.pseudo;
 
-    return UserProfile(
-      uid: user.uid,
-      phoneNumber: user.phoneNumber ?? '',
-      createdAt: user.metadata.creationTime ?? DateTime.now(),
-      lastSignIn: user.metadata.lastSignInTime ?? DateTime.now(),
-    );
-  }
+  /// Collection des utilisateurs
+  CollectionReference<Map<String, dynamic>> get _usersRef =>
+      _firestore.collection('users');
 
-  // ==================== PHONE AUTH ====================
+  /// Initialise le service et charge l'utilisateur depuis le stockage local
+  Future<bool> initialize() async {
+    debugPrint('[AuthService] initialize()');
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getString(_userIdKey);
+    final userPseudo = prefs.getString(_userPseudoKey);
 
-  /// Envoie un code de vérification au numéro de téléphone
-  Future<void> sendVerificationCode({
-    required String phoneNumber,
-    required Function(String verificationId) onCodeSent,
-    required Function(String error) onError,
-    required Function(PhoneAuthCredential credential) onAutoVerify,
-    Duration timeout = const Duration(seconds: 60),
-  }) async {
-    try {
-      await _auth.verifyPhoneNumber(
-        phoneNumber: phoneNumber,
-        timeout: timeout,
-        verificationCompleted: (PhoneAuthCredential credential) async {
-          // Auto-vérification sur Android (si le SMS est détecté automatiquement)
-          onAutoVerify(credential);
-        },
-        verificationFailed: (FirebaseAuthException e) {
-          String message;
-          switch (e.code) {
-            case 'invalid-phone-number':
-              message = 'Numéro de téléphone invalide';
-              break;
-            case 'too-many-requests':
-              message = 'Trop de tentatives. Réessayez plus tard.';
-              break;
-            case 'quota-exceeded':
-              message = 'Quota dépassé. Réessayez plus tard.';
-              break;
-            default:
-              message = e.message ?? 'Erreur d\'envoi du code';
-          }
-          onError(message);
-        },
-        codeSent: (String verificationId, int? resendToken) {
-          _verificationId = verificationId;
-          _resendToken = resendToken;
-          onCodeSent(verificationId);
-        },
-        codeAutoRetrievalTimeout: (String verificationId) {
-          _verificationId = verificationId;
-        },
-        forceResendingToken: _resendToken,
-      );
-    } catch (e) {
-      onError('Erreur: $e');
-    }
-  }
+    debugPrint('[AuthService] userId from prefs: $userId');
+    debugPrint('[AuthService] userPseudo from prefs: $userPseudo');
 
-  /// Vérifie le code OTP et connecte l'utilisateur
-  Future<UserCredential> verifyOtpAndSignIn(String smsCode) async {
-    if (_verificationId == null) {
-      throw AuthException('Aucune vérification en cours. Demandez un nouveau code.');
-    }
-
-    try {
-      final credential = PhoneAuthProvider.credential(
-        verificationId: _verificationId!,
-        smsCode: smsCode,
-      );
-
-      final userCredential = await _auth.signInWithCredential(credential);
-
-      // Sauvegarder l'utilisateur dans Firestore
-      await _saveUserToFirestore(userCredential.user);
-
-      return userCredential;
-    } on FirebaseAuthException catch (e) {
-      String message;
-      switch (e.code) {
-        case 'invalid-verification-code':
-          message = 'Code invalide. Vérifiez et réessayez.';
-          break;
-        case 'session-expired':
-          message = 'Session expirée. Demandez un nouveau code.';
-          break;
-        default:
-          message = e.message ?? 'Erreur de vérification';
+    if (userId != null && userPseudo != null) {
+      // Récupérer le profil depuis Firestore
+      try {
+        final doc = await _usersRef.doc(userId).get();
+        if (doc.exists) {
+          _currentUser = UserProfile.fromJson(doc.data()!);
+          debugPrint('[AuthService] User loaded from Firestore: ${_currentUser?.id}');
+          return true;
+        } else {
+          // Le document n'existe pas dans Firestore, créer un profil local
+          _currentUser = UserProfile(
+            id: userId,
+            pseudo: userPseudo,
+            createdAt: DateTime.now(),
+          );
+          debugPrint('[AuthService] Created local user (not in Firestore): ${_currentUser?.id}');
+          return true;
+        }
+      } catch (e) {
+        debugPrint('[AuthService] Error loading user from Firestore: $e');
+        // Créer un profil local si Firestore échoue
+        _currentUser = UserProfile(
+          id: userId,
+          pseudo: userPseudo,
+          createdAt: DateTime.now(),
+        );
+        debugPrint('[AuthService] Created local user (Firestore error): ${_currentUser?.id}');
+        return true;
       }
-      throw AuthException(message);
     }
+    debugPrint('[AuthService] No user found');
+    return false;
   }
 
-  /// Sauvegarde l'utilisateur dans Firestore
-  Future<void> _saveUserToFirestore(User? user) async {
-    if (user == null || user.phoneNumber == null) return;
+  /// Crée un nouvel utilisateur avec le pseudo donné
+  Future<UserProfile> createUser(String pseudo) async {
+    debugPrint('[AuthService] createUser: $pseudo');
 
+    if (pseudo.trim().isEmpty) {
+      throw AuthException('Le pseudo ne peut pas être vide');
+    }
+
+    // Créer un document avec ID auto-généré
+    final docRef = _usersRef.doc();
+    final now = DateTime.now();
+
+    final user = UserProfile(
+      id: docRef.id,
+      pseudo: pseudo.trim(),
+      createdAt: now,
+    );
+
+    // Sauvegarder dans Firestore
     try {
-      final userProfile = UserProfile(
-        uid: user.uid,
-        phoneNumber: user.phoneNumber!,
-        createdAt: user.metadata.creationTime ?? DateTime.now(),
-        lastSignIn: user.metadata.lastSignInTime ?? DateTime.now(),
-      );
-      await _userService.saveUser(userProfile);
+      await docRef.set(user.toJson());
+      debugPrint('[AuthService] User saved to Firestore: ${user.id}');
     } catch (e) {
-      // Ne pas bloquer la connexion si l'enregistrement échoue
-      print('Failed to save user to Firestore: $e');
+      debugPrint('[AuthService] Error saving to Firestore: $e (continuing anyway)');
     }
+
+    // Sauvegarder localement
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_userIdKey, user.id);
+    await prefs.setString(_userPseudoKey, user.pseudo);
+    debugPrint('[AuthService] User saved locally: ${user.id}');
+
+    _currentUser = user;
+    return user;
   }
 
-  /// Connexion avec credential (utilisé pour l'auto-vérification)
-  Future<UserCredential> signInWithCredential(PhoneAuthCredential credential) async {
+  /// Met à jour le pseudo de l'utilisateur
+  Future<void> updatePseudo(String newPseudo) async {
+    if (_currentUser == null) {
+      throw AuthException('Aucun utilisateur connecté');
+    }
+
+    if (newPseudo.trim().isEmpty) {
+      throw AuthException('Le pseudo ne peut pas être vide');
+    }
+
     try {
-      final userCredential = await _auth.signInWithCredential(credential);
-
-      // Sauvegarder l'utilisateur dans Firestore
-      await _saveUserToFirestore(userCredential.user);
-
-      return userCredential;
-    } on FirebaseAuthException catch (e) {
-      throw AuthException(e.message ?? 'Erreur de connexion');
+      await _usersRef.doc(_currentUser!.id).update({
+        'pseudo': newPseudo.trim(),
+      });
+    } catch (e) {
+      debugPrint('[AuthService] Error updating pseudo in Firestore: $e');
     }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_userPseudoKey, newPseudo.trim());
+
+    _currentUser = _currentUser!.copyWith(pseudo: newPseudo.trim());
   }
 
-  // ==================== DÉCONNEXION ====================
-
-  /// Déconnexion
+  /// Déconnexion (efface les données locales)
   Future<void> signOut() async {
-    _verificationId = null;
-    _resendToken = null;
-    await _auth.signOut();
+    debugPrint('[AuthService] signOut()');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_userIdKey);
+    await prefs.remove(_userPseudoKey);
+    _currentUser = null;
   }
-
-  // ==================== GESTION DU COMPTE ====================
 
   /// Supprime le compte utilisateur
   Future<void> deleteAccount() async {
-    final user = currentUser;
-    if (user == null) throw AuthException('Aucun utilisateur connecté');
+    if (_currentUser == null) {
+      throw AuthException('Aucun utilisateur connecté');
+    }
 
-    await user.delete();
-  }
+    // Supprimer de Firestore
+    try {
+      await _usersRef.doc(_currentUser!.id).delete();
+    } catch (e) {
+      debugPrint('[AuthService] Error deleting from Firestore: $e');
+    }
 
-  /// Réinitialise l'état de vérification
-  void resetVerification() {
-    _verificationId = null;
-    _resendToken = null;
+    // Déconnexion locale
+    await signOut();
   }
 }
 
@@ -190,3 +174,4 @@ class AuthException implements Exception {
   @override
   String toString() => 'AuthException: $message';
 }
+

@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import '../models/user_profile.dart';
 
 /// Service pour gérer les utilisateurs de l'application dans Firestore.
-/// Permet de rechercher des utilisateurs par numéro de téléphone.
 class UserService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -12,103 +11,48 @@ class UserService {
   CollectionReference<Map<String, dynamic>> get _usersRef =>
       _firestore.collection('users');
 
-  /// Enregistre ou met à jour un utilisateur dans Firestore
-  Future<void> saveUser(UserProfile user) async {
-    debugPrint('[UserService] saveUser: ${user.phoneNumber}');
+  /// Récupère un utilisateur par son ID
+  Future<UserProfile?> getUserById(String id) async {
+    debugPrint('[UserService] getUserById: $id');
     try {
-      await _usersRef.doc(user.phoneNumber).set(user.toJson(), SetOptions(merge: true));
-      debugPrint('[UserService] saveUser SUCCESS: ${user.phoneNumber}');
-    } catch (e) {
-      debugPrint('[UserService] saveUser ERROR: $e');
-      rethrow;
-    }
-  }
-
-  /// Récupère un utilisateur par son numéro de téléphone
-  Future<UserProfile?> getUserByPhone(String phoneNumber) async {
-    debugPrint('[UserService] getUserByPhone: $phoneNumber');
-    try {
-      final doc = await _usersRef.doc(phoneNumber).get();
+      final doc = await _usersRef.doc(id).get();
       if (!doc.exists) {
-        debugPrint('[UserService] getUserByPhone: NOT FOUND');
+        debugPrint('[UserService] getUserById: NOT FOUND');
         return null;
       }
-      debugPrint('[UserService] getUserByPhone: FOUND');
+      debugPrint('[UserService] getUserById: FOUND');
       return UserProfile.fromJson(doc.data()!);
     } catch (e) {
-      debugPrint('[UserService] getUserByPhone ERROR: $e');
+      debugPrint('[UserService] getUserById ERROR: $e');
       rethrow;
     }
   }
 
-  /// Recherche des utilisateurs par numéro de téléphone (partiel)
-  /// Retourne les utilisateurs dont le numéro contient les chiffres recherchés
-  Future<List<UserProfile>> searchUsersByPhone(String phoneDigits, {int limit = 10}) async {
-    debugPrint('[UserService] searchUsersByPhone: $phoneDigits');
-    if (phoneDigits.length < 5) return [];
-
-    // Extraire uniquement les chiffres
-    final digits = phoneDigits.replaceAll(RegExp(r'[^\d]'), '');
-    if (digits.length < 5) return [];
-
+  /// Récupère plusieurs utilisateurs par leurs IDs
+  Future<Map<String, UserProfile>> getUsersByIds(List<String> ids) async {
+    debugPrint('[UserService] getUsersByIds: ${ids.length} IDs');
+    final result = <String, UserProfile>{};
+    
+    if (ids.isEmpty) return result;
+    
     try {
-      // Firestore ne supporte pas la recherche "contains", donc on récupère tous les utilisateurs
-      // et on filtre côté client. Pour une app de production, utiliser Algolia ou une Cloud Function.
-      final snapshot = await _usersRef.limit(100).get();
-      debugPrint('[UserService] searchUsersByPhone: fetched ${snapshot.docs.length} users');
-
-      final users = snapshot.docs
-          .map((doc) => UserProfile.fromJson(doc.data()))
-          .where((user) {
-            final userDigits = user.phoneNumber.replaceAll(RegExp(r'[^\d]'), '');
-            return userDigits.contains(digits);
-          })
-          .take(limit)
-          .toList();
-
-      debugPrint('[UserService] searchUsersByPhone: found ${users.length} matching users');
-      return users;
+      // Firestore limite whereIn à 30 éléments
+      const batchSize = 30;
+      for (var i = 0; i < ids.length; i += batchSize) {
+        final batch = ids.skip(i).take(batchSize).toList();
+        final snapshot = await _usersRef.where(FieldPath.documentId, whereIn: batch).get();
+        
+        for (final doc in snapshot.docs) {
+          result[doc.id] = UserProfile.fromJson(doc.data());
+        }
+      }
+      
+      debugPrint('[UserService] getUsersByIds: found ${result.length} users');
+      return result;
     } catch (e) {
-      debugPrint('[UserService] searchUsersByPhone ERROR: $e');
+      debugPrint('[UserService] getUsersByIds ERROR: $e');
       rethrow;
     }
-  }
-
-  /// Récupère tous les utilisateurs (pour suggestions)
-  Future<List<UserProfile>> getAllUsers({int limit = 50}) async {
-    debugPrint('[UserService] getAllUsers');
-    try {
-      final snapshot = await _usersRef.limit(limit).get();
-      debugPrint('[UserService] getAllUsers: fetched ${snapshot.docs.length} users');
-      return snapshot.docs
-          .map((doc) => UserProfile.fromJson(doc.data()))
-          .toList();
-    } catch (e) {
-      debugPrint('[UserService] getAllUsers ERROR: $e');
-      rethrow;
-    }
-  }
-
-  /// Vérifie si un numéro de téléphone est un utilisateur de l'app
-  Future<bool> isAppUser(String phoneNumber) async {
-    debugPrint('[UserService] isAppUser: $phoneNumber');
-    try {
-      final doc = await _usersRef.doc(phoneNumber).get();
-      debugPrint('[UserService] isAppUser: ${doc.exists}');
-      return doc.exists;
-    } catch (e) {
-      debugPrint('[UserService] isAppUser ERROR: $e');
-      rethrow;
-    }
-  }
-
-  /// Stream des utilisateurs (pour mise à jour en temps réel)
-  Stream<List<UserProfile>> watchUsers({int limit = 50}) {
-    debugPrint('[UserService] watchUsers');
-    return _usersRef.limit(limit).snapshots().map((snapshot) {
-      debugPrint('[UserService] watchUsers: received ${snapshot.docs.length} users');
-      return snapshot.docs.map((doc) => UserProfile.fromJson(doc.data())).toList();
-    });
   }
 }
 

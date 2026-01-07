@@ -1,11 +1,11 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/auth_service.dart';
 import 'home_screen.dart';
 
-/// Écran de connexion par numéro de téléphone.
+/// Écran de création de profil (première utilisation).
+/// Demande simplement un pseudo à l'utilisateur.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -15,87 +15,27 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final AuthService _authService = AuthService();
-  final _phoneController = TextEditingController();
-  final _otpController = TextEditingController();
+  final _pseudoController = TextEditingController();
 
   bool _isLoading = false;
-  bool _codeSent = false;
   String? _errorMessage;
-  String _selectedCountryCode = '+33'; // France par défaut
-
-  final List<Map<String, String>> _countryCodes = [
-    {'code': '+33', 'name': 'France', 'flag': '🇫🇷'},
-    {'code': '+1', 'name': 'USA/Canada', 'flag': '🇺🇸'},
-    {'code': '+44', 'name': 'UK', 'flag': '🇬🇧'},
-    {'code': '+32', 'name': 'Belgique', 'flag': '🇧🇪'},
-    {'code': '+41', 'name': 'Suisse', 'flag': '🇨🇭'},
-    {'code': '+352', 'name': 'Luxembourg', 'flag': '🇱🇺'},
-    {'code': '+49', 'name': 'Allemagne', 'flag': '🇩🇪'},
-    {'code': '+34', 'name': 'Espagne', 'flag': '🇪🇸'},
-    {'code': '+39', 'name': 'Italie', 'flag': '🇮🇹'},
-  ];
 
   @override
   void dispose() {
-    _phoneController.dispose();
-    _otpController.dispose();
+    _pseudoController.dispose();
     super.dispose();
   }
 
-  String get _fullPhoneNumber {
-    String phone = _phoneController.text.trim();
-    // Supprimer le 0 initial si présent
-    if (phone.startsWith('0')) {
-      phone = phone.substring(1);
-    }
-    return '$_selectedCountryCode$phone';
-  }
-
-  Future<void> _sendVerificationCode() async {
-    if (_phoneController.text.trim().isEmpty) {
-      setState(() => _errorMessage = 'Veuillez entrer votre numéro de téléphone');
+  Future<void> _createProfile() async {
+    final pseudo = _pseudoController.text.trim();
+    
+    if (pseudo.isEmpty) {
+      setState(() => _errorMessage = 'Veuillez entrer un pseudo');
       return;
     }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    await _authService.sendVerificationCode(
-      phoneNumber: _fullPhoneNumber,
-      onCodeSent: (verificationId) {
-        if (mounted) {
-          setState(() {
-            _codeSent = true;
-            _isLoading = false;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Code envoyé par SMS'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      },
-      onError: (error) {
-        if (mounted) {
-          setState(() {
-            _errorMessage = error;
-            _isLoading = false;
-          });
-        }
-      },
-      onAutoVerify: (credential) async {
-        // Auto-vérification Android
-        await _signInWithCredential(credential);
-      },
-    );
-  }
-
-  Future<void> _verifyCode() async {
-    if (_otpController.text.trim().length != 6) {
-      setState(() => _errorMessage = 'Le code doit contenir 6 chiffres');
+    
+    if (pseudo.length < 2) {
+      setState(() => _errorMessage = 'Le pseudo doit faire au moins 2 caractères');
       return;
     }
 
@@ -105,7 +45,8 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await _authService.verifyOtpAndSignIn(_otpController.text.trim());
+      await _authService.createUser(pseudo);
+      
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const HomeScreen()),
@@ -116,33 +57,12 @@ class _LoginScreenState extends State<LoginScreen> {
         _errorMessage = e.message;
         _isLoading = false;
       });
-    }
-  }
-
-  Future<void> _signInWithCredential(PhoneAuthCredential credential) async {
-    setState(() => _isLoading = true);
-    try {
-      await _authService.signInWithCredential(credential);
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-        );
-      }
-    } on AuthException catch (e) {
+    } catch (e) {
       setState(() {
-        _errorMessage = e.message;
+        _errorMessage = 'Erreur: $e';
         _isLoading = false;
       });
     }
-  }
-
-  void _resetToPhoneEntry() {
-    _authService.resetVerification();
-    setState(() {
-      _codeSent = false;
-      _otpController.clear();
-      _errorMessage = null;
-    });
   }
 
   @override
@@ -202,19 +122,18 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 24),
                 ],
 
-                // Contenu selon l'étape
+                // Contenu
                 if (_isLoading)
                   const CircularProgressIndicator()
-                else if (!_codeSent)
-                  _buildPhoneEntry()
                 else
-                  _buildOtpEntry(),
+                  _buildPseudoEntry(),
 
                 const SizedBox(height: 32),
 
                 // Texte explicatif
                 Text(
-                  'Votre numéro de téléphone est votre seul identifiant.\nAucun mot de passe, aucune donnée personnelle.',
+                  'Choisissez un pseudo pour commencer.\n'
+                  'Votre identifiant unique sera généré automatiquement.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Colors.grey[500],
@@ -228,145 +147,39 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildPhoneEntry() {
+  Widget _buildPseudoEntry() {
     return Column(
       children: [
         Text(
-          'Entrez votre numéro de téléphone',
+          'Choisissez votre pseudo',
           style: Theme.of(context).textTheme.titleMedium,
         ),
         const SizedBox(height: 16),
 
-        // Sélecteur de pays + champ numéro
-        Row(
-          children: [
-            // Sélecteur de pays
-            Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey[300]!),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedCountryCode,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  items: _countryCodes.map((country) {
-                    return DropdownMenuItem<String>(
-                      value: country['code'],
-                      child: Text('${country['flag']} ${country['code']}'),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _selectedCountryCode = value);
-                    }
-                  },
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-
-            // Champ numéro
-            Expanded(
-              child: TextField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(10),
-                ],
-                decoration: InputDecoration(
-                  hintText: '6 12 34 56 78',
-                  prefixIcon: const Icon(Icons.phone),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-
-        // Bouton envoyer
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton(
-            onPressed: _sendVerificationCode,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).primaryColor,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text(
-              'Recevoir un code par SMS',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildOtpEntry() {
-    return Column(
-      children: [
-        Icon(
-          Icons.sms_outlined,
-          size: 48,
-          color: Theme.of(context).primaryColor,
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'Code envoyé à',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        Text(
-          _fullPhoneNumber,
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 24),
-
-        // Champ code OTP
+        // Champ pseudo
         TextField(
-          controller: _otpController,
-          keyboardType: TextInputType.number,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 32,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 8,
-          ),
+          controller: _pseudoController,
+          textCapitalization: TextCapitalization.words,
           inputFormatters: [
-            FilteringTextInputFormatter.digitsOnly,
-            LengthLimitingTextInputFormatter(6),
+            LengthLimitingTextInputFormatter(30),
           ],
           decoration: InputDecoration(
-            hintText: '• • • • • •',
-            hintStyle: TextStyle(
-              color: Colors.grey[400],
-              fontSize: 32,
-              letterSpacing: 8,
-            ),
+            hintText: 'Ex: Alice, Bob, Charlie...',
+            prefixIcon: const Icon(Icons.person),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
             ),
-            contentPadding: const EdgeInsets.symmetric(vertical: 16),
           ),
+          onSubmitted: (_) => _createProfile(),
         ),
         const SizedBox(height: 24),
 
-        // Bouton vérifier
+        // Bouton créer
         SizedBox(
           width: double.infinity,
           height: 52,
           child: ElevatedButton(
-            onPressed: _verifyCode,
+            onPressed: _createProfile,
             style: ElevatedButton.styleFrom(
               backgroundColor: Theme.of(context).primaryColor,
               foregroundColor: Colors.white,
@@ -375,26 +188,10 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             child: const Text(
-              'Vérifier le code',
+              'Commencer',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
           ),
-        ),
-        const SizedBox(height: 16),
-
-        // Options
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            TextButton(
-              onPressed: _resetToPhoneEntry,
-              child: const Text('← Modifier le numéro'),
-            ),
-            TextButton(
-              onPressed: _sendVerificationCode,
-              child: const Text('Renvoyer le code'),
-            ),
-          ],
         ),
       ],
     );

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
@@ -39,7 +38,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   @override
   void initState() {
     super.initState();
-    final userId = _authService.currentPhoneNumber ?? '';
+    final userId = _authService.currentUserId ?? '';
     _conversationService = ConversationService(localUserId: userId);
     _cryptoService = CryptoService(localPeerId: userId);
     _loadSharedKey();
@@ -63,77 +62,51 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     super.dispose();
   }
 
-  String get _currentUserId => _authService.currentPhoneNumber ?? '';
+  String get _currentUserId => _authService.currentUserId ?? '';
 
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
+    // Vérifier qu'on a une clé
+    if (_sharedKey == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Impossible d\'envoyer: pas de clé de chiffrement'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     debugPrint('[ConversationDetail] _sendMessage: "$text"');
     debugPrint('[ConversationDetail] conversationId: ${widget.conversation.id}');
-    debugPrint('[ConversationDetail] hasKey: ${widget.conversation.hasKey}');
-    debugPrint('[ConversationDetail] sharedKey loaded: ${_sharedKey != null}');
     debugPrint('[ConversationDetail] currentUserId: $_currentUserId');
 
     setState(() => _isLoading = true);
     _messageController.clear();
 
     try {
-      EncryptedMessage message;
-      String messagePreview;
+      // Chiffrement avec One-Time Pad
+      debugPrint('[ConversationDetail] Encrypting message with OTP...');
 
-      if (_sharedKey != null) {
-        // Chiffrement avec One-Time Pad
-        debugPrint('[ConversationDetail] Encrypting message with OTP...');
+      final result = _cryptoService.encrypt(
+        plaintext: text,
+        sharedKey: _sharedKey!,
+        compress: true,
+      );
 
-        try {
-          final result = _cryptoService.encrypt(
-            plaintext: text,
-            sharedKey: _sharedKey!,
-            compress: true,
-          );
+      final message = result.message;
+      const messagePreview = '🔒 Message chiffré';
 
-          message = result.message;
-          messagePreview = '🔒 Message chiffré';
+      // Mettre à jour les bits utilisés dans le stockage local
+      await _keyStorageService.updateUsedBits(
+        widget.conversation.id,
+        result.usedSegment.startBit,
+        result.usedSegment.endBit,
+      );
 
-          // Mettre à jour les bits utilisés dans le stockage local
-          await _keyStorageService.updateUsedBits(
-            widget.conversation.id,
-            result.usedSegment.startBit,
-            result.usedSegment.endBit,
-          );
-
-          debugPrint('[ConversationDetail] Message encrypted: ${message.totalBitsUsed} bits used');
-        } catch (e) {
-          debugPrint('[ConversationDetail] Encryption failed: $e');
-          // Si le chiffrement échoue (pas assez de clé), envoyer en clair avec avertissement
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Chiffrement impossible: $e'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-          setState(() => _isLoading = false);
-          return;
-        }
-      } else {
-        // Message non chiffré
-        debugPrint('[ConversationDetail] Sending unencrypted message (no key)...');
-
-        final messageId = 'msg_${DateTime.now().millisecondsSinceEpoch}_$_currentUserId';
-        message = EncryptedMessage(
-          id: messageId,
-          keyId: '',
-          senderId: _currentUserId,
-          keySegments: [],
-          ciphertext: Uint8List.fromList(utf8.encode(text)),
-          isCompressed: false,
-          deleteAfterRead: false,
-        );
-        messagePreview = text;
-      }
+      debugPrint('[ConversationDetail] Message encrypted: ${message.totalBitsUsed} bits used');
 
       debugPrint('[ConversationDetail] Calling conversationService.sendMessage...');
       await _conversationService.sendMessage(
@@ -143,17 +116,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       );
 
       debugPrint('[ConversationDetail] Message sent successfully!');
-      if (mounted) {
-        if (_sharedKey == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('⚠️ Message envoyé sans chiffrement'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 1),
-            ),
-          );
-        }
-      }
     } catch (e, stackTrace) {
       debugPrint('[ConversationDetail] ERROR sending message: $e');
       debugPrint('[ConversationDetail] Stack trace: $stackTrace');
@@ -177,6 +139,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
           peerIds: widget.conversation.peerIds,
           peerNames: widget.conversation.peerNames,
           conversationName: widget.conversation.name,
+          existingConversationId: widget.conversation.id,
         ),
       ),
     );
@@ -402,10 +365,35 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   void _showConversationInfo(BuildContext context) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       builder: (context) => _ConversationInfoSheet(
         conversation: widget.conversation,
+        onDelete: _deleteConversation,
+        onExtendKey: _startKeyExchange,
       ),
     );
+  }
+
+  Future<void> _deleteConversation() async {
+    try {
+      await _conversationService.deleteConversation(widget.conversation.id);
+
+      // Supprimer la clé locale si elle existe
+      await _keyStorageService.deleteKey(widget.conversation.id);
+
+      if (mounted) {
+        Navigator.pop(context); // Retour à l'écran d'accueil
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Conversation supprimée')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e')),
+        );
+      }
+    }
   }
 }
 
@@ -542,8 +530,14 @@ class _MessageBubble extends StatelessWidget {
 
 class _ConversationInfoSheet extends StatelessWidget {
   final Conversation conversation;
+  final VoidCallback? onDelete;
+  final VoidCallback? onExtendKey;
 
-  const _ConversationInfoSheet({required this.conversation});
+  const _ConversationInfoSheet({
+    required this.conversation,
+    this.onDelete,
+    this.onExtendKey,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -670,8 +664,88 @@ class _ConversationInfoSheet extends StatelessWidget {
                 ),
               ),
             ],
+
+            const SizedBox(height: 32),
+            const Divider(),
+            const SizedBox(height: 16),
+
+            // Actions
+            Text(
+              'Actions',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 16),
+
+            // Bouton pour étendre/créer la clé
+            if (conversation.hasKey && conversation.isKeyLow || !conversation.hasKey)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    onExtendKey?.call();
+                  },
+                  icon: Icon(conversation.hasKey ? Icons.add : Icons.key),
+                  label: Text(
+                    conversation.hasKey
+                        ? 'Étendre la clé (${conversation.keyRemainingPercent.toStringAsFixed(0)}% restant)'
+                        : 'Créer une clé de chiffrement',
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+
+            if (conversation.hasKey && conversation.isKeyLow)
+              const SizedBox(height: 8),
+
+            // Bouton de suppression
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _showDeleteConfirmation(context);
+                },
+                icon: const Icon(Icons.delete_forever),
+                label: const Text('Supprimer la conversation'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  side: const BorderSide(color: Colors.red),
+                ),
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showDeleteConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Supprimer la conversation ?'),
+        content: const Text(
+          'Cette action est irréversible. La conversation et tous ses messages seront supprimés pour tous les participants.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              onDelete?.call();
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Supprimer'),
+          ),
+        ],
       ),
     );
   }

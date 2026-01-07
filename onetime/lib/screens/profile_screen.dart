@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/auth_service.dart';
-import '../models/user_profile.dart';
 import 'login_screen.dart';
 
 /// Écran de profil utilisateur avec option de déconnexion.
@@ -15,8 +15,6 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
   bool _isLoading = false;
-
-  UserProfile? get _profile => _authService.currentUserProfile;
 
   Future<void> _signOut() async {
     final confirm = await showDialog<bool>(
@@ -101,9 +99,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  void _copyId() {
+    final id = _authService.currentUserId ?? '';
+    Clipboard.setData(ClipboardData(text: id));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('ID copié dans le presse-papier')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final profile = _profile;
+    final user = _authService.currentUser;
+    final pseudo = user?.pseudo ?? 'Inconnu';
+    final id = user?.id ?? '';
 
     return Scaffold(
       appBar: AppBar(
@@ -111,18 +119,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : profile == null
+          : user == null
               ? const Center(child: Text('Non connecté'))
               : SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      // Avatar avec numéro
+                      // Avatar avec pseudo
                       CircleAvatar(
                         radius: 50,
                         backgroundColor: Theme.of(context).primaryColor,
                         child: Text(
-                          profile.initials,
+                          user.initials,
                           style: const TextStyle(
                             fontSize: 32,
                             color: Colors.white,
@@ -132,52 +140,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Numéro de téléphone
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.phone,
-                            color: Theme.of(context).primaryColor,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            profile.formattedPhoneNumber,
-                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+                      // Pseudo
+                      Text(
+                        pseudo,
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 8),
 
-                      // Badge identifiant unique
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).primaryColor.withAlpha(25),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.verified_user,
-                              size: 16,
-                              color: Theme.of(context).primaryColor,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Identifiant vérifié',
-                              style: TextStyle(
+                      // ID
+                      GestureDetector(
+                        onTap: _copyId,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).primaryColor.withAlpha(25),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.fingerprint,
+                                size: 16,
                                 color: Theme.of(context).primaryColor,
-                                fontSize: 12,
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 6),
+                              Text(
+                                id.length > 16 ? '${id.substring(0, 16)}...' : id,
+                                style: TextStyle(
+                                  color: Theme.of(context).primaryColor,
+                                  fontSize: 12,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Icon(
+                                Icons.copy,
+                                size: 14,
+                                color: Theme.of(context).primaryColor,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: 32),
@@ -187,19 +195,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         title: 'Informations du compte',
                         children: [
                           _InfoRow(
-                            icon: Icons.fingerprint,
-                            label: 'ID interne',
-                            value: '${profile.uid.substring(0, 8)}...',
+                            icon: Icons.person,
+                            label: 'Pseudo',
+                            value: pseudo,
                           ),
                           _InfoRow(
                             icon: Icons.calendar_today,
                             label: 'Membre depuis',
-                            value: _formatDate(profile.createdAt),
-                          ),
-                          _InfoRow(
-                            icon: Icons.access_time,
-                            label: 'Dernière connexion',
-                            value: _formatDate(profile.lastSignIn),
+                            value: _formatDate(user.createdAt),
                           ),
                         ],
                       ),
@@ -218,9 +221,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
-                                    'Votre numéro de téléphone est votre seul identifiant. '
+                                    'Votre identifiant unique est généré automatiquement. '
                                     'Les clés de chiffrement sont échangées en personne via QR code. '
-                                    'Aucune donnée sensible ne transite sur le réseau.',
+                                    'Tous les messages sont chiffrés avec le One-Time Pad.',
                                     style: TextStyle(
                                       color: Colors.grey[600],
                                       fontSize: 13,
