@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../models/conversation.dart';
 import '../models/encrypted_message.dart';
@@ -9,6 +11,9 @@ import '../services/conversation_service.dart';
 import '../services/auth_service.dart';
 import '../services/crypto_service.dart';
 import '../services/key_storage_service.dart';
+import '../services/media_service.dart';
+import '../services/pseudo_storage_service.dart';
+import '../widgets/media_confirm_dialog.dart';
 import 'key_exchange_screen.dart';
 
 /// Écran de détail d'une conversation (chat).
@@ -27,6 +32,8 @@ class ConversationDetailScreen extends StatefulWidget {
 class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   final AuthService _authService = AuthService();
   final KeyStorageService _keyStorageService = KeyStorageService();
+  final MediaService _mediaService = MediaService();
+  final PseudoStorageService _pseudoService = PseudoStorageService();
   late final ConversationService _conversationService;
   late final CryptoService _cryptoService;
   final _messageController = TextEditingController();
@@ -35,6 +42,9 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   bool _isLoading = false;
   SharedKey? _sharedKey;
 
+  // Cache des pseudos pour affichage
+  Map<String, String> _displayNames = {};
+
   @override
   void initState() {
     super.initState();
@@ -42,6 +52,24 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     _conversationService = ConversationService(localUserId: userId);
     _cryptoService = CryptoService(localPeerId: userId);
     _loadSharedKey();
+    _loadDisplayNames();
+  }
+
+  /// Charge les noms d'affichage des participants
+  Future<void> _loadDisplayNames() async {
+    final names = await _pseudoService.getDisplayNames(widget.conversation.peerIds);
+    if (mounted) {
+      setState(() {
+        _displayNames = names;
+      });
+    }
+  }
+
+  /// Callback appelé quand un message pseudo est reçu
+  void _onPseudoReceived(String oderId, String pseudo) async {
+    await _pseudoService.setPseudo(oderId, pseudo);
+    // Recharger les noms d'affichage
+    _loadDisplayNames();
   }
 
   Future<void> _loadSharedKey() async {
@@ -131,13 +159,162 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     }
   }
 
+  /// Affiche le menu d'attachement (image/fichier)
+  void _showAttachmentMenu() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Galerie'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Appareil photo'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.attach_file),
+              title: const Text('Fichier'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickFile();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Sélectionne et envoie une image
+  Future<void> _pickImage(ImageSource source) async {
+    if (_sharedKey == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Impossible d\'envoyer: pas de clé de chiffrement'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final result = await _mediaService.pickImage(
+      source: source,
+      quality: ImageQuality.medium,
+    );
+
+    if (result == null) return;
+
+    final availableBits = _sharedKey!.countAvailableBits(_currentUserId);
+
+    if (!mounted) return;
+
+    final confirmation = await MediaConfirmDialog.show(
+      context: context,
+      mediaResult: result,
+      availableKeyBits: availableBits,
+      mediaService: _mediaService,
+    );
+
+    if (confirmation == null) return;
+
+    await _sendMedia(confirmation.result);
+  }
+
+  /// Sélectionne et envoie un fichier
+  Future<void> _pickFile() async {
+    if (_sharedKey == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Impossible d\'envoyer: pas de clé de chiffrement'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final result = await _mediaService.pickFile();
+
+    if (result == null) return;
+
+    final availableBits = _sharedKey!.countAvailableBits(_currentUserId);
+
+    if (!mounted) return;
+
+    final confirmation = await MediaConfirmDialog.show(
+      context: context,
+      mediaResult: result,
+      availableKeyBits: availableBits,
+      mediaService: _mediaService,
+    );
+
+    if (confirmation == null) return;
+
+    await _sendMedia(confirmation.result);
+  }
+
+  /// Envoie un média chiffré
+  Future<void> _sendMedia(MediaPickResult media) async {
+    setState(() => _isLoading = true);
+
+    try {
+      final result = _cryptoService.encryptBinary(
+        data: media.data,
+        sharedKey: _sharedKey!,
+        contentType: media.contentType,
+        fileName: media.fileName,
+        mimeType: media.mimeType,
+      );
+
+      final message = result.message;
+      final messagePreview = media.contentType == MessageContentType.image
+          ? '📷 Image'
+          : '📎 ${media.fileName}';
+
+      // Mettre à jour les bits utilisés dans le stockage local
+      await _keyStorageService.updateUsedBits(
+        widget.conversation.id,
+        result.usedSegment.startBit,
+        result.usedSegment.endBit,
+      );
+
+      await _conversationService.sendMessage(
+        conversationId: widget.conversation.id,
+        message: message,
+        messagePreview: messagePreview,
+      );
+
+      debugPrint('[ConversationDetail] Media sent: ${message.totalBitsUsed} bits used');
+    } catch (e) {
+      debugPrint('[ConversationDetail] ERROR sending media: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   void _startKeyExchange() {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => KeyExchangeScreen(
           peerIds: widget.conversation.peerIds,
-          peerNames: widget.conversation.peerNames,
           conversationName: widget.conversation.name,
           existingConversationId: widget.conversation.id,
         ),
@@ -290,11 +467,13 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
                   itemBuilder: (context, index) {
                     final message = messages[index];
                     final isMine = message.senderId == _currentUserId;
+                    final senderName = _displayNames[message.senderId] ?? message.senderId;
                     return _MessageBubble(
                       message: message,
                       isMine: isMine,
-                      senderName: widget.conversation.peerNames[message.senderId],
+                      senderName: senderName,
                       sharedKey: _sharedKey,
+                      onPseudoReceived: _onPseudoReceived,
                     );
                   },
                 );
@@ -318,6 +497,12 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
             child: SafeArea(
               child: Row(
                 children: [
+                  // Bouton d'attachement (image/fichier)
+                  IconButton(
+                    onPressed: _isLoading || _sharedKey == null ? null : _showAttachmentMenu,
+                    icon: const Icon(Icons.attach_file),
+                    tooltip: 'Envoyer image/fichier',
+                  ),
                   Expanded(
                     child: TextField(
                       controller: _messageController,
@@ -382,7 +567,10 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       await _keyStorageService.deleteKey(widget.conversation.id);
 
       if (mounted) {
-        Navigator.pop(context); // Retour à l'écran d'accueil
+        // Fermer le bottom sheet d'info d'abord
+        Navigator.pop(context);
+        // Puis fermer l'écran de conversation et retourner à l'écran d'accueil
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Conversation supprimée')),
         );
@@ -397,76 +585,117 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   }
 }
 
-class _MessageBubble extends StatelessWidget {
+class _MessageBubble extends StatefulWidget {
   final EncryptedMessage message;
   final bool isMine;
   final String? senderName;
   final SharedKey? sharedKey;
+  final void Function(String oderId, String pseudo)? onPseudoReceived;
 
   const _MessageBubble({
     required this.message,
     required this.isMine,
     this.senderName,
     this.sharedKey,
+    this.onPseudoReceived,
   });
 
-  String _decryptMessage() {
+  @override
+  State<_MessageBubble> createState() => _MessageBubbleState();
+}
+
+class _MessageBubbleState extends State<_MessageBubble> {
+  bool _pseudoProcessed = false;
+
+  /// Déchiffre un message texte
+  String _decryptTextMessage() {
     // Si pas de segments de clé, le message est en clair
-    if (!message.isEncrypted) {
+    if (!widget.message.isEncrypted) {
       try {
-        return utf8.decode(message.ciphertext);
+        return utf8.decode(widget.message.ciphertext);
       } catch (e) {
-        return String.fromCharCodes(message.ciphertext);
+        return String.fromCharCodes(widget.message.ciphertext);
       }
     }
 
     // Si on n'a pas la clé, afficher un placeholder
-    if (sharedKey == null) {
+    if (widget.sharedKey == null) {
       return '🔒 [Clé manquante pour déchiffrer]';
     }
 
     // Déchiffrer avec la clé
     try {
       final cryptoService = CryptoService(localPeerId: '');
-      return cryptoService.decrypt(
-        encryptedMessage: message,
-        sharedKey: sharedKey!,
+      final decrypted = cryptoService.decrypt(
+        encryptedMessage: widget.message,
+        sharedKey: widget.sharedKey!,
       );
+
+      // Vérifier si c'est un message pseudo
+      if (!_pseudoProcessed && PseudoExchangeMessage.isPseudoExchange(decrypted)) {
+        _pseudoProcessed = true;
+        final pseudoMsg = PseudoExchangeMessage.fromJson(decrypted);
+        if (pseudoMsg != null && widget.onPseudoReceived != null) {
+          // Appeler le callback après le build
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            widget.onPseudoReceived!(pseudoMsg.oderId, pseudoMsg.pseudo);
+          });
+        }
+        return '👤 ${pseudoMsg?.pseudo ?? "Pseudo reçu"}';
+      }
+
+      return decrypted;
     } catch (e) {
       debugPrint('[_MessageBubble] Decryption error: $e');
-      return '🔒 [Erreur de déchiffrement: $e]';
+      return '🔒 [Erreur de déchiffrement]';
+    }
+  }
+
+  /// Déchiffre des données binaires (image/fichier)
+  Uint8List? _decryptBinaryMessage() {
+    if (!widget.message.isEncrypted || widget.sharedKey == null) {
+      return widget.message.ciphertext;
+    }
+
+    try {
+      final cryptoService = CryptoService(localPeerId: '');
+      return cryptoService.decryptBinary(
+        encryptedMessage: widget.message,
+        sharedKey: widget.sharedKey!,
+      );
+    } catch (e) {
+      debugPrint('[_MessageBubble] Binary decryption error: $e');
+      return null;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final decryptedText = _decryptMessage();
-
     return Align(
-      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: widget.isMine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.75,
         ),
         decoration: BoxDecoration(
-          color: isMine
+          color: widget.isMine
               ? Theme.of(context).primaryColor
               : Colors.grey[200],
           borderRadius: BorderRadius.circular(16).copyWith(
-            bottomRight: isMine ? const Radius.circular(4) : null,
-            bottomLeft: !isMine ? const Radius.circular(4) : null,
+            bottomRight: widget.isMine ? const Radius.circular(4) : null,
+            bottomLeft: !widget.isMine ? const Radius.circular(4) : null,
           ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (!isMine && senderName != null)
+            if (!widget.isMine && widget.senderName != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
-                  senderName!,
+                  widget.senderName!,
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -474,50 +703,178 @@ class _MessageBubble extends StatelessWidget {
                   ),
                 ),
               ),
-            Text(
-              decryptedText,
-              style: TextStyle(
-                color: isMine ? Colors.white : Colors.black87,
-              ),
-            ),
+            _buildContent(context),
             const SizedBox(height: 4),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _formatTime(message.createdAt),
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: isMine ? Colors.white70 : Colors.grey[600],
-                  ),
-                ),
-                if (message.isEncrypted) ...[
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.lock,
-                    size: 12,
-                    color: isMine ? Colors.white70 : Colors.grey[600],
-                  ),
-                ],
-                if (message.isCompressed) ...[
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.compress,
-                    size: 12,
-                    color: isMine ? Colors.white70 : Colors.grey[600],
-                  ),
-                ],
-                if (message.deleteAfterRead) ...[
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.timer,
-                    size: 12,
-                    color: isMine ? Colors.white70 : Colors.grey[600],
-                  ),
-                ],
-              ],
-            ),
+            _buildFooter(context),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
+    switch (widget.message.contentType) {
+      case MessageContentType.image:
+        return _buildImageContent(context);
+      case MessageContentType.file:
+        return _buildFileContent(context);
+      case MessageContentType.text:
+        return _buildTextContent(context);
+    }
+  }
+
+  Widget _buildTextContent(BuildContext context) {
+    final decryptedText = _decryptTextMessage();
+
+    return Text(
+      decryptedText,
+      style: TextStyle(
+        color: widget.isMine ? Colors.white : Colors.black87,
+      ),
+    );
+  }
+
+  Widget _buildImageContent(BuildContext context) {
+    final imageData = _decryptBinaryMessage();
+
+    if (imageData == null) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.broken_image,
+            color: widget.isMine ? Colors.white70 : Colors.grey[600],
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Image non déchiffrable',
+            style: TextStyle(
+              color: widget.isMine ? Colors.white70 : Colors.grey[600],
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      );
+    }
+
+    return GestureDetector(
+      onTap: () => _showFullScreenImage(context, imageData),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.memory(
+          imageData,
+          fit: BoxFit.cover,
+          width: 200,
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              width: 200,
+              height: 150,
+              color: Colors.grey[300],
+              child: const Center(
+                child: Icon(Icons.broken_image, size: 48),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFileContent(BuildContext context) {
+    final fileName = widget.message.fileName ?? 'Fichier';
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.attach_file,
+          color: widget.isMine ? Colors.white : Colors.grey[700],
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            fileName,
+            style: TextStyle(
+              color: widget.isMine ? Colors.white : Colors.black87,
+              decoration: TextDecoration.underline,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFooter(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          _formatTime(widget.message.createdAt),
+          style: TextStyle(
+            fontSize: 10,
+            color: widget.isMine ? Colors.white70 : Colors.grey[600],
+          ),
+        ),
+        if (widget.message.isEncrypted) ...[
+          const SizedBox(width: 4),
+          Icon(
+            Icons.lock,
+            size: 12,
+            color: widget.isMine ? Colors.white70 : Colors.grey[600],
+          ),
+        ],
+        if (widget.message.contentType == MessageContentType.image) ...[
+          const SizedBox(width: 4),
+          Icon(
+            Icons.image,
+            size: 12,
+            color: widget.isMine ? Colors.white70 : Colors.grey[600],
+          ),
+        ],
+        if (widget.message.contentType == MessageContentType.file) ...[
+          const SizedBox(width: 4),
+          Icon(
+            Icons.attach_file,
+            size: 12,
+            color: widget.isMine ? Colors.white70 : Colors.grey[600],
+          ),
+        ],
+        if (widget.message.isCompressed) ...[
+          const SizedBox(width: 4),
+          Icon(
+            Icons.compress,
+            size: 12,
+            color: widget.isMine ? Colors.white70 : Colors.grey[600],
+          ),
+        ],
+        if (widget.message.deleteAfterRead) ...[
+          const SizedBox(width: 4),
+          Icon(
+            Icons.timer,
+            size: 12,
+            color: widget.isMine ? Colors.white70 : Colors.grey[600],
+          ),
+        ],
+      ],
+    );
+  }
+
+  void _showFullScreenImage(BuildContext context, Uint8List imageData) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            iconTheme: const IconThemeData(color: Colors.white),
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              child: Image.memory(imageData),
+            ),
+          ),
         ),
       ),
     );
@@ -564,15 +921,20 @@ class _ConversationInfoSheet extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: conversation.peerIds.map((peerId) {
-                final name = conversation.peerNames[peerId] ?? peerId;
+                // Utiliser un affichage raccourci de l'ID
+                final shortId = peerId.length > 8
+                    ? peerId.substring(0, 8)
+                    : peerId;
                 return Chip(
                   avatar: CircleAvatar(
                     child: Text(
-                      name.isNotEmpty ? name[0].toUpperCase() : '?',
+                      peerId.length >= 2
+                          ? peerId.substring(0, 2).toUpperCase()
+                          : '?',
                       style: const TextStyle(fontSize: 12),
                     ),
                   ),
-                  label: Text(name),
+                  label: Text(shortId),
                 );
               }).toList(),
             ),

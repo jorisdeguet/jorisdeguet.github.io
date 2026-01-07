@@ -110,8 +110,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final user = _authService.currentUser;
-    final pseudo = user?.pseudo ?? 'Inconnu';
-    final id = user?.id ?? '';
 
     return Scaffold(
       appBar: AppBar(
@@ -125,7 +123,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      // Avatar avec pseudo
+                      // Avatar avec initiales
                       CircleAvatar(
                         radius: 50,
                         backgroundColor: Theme.of(context).primaryColor,
@@ -140,16 +138,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Pseudo
+                      // ID utilisateur
                       Text(
-                        pseudo,
+                        user.shortId,
                         style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       const SizedBox(height: 8),
 
-                      // ID
+                      // Bouton copier
                       GestureDetector(
                         onTap: _copyId,
                         child: Container(
@@ -171,11 +169,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                id.length > 16 ? '${id.substring(0, 16)}...' : id,
+                                'Copier l\'ID',
                                 style: TextStyle(
                                   color: Theme.of(context).primaryColor,
                                   fontSize: 12,
-                                  fontFamily: 'monospace',
                                 ),
                               ),
                               const SizedBox(width: 6),
@@ -195,9 +192,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         title: 'Informations du compte',
                         children: [
                           _InfoRow(
-                            icon: Icons.person,
-                            label: 'Pseudo',
-                            value: pseudo,
+                            icon: Icons.fingerprint,
+                            label: 'ID utilisateur',
+                            value: user.shortId,
                           ),
                           _InfoRow(
                             icon: Icons.calendar_today,

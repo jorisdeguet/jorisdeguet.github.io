@@ -11,7 +11,7 @@ class KeyExchangeSessionModel {
   /// ID de la conversation associée (si existante)
   final String? conversationId;
 
-  /// Liste des participants (numéros de téléphone normalisés)
+  /// Liste des participants (IDs utilisateur)
   final List<String> participants;
 
   /// ID du participant source (celui qui affiche les QR codes)

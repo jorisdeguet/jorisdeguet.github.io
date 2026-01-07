@@ -35,7 +35,6 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
   }
 
   String get _currentUserId => _authService.currentUserId ?? '';
-  String get _currentPseudo => _authService.currentPseudo ?? '';
 
   /// Crée la conversation et affiche le QR code
   Future<void> _createConversation() async {
@@ -55,7 +54,6 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
       // Créer la conversation avec seulement le créateur
       final conversation = await conversationService.createConversation(
         peerIds: [], // Vide pour l'instant, les autres rejoindront
-        peerNames: {_currentUserId: _currentPseudo},
         totalKeyBits: 0, // Pas de clé pour l'instant
         name: _nameController.text.isEmpty ? null : _nameController.text,
       );
@@ -85,11 +83,10 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
           
           final data = doc.data()!;
           final peerIds = List<String>.from(data['peerIds'] as List? ?? []);
-          final peerNames = Map<String, String>.from(data['peerNames'] as Map? ?? {});
-          
+
           return peerIds.map((id) => {
             'id': id,
-            'name': peerNames[id] ?? id.substring(0, 8),
+            'name': id, // Utiliser l'ID utilisateur comme nom
           }).toList();
         });
   }
@@ -108,7 +105,6 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
 
       final data = doc.data()!;
       final peerIds = List<String>.from(data['peerIds'] as List? ?? []);
-      final peerNames = Map<String, String>.from(data['peerNames'] as Map? ?? {});
 
       if (peerIds.length < 2) {
         setState(() => _errorMessage = 'Il faut au moins 2 participants');
@@ -127,7 +123,6 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
           MaterialPageRoute(
             builder: (_) => KeyExchangeScreen(
               peerIds: peerIds,
-              peerNames: peerNames,
               conversationName: _nameController.text.isEmpty ? null : _nameController.text,
               existingConversationId: _conversationId,
             ),

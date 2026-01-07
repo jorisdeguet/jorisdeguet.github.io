@@ -138,7 +138,7 @@ class KeyExchangeService {
   }
 
   /// Finalise l'échange et crée la clé partagée.
-  /// [force] permet de forcer la finalisation même si tous les peers n'ont pas confirmé localement
+   /// [force] permet de forcer la finalisation même si tous les peers n'ont pas confirmé localement
   /// (utile quand la vérification est faite via Firestore)
   SharedKey finalizeExchange(KeyExchangeSession session, {String? conversationName, bool force = false}) {
     if (!force && !session.isComplete && session.role == KeyExchangeRole.source) {
@@ -213,6 +213,9 @@ class KeyExchangeSession {
 
   int get totalSegments => (totalBits + KeyExchangeService.segmentSizeBits - 1) ~/
                            KeyExchangeService.segmentSizeBits;
+
+  /// Accède aux données d'un segment par son index (pour le mode torrent)
+  Uint8List? getSegmentData(int segmentIndex) => _segmentData[segmentIndex];
 
   void addSegmentData(int startBit, Uint8List data) {
     final segmentIndex = startBit ~/ KeyExchangeService.segmentSizeBits;

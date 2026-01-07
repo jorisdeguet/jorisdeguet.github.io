@@ -25,7 +25,6 @@ class _JoinConversationScreenState extends State<JoinConversationScreen> {
   String? _errorMessage;
 
   String get _currentUserId => _authService.currentUserId ?? '';
-  String get _currentPseudo => _authService.currentPseudo ?? '';
 
   /// Appelé quand un QR code est scanné
   Future<void> _onQrScanned(String conversationId) async {
@@ -52,16 +51,13 @@ class _JoinConversationScreenState extends State<JoinConversationScreen> {
 
       final data = doc.data()!;
       final peerIds = List<String>.from(data['peerIds'] as List? ?? []);
-      final peerNames = Map<String, String>.from(data['peerNames'] as Map? ?? {});
 
       // Ajouter cet utilisateur à la conversation
       if (!peerIds.contains(_currentUserId)) {
         peerIds.add(_currentUserId);
-        peerNames[_currentUserId] = _currentPseudo;
 
         await _firestore.collection('conversations').doc(conversationId).update({
           'peerIds': peerIds,
-          'peerNames': peerNames,
         });
       }
 
@@ -89,11 +85,10 @@ class _JoinConversationScreenState extends State<JoinConversationScreen> {
           
           final data = doc.data()!;
           final peerIds = List<String>.from(data['peerIds'] as List? ?? []);
-          final peerNames = Map<String, String>.from(data['peerNames'] as Map? ?? {});
-          
+
           return peerIds.map((id) => {
             'id': id,
-            'name': peerNames[id] ?? id.substring(0, 8),
+            'name': id, // Utiliser l'ID utilisateur comme nom
           }).toList();
         });
   }
@@ -339,7 +334,6 @@ class _JoinConversationScreenState extends State<JoinConversationScreen> {
 
       final data = doc.data()!;
       final peerIds = List<String>.from(data['peerIds'] as List? ?? []);
-      final peerNames = Map<String, String>.from(data['peerNames'] as Map? ?? {});
       final name = data['name'] as String?;
 
       if (mounted) {
@@ -348,7 +342,6 @@ class _JoinConversationScreenState extends State<JoinConversationScreen> {
           MaterialPageRoute(
             builder: (_) => KeyExchangeScreen(
               peerIds: peerIds,
-              peerNames: peerNames,
               conversationName: name,
               existingConversationId: _scannedConversationId,
             ),

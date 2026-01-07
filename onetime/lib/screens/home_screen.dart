@@ -23,7 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final userId = _authService.currentUserId ?? '';
-    final pseudo = _authService.currentPseudo ?? '';
+    final userProfile = _authService.currentUser;
 
     return Scaffold(
       appBar: AppBar(
@@ -33,14 +33,14 @@ class _HomeScreenState extends State<HomeScreen> {
               '1 time',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
-            if (pseudo.isNotEmpty) ...[
+            if (userId.isNotEmpty && userProfile != null) ...[
               Text(
                 ' : ',
                 style: TextStyle(color: Colors.grey[600]),
               ),
               Flexible(
                 child: Text(
-                  pseudo,
+                  userProfile.shortId,
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.grey[600],

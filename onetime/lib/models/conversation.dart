@@ -16,9 +16,6 @@ class Conversation {
   /// Liste des IDs des participants
   final List<String> peerIds;
   
-  /// Noms d'affichage des participants (pour l'UI)
-  final Map<String, String> peerNames;
-  
   /// Nom de la conversation (optionnel)
   final String? name;
   
@@ -49,7 +46,6 @@ class Conversation {
   Conversation({
     required this.id,
     required this.peerIds,
-    Map<String, String>? peerNames,
     this.name,
     this.state = ConversationState.joining,
     DateTime? createdAt,
@@ -59,8 +55,7 @@ class Conversation {
     this.totalKeyBits = 0,
     this.usedKeyBits = 0,
     this.messageCount = 0,
-  }) : peerNames = peerNames ?? {},
-       createdAt = createdAt ?? DateTime.now(),
+  }) : createdAt = createdAt ?? DateTime.now(),
        lastMessageAt = lastMessageAt ?? DateTime.now();
 
   /// La conversation a-t-elle une clé de chiffrement ?
@@ -88,8 +83,9 @@ class Conversation {
   String get displayName {
     if (name != null && name!.isNotEmpty) return name!;
     
+    // Utiliser les IDs utilisateur (raccourcis)
     final names = peerIds
-        .map((id) => peerNames[id] ?? id.substring(0, 8))
+        .map((id) => id.length > 8 ? id.substring(0, 8) : id)
         .toList();
     
     if (names.length <= 3) {
@@ -126,8 +122,11 @@ class Conversation {
   String get lastMessageDisplay {
     if (lastMessagePreview == null) return 'Aucun message';
     
-    final senderName = lastMessageSenderId != null 
-        ? peerNames[lastMessageSenderId] ?? 'Inconnu'
+    // Utiliser un ID court pour l'expéditeur
+    final senderName = lastMessageSenderId != null
+        ? (lastMessageSenderId!.length > 4
+            ? '...${lastMessageSenderId!.substring(lastMessageSenderId!.length - 4)}'
+            : lastMessageSenderId!)
         : '';
     
     final preview = lastMessagePreview!.length > 50
@@ -158,7 +157,6 @@ class Conversation {
     return {
       'id': id,
       'peerIds': peerIds,
-      'peerNames': peerNames,
       'name': name,
       'state': state.name,
       'createdAt': createdAt.toIso8601String(),
@@ -176,7 +174,6 @@ class Conversation {
     return Conversation(
       id: data['id'] as String,
       peerIds: List<String>.from(data['peerIds'] as List),
-      peerNames: Map<String, String>.from(data['peerNames'] as Map? ?? {}),
       name: data['name'] as String?,
       state: ConversationState.values.firstWhere(
         (s) => s.name == data['state'],
@@ -201,7 +198,6 @@ class Conversation {
 
   Conversation copyWith({
     String? name,
-    Map<String, String>? peerNames,
     String? lastMessagePreview,
     String? lastMessageSenderId,
     DateTime? lastMessageAt,
@@ -211,7 +207,6 @@ class Conversation {
     return Conversation(
       id: id,
       peerIds: peerIds,
-      peerNames: peerNames ?? this.peerNames,
       name: name ?? this.name,
       createdAt: createdAt,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,

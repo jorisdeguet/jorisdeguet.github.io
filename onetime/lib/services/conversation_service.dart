@@ -26,7 +26,6 @@ class ConversationService {
   /// Crée une nouvelle conversation (en état "joining")
   Future<Conversation> createConversation({
     required List<String> peerIds,
-    required Map<String, String> peerNames,
     int totalKeyBits = 0,
     String? name,
     ConversationState state = ConversationState.joining,
@@ -41,7 +40,6 @@ class ConversationService {
     final conversation = Conversation(
       id: conversationId,
       peerIds: allPeers,
-      peerNames: peerNames,
       name: name,
       state: state,
       totalKeyBits: totalKeyBits,
@@ -263,9 +261,83 @@ class ConversationService {
             .toList());
   }
 
-  /// Marque un message comme lu
+  /// Marque un message comme lu par l'utilisateur local
   Future<void> markMessageAsRead(String conversationId, String messageId) async {
-    await _messagesRef(conversationId).doc(messageId).update({'isRead': true});
+    await _messagesRef(conversationId).doc(messageId).update({
+      'readBy': FieldValue.arrayUnion([localUserId]),
+    });
+  }
+
+  /// Marque un message comme transféré par l'utilisateur local
+  /// Supprime le contenu si tous les participants l'ont transféré
+  Future<void> markMessageAsTransferred({
+    required String conversationId,
+    required String messageId,
+    required List<String> allParticipants,
+  }) async {
+    final docRef = _messagesRef(conversationId).doc(messageId);
+
+    await _firestore.runTransaction((transaction) async {
+      final doc = await transaction.get(docRef);
+      if (!doc.exists) return;
+
+      final data = doc.data()!;
+      final transferredBy = List<String>.from(data['transferredBy'] as List? ?? []);
+
+      if (!transferredBy.contains(localUserId)) {
+        transferredBy.add(localUserId);
+      }
+
+      // Vérifier si tous les participants ont transféré
+      final allTransferred = allParticipants.every((p) => transferredBy.contains(p));
+
+      if (allTransferred) {
+        // Supprimer le contenu chiffré (garder les métadonnées)
+        transaction.update(docRef, {
+          'transferredBy': transferredBy,
+          'ciphertext': '', // Vider le contenu
+        });
+        debugPrint('[ConversationService] Message $messageId content cleared (all transferred)');
+      } else {
+        transaction.update(docRef, {
+          'transferredBy': transferredBy,
+        });
+      }
+    });
+  }
+
+  /// Marque un message comme lu et vérifie si on peut le supprimer complètement
+  Future<void> markMessageAsReadAndCleanup({
+    required String conversationId,
+    required String messageId,
+    required List<String> allParticipants,
+  }) async {
+    final docRef = _messagesRef(conversationId).doc(messageId);
+
+    await _firestore.runTransaction((transaction) async {
+      final doc = await transaction.get(docRef);
+      if (!doc.exists) return;
+
+      final data = doc.data()!;
+      final readBy = List<String>.from(data['readBy'] as List? ?? []);
+
+      if (!readBy.contains(localUserId)) {
+        readBy.add(localUserId);
+      }
+
+      // Vérifier si tous les participants ont lu
+      final allRead = allParticipants.every((p) => readBy.contains(p));
+
+      if (allRead) {
+        // Supprimer complètement le message
+        transaction.delete(docRef);
+        debugPrint('[ConversationService] Message $messageId deleted (all read)');
+      } else {
+        transaction.update(docRef, {
+          'readBy': readBy,
+        });
+      }
+    });
   }
 
   /// Supprime un message (mode ultra-secure)

@@ -260,7 +260,7 @@ class MockFirebaseMessageService extends FirebaseMessageService {
     final messages = _messages[conversationId] ?? [];
     final index = messages.indexWhere((m) => m.id == messageId);
     if (index != -1) {
-      messages[index].isRead = true;
+      messages[index].markReadBy(localPeerId);
     }
   }
 

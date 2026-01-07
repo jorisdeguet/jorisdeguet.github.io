@@ -3,27 +3,29 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:screen_brightness/screen_brightness.dart';
 
 import '../models/key_exchange_session.dart';
+import '../models/shared_key.dart';
 import '../services/random_key_generator_service.dart';
 import '../services/key_exchange_service.dart';
 import '../services/key_exchange_sync_service.dart';
 import '../services/key_storage_service.dart';
 import '../services/conversation_service.dart';
 import '../services/auth_service.dart';
+import '../services/pseudo_storage_service.dart';
+import '../services/crypto_service.dart';
 import 'conversation_detail_screen.dart';
 
 /// Écran d'échange de clé via QR codes.
 class KeyExchangeScreen extends StatefulWidget {
   final List<String> peerIds;
-  final Map<String, String> peerNames;
   final String? conversationName;
   final String? existingConversationId;
 
   const KeyExchangeScreen({
     super.key,
     required this.peerIds,
-    required this.peerNames,
     this.conversationName,
     this.existingConversationId,
   });
@@ -37,6 +39,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   final RandomKeyGeneratorService _keyGenerator = RandomKeyGeneratorService();
   final KeyExchangeSyncService _syncService = KeyExchangeSyncService();
   final KeyStorageService _keyStorageService = KeyStorageService();
+  final PseudoStorageService _pseudoService = PseudoStorageService();
   late final KeyExchangeService _keyExchangeService;
   
   // Session locale (pour les données de clé)
@@ -54,6 +57,15 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   
   // Taille de clé à générer (en bits)
   int _keySizeBits = 8192 * 8; // 8 KB par défaut
+
+  // Gestion de la luminosité
+  double? _originalBrightness;
+  bool _isBrightnessMaxed = false;
+
+  // Mode torrent: rotation automatique des QR codes
+  Timer? _torrentRotationTimer;
+  final bool _torrentModeEnabled = true;
+  static const Duration _torrentRotationInterval = Duration(milliseconds: 100);
 
   final List<int> _keySizeOptions = [
     1024 * 2,   // 2 segments (pour tests rapides)
@@ -73,7 +85,85 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   @override
   void dispose() {
     _sessionSubscription?.cancel();
+    _torrentRotationTimer?.cancel();
+    _restoreBrightness();
     super.dispose();
+  }
+
+  /// Met la luminosité au maximum pour afficher le QR code
+  Future<void> _setMaxBrightness() async {
+    if (_isBrightnessMaxed) return;
+
+    try {
+      _originalBrightness = await ScreenBrightness().current;
+      await ScreenBrightness().setScreenBrightness(1.0);
+      _isBrightnessMaxed = true;
+      debugPrint('[KeyExchange] Brightness set to maximum');
+    } catch (e) {
+      debugPrint('[KeyExchange] Error setting brightness: $e');
+    }
+  }
+
+  /// Restaure la luminosité originale
+  Future<void> _restoreBrightness() async {
+    if (!_isBrightnessMaxed) return;
+
+    try {
+      if (_originalBrightness != null) {
+        await ScreenBrightness().setScreenBrightness(_originalBrightness!);
+      } else {
+        await ScreenBrightness().resetScreenBrightness();
+      }
+      _isBrightnessMaxed = false;
+      debugPrint('[KeyExchange] Brightness restored');
+    } catch (e) {
+      debugPrint('[KeyExchange] Error restoring brightness: $e');
+    }
+  }
+
+  /// Envoie un message pseudo chiffré pour que les autres participants connaissent notre pseudo
+  Future<void> _sendPseudoMessage(String conversationId, SharedKey sharedKey) async {
+    try {
+      final myPseudo = await _pseudoService.getMyPseudo();
+      if (myPseudo == null || myPseudo.isEmpty) {
+        debugPrint('[KeyExchange] No pseudo to send');
+        return;
+      }
+
+      final pseudoMessage = PseudoExchangeMessage(
+        oderId: _currentUserId,
+        pseudo: myPseudo,
+      );
+
+      final cryptoService = CryptoService(localPeerId: _currentUserId);
+      final conversationService = ConversationService(localUserId: _currentUserId);
+
+      // Chiffrer le message pseudo
+      final result = cryptoService.encrypt(
+        plaintext: pseudoMessage.toJson(),
+        sharedKey: sharedKey,
+        compress: true,
+      );
+
+      // Mettre à jour les bits utilisés
+      await _keyStorageService.updateUsedBits(
+        conversationId,
+        result.usedSegment.startBit,
+        result.usedSegment.endBit,
+      );
+
+      // Envoyer le message
+      await conversationService.sendMessage(
+        conversationId: conversationId,
+        message: result.message,
+        messagePreview: '👤 Pseudo partagé',
+      );
+
+      debugPrint('[KeyExchange] Pseudo message sent successfully');
+    } catch (e) {
+      debugPrint('[KeyExchange] Error sending pseudo message: $e');
+      // Ne pas bloquer si l'envoi du pseudo échoue
+    }
   }
 
   String get _currentUserId => _authService.currentUserId ?? '';
@@ -114,7 +204,14 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         _currentStep = 1;
       });
 
-      _generateNextSegment();
+      // En mode torrent, générer TOUS les segments à l'avance
+      if (_torrentModeEnabled) {
+        _generateAllSegments();
+        _startTorrentRotation();
+      } else {
+        // Mode manuel: générer un segment à la fois
+        _generateNextSegment();
+      }
     } catch (e) {
       setState(() => _errorMessage = 'Erreur: $e');
     }
@@ -153,19 +250,23 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         return;
       }
 
-      // Sinon, changer automatiquement de QR quand le segment courant est scanné
-      if (_currentQrData != null) {
-        final displayedSegmentIdx = _currentQrData!.segmentIndex;
-        final allScanned = session.allParticipantsScannedSegment(displayedSegmentIdx);
+      // En mode torrent, ne pas changer automatiquement le QR
+      // Le timer de rotation s'en charge
+      if (!_torrentModeEnabled) {
+        // Mode manuel: changer automatiquement de QR quand le segment courant est scanné
+        if (_currentQrData != null) {
+          final displayedSegmentIdx = _currentQrData!.segmentIndex;
+          final allScanned = session.allParticipantsScannedSegment(displayedSegmentIdx);
 
-        // Si tous ont scanné et qu'il reste des segments, passer au suivant automatiquement
-        if (allScanned && _session!.currentSegmentIndex < totalSegments) {
-          Future.delayed(const Duration(milliseconds: 500), () {
-            if (mounted) {
-              _syncService.moveToNextSegment(session.id);
-              _generateNextSegment();
-            }
-          });
+          // Si tous ont scanné et qu'il reste des segments, passer au suivant automatiquement
+          if (allScanned && _session!.currentSegmentIndex < totalSegments) {
+            Future.delayed(const Duration(milliseconds: 500), () {
+              if (mounted) {
+                _syncService.moveToNextSegment(session.id);
+                _generateNextSegment();
+              }
+            });
+          }
         }
       }
     }
@@ -216,6 +317,9 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       await _keyStorageService.saveKey(conversation.id, sharedKey);
       debugPrint('[KeyExchange] Reader: Shared key saved successfully');
 
+      // Envoyer le message pseudo chiffré
+      await _sendPseudoMessage(conversation.id, sharedKey);
+
       // Supprimer la session d'échange de Firestore (nettoyage par le reader)
       await _syncService.deleteSession(_firestoreSession!.id);
       debugPrint('[KeyExchange] Reader: Key exchange session deleted from Firestore');
@@ -248,11 +352,135 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
     try {
       _currentQrData = _keyExchangeService.generateNextSegment(_session!);
+      // Mettre la luminosité au maximum pour l'affichage du QR code
+      _setMaxBrightness();
       setState(() {});
     } catch (e) {
       setState(() => _errorMessage = e.toString());
     }
   }
+
+  /// Génère tous les segments à l'avance (pour le mode torrent)
+  void _generateAllSegments() {
+    if (_session == null) return;
+
+    debugPrint('[Torrent] Generating all ${_session!.totalSegments} segments...');
+    
+    try {
+      // Générer tous les segments
+      for (int i = 0; i < _session!.totalSegments; i++) {
+        _keyExchangeService.generateNextSegment(_session!);
+      }
+      
+      // Afficher le premier segment
+      _displaySegmentAtIndex(0);
+      
+      // Mettre la luminosité au maximum
+      _setMaxBrightness();
+      
+      debugPrint('[Torrent] All segments generated successfully');
+    } catch (e) {
+      setState(() => _errorMessage = 'Erreur génération segments: $e');
+      debugPrint('[Torrent] Error generating segments: $e');
+    }
+  }
+
+  /// Démarre le mode torrent: rotation automatique des QR codes
+  void _startTorrentRotation() {
+    _stopTorrentRotation(); // S'assurer qu'il n'y a pas de timer actif
+    
+    debugPrint('[Torrent] Starting rotation mode (${_torrentRotationInterval.inMilliseconds}ms per segment)');
+    
+    _torrentRotationTimer = Timer.periodic(_torrentRotationInterval, (_) {
+      if (!mounted || _session == null || _firestoreSession == null) {
+        _stopTorrentRotation();
+        return;
+      }
+
+      // Trouver le prochain segment non-complet à afficher
+      final nextSegmentIndex = _findNextIncompleteSegment();
+      
+      if (nextSegmentIndex == null) {
+        // Tous les segments sont complets, arrêter la rotation
+        debugPrint('[Torrent] All segments complete, stopping rotation');
+        _stopTorrentRotation();
+        return;
+      }
+
+      // Générer et afficher le segment si différent de l'actuel
+      if (_currentQrData == null || _currentQrData!.segmentIndex != nextSegmentIndex) {
+        _displaySegmentAtIndex(nextSegmentIndex);
+      }
+    });
+  }
+
+  /// Arrête le mode torrent
+  void _stopTorrentRotation() {
+    if (_torrentRotationTimer != null) {
+      _torrentRotationTimer!.cancel();
+      _torrentRotationTimer = null;
+      debugPrint('[Torrent] Rotation stopped');
+    }
+  }
+
+  /// Trouve le prochain segment qui n'a pas été scanné par tous les participants
+  /// Retourne null si tous les segments sont complets
+  int? _findNextIncompleteSegment() {
+    if (_session == null || _firestoreSession == null) return null;
+
+    final totalSegments = _session!.totalSegments;
+    final currentDisplayed = _currentQrData?.segmentIndex ?? 0;
+
+    // Commencer à chercher après le segment actuellement affiché (rotation circulaire)
+    for (int offset = 1; offset <= totalSegments; offset++) {
+      final segmentIndex = (currentDisplayed + offset) % totalSegments;
+      
+      // Vérifier si ce segment a été scanné par tous
+      if (!_firestoreSession!.allParticipantsScannedSegment(segmentIndex)) {
+        return segmentIndex;
+      }
+    }
+
+    // Tous les segments sont complets
+    return null;
+  }
+
+  /// Affiche un segment spécifique par son index
+  void _displaySegmentAtIndex(int segmentIndex) {
+    if (_session == null) return;
+
+    try {
+      // Recréer le QR data pour ce segment
+      final startBit = segmentIndex * KeyExchangeService.segmentSizeBits;
+      final endBit = min(startBit + KeyExchangeService.segmentSizeBits, _session!.totalBits);
+      
+      // Récupérer les données du segment depuis la session
+      final segmentData = _session!.getSegmentData(segmentIndex);
+      
+      if (segmentData == null) {
+        debugPrint('[Torrent] Segment $segmentIndex data not found, regenerating...');
+        // Le segment n'a pas encore été généré, le générer maintenant
+        _keyExchangeService.generateNextSegment(_session!);
+        return;
+      }
+
+      setState(() {
+        _currentQrData = KeySegmentQrData(
+          sessionId: _session!.sessionId,
+          segmentIndex: segmentIndex,
+          startBit: startBit,
+          endBit: endBit,
+          keyData: segmentData,
+        );
+      });
+
+      debugPrint('[Torrent] Displaying segment $segmentIndex');
+    } catch (e) {
+      debugPrint('[Torrent] Error displaying segment $segmentIndex: $e');
+    }
+  }
+
+  int min(int a, int b) => a < b ? a : b;
 
   Future<void> _onQrScanned(String qrData) async {
     if (_currentUserId.isEmpty) return;
@@ -357,7 +585,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         // Créer une nouvelle conversation
         final conversation = await conversationService.createConversation(
           peerIds: sharedKey.peerIds,
-          peerNames: widget.peerNames,
           totalKeyBits: sharedKey.lengthInBits,
           name: widget.conversationName,
         );
@@ -380,12 +607,21 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       await _keyStorageService.saveKey(conversationId, sharedKey);
       debugPrint('[KeyExchange] Shared key saved successfully');
 
+      // Envoyer le message pseudo chiffré
+      await _sendPseudoMessage(conversationId, sharedKey);
+
       // Récupérer la conversation pour naviguer
       final conversation = await conversationService.getConversation(conversationId);
       if (conversation == null) {
         setState(() => _errorMessage = 'Conversation non trouvée');
         return;
       }
+
+      // Restaurer la luminosité avant de naviguer
+      await _restoreBrightness();
+      
+      // Arrêter le mode torrent
+      _stopTorrentRotation();
 
       if (mounted) {
         Navigator.pushReplacement(
@@ -592,7 +828,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
             ),
           const SizedBox(height: 16),
 
-          // QR Code
+          // QR Code avec indicateur de segment
           Expanded(
             child: Center(
               child: Container(
@@ -601,11 +837,34 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: QrImageView(
-                  data: _currentQrData!.toQrString(),
-                  version: QrVersions.auto,
-                  size: 280,
-                  errorCorrectionLevel: QrErrorCorrectLevel.L,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Badge du numéro de segment (mode torrent)
+                    if (_torrentModeEnabled)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: allScanned ? Colors.green : Colors.blue,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${displayedSegmentIdx + 1}/${session.totalSegments}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    QrImageView(
+                      data: _currentQrData!.toQrString(),
+                      version: QrVersions.auto,
+                      size: 280,
+                      errorCorrectionLevel: QrErrorCorrectLevel.L,
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -624,10 +883,12 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           const SizedBox(height: 8),
 
           // Instructions
-          const Text(
-            'Faites scanner ce QR code par les autres appareils\nLe QR change automatiquement quand tous ont scanné',
+          Text(
+            _torrentModeEnabled
+                ? '🔄 Mode Torrent: rotation automatique tous les ${_torrentRotationInterval.inMilliseconds}ms\nLe QR affiche les segments non-complets'
+                : 'Faites scanner ce QR code par les autres appareils\nLe QR change automatiquement quand tous ont scanné',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12),
+            style: const TextStyle(fontSize: 12),
           ),
           const SizedBox(height: 16),
 
@@ -662,6 +923,9 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
   /// Termine l'échange de clé (appelé par la source)
   Future<void> _terminateKeyExchange() async {
+    // Arrêter le mode torrent
+    _stopTorrentRotation();
+    
     if (_session == null || _firestoreSession == null) {
       debugPrint('ERROR: _session or _firestoreSession is null');
       return;

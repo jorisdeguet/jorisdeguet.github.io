@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../services/auth_service.dart';
+import '../services/pseudo_storage_service.dart';
 import 'home_screen.dart';
 
 /// Écran de création de profil (première utilisation).
-/// Demande simplement un pseudo à l'utilisateur.
+/// Demande uniquement un pseudo à l'utilisateur.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -15,6 +15,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final AuthService _authService = AuthService();
+  final PseudoStorageService _pseudoService = PseudoStorageService();
   final _pseudoController = TextEditingController();
 
   bool _isLoading = false;
@@ -28,14 +29,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _createProfile() async {
     final pseudo = _pseudoController.text.trim();
-    
+
     if (pseudo.isEmpty) {
       setState(() => _errorMessage = 'Veuillez entrer un pseudo');
-      return;
-    }
-    
-    if (pseudo.length < 2) {
-      setState(() => _errorMessage = 'Le pseudo doit faire au moins 2 caractères');
       return;
     }
 
@@ -45,8 +41,11 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await _authService.createUser(pseudo);
-      
+      await _authService.createUser();
+
+      // Stocker le pseudo localement (jamais sur le serveur)
+      await _pseudoService.setMyPseudo(pseudo);
+
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const HomeScreen()),
@@ -83,7 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'OneTime',
+                  '1 time',
                   style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -126,14 +125,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 if (_isLoading)
                   const CircularProgressIndicator()
                 else
-                  _buildPseudoEntry(),
+                  _buildPhoneEntry(),
 
                 const SizedBox(height: 32),
 
                 // Texte explicatif
                 Text(
-                  'Choisissez un pseudo pour commencer.\n'
-                  'Votre identifiant unique sera généré automatiquement.',
+                  'Votre pseudo est stocké uniquement sur cet appareil.\n'
+                  'Il sera partagé de manière chiffrée avec vos contacts.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Colors.grey[500],
@@ -147,7 +146,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildPseudoEntry() {
+  Widget _buildPhoneEntry() {
     return Column(
       children: [
         Text(
@@ -160,15 +159,15 @@ class _LoginScreenState extends State<LoginScreen> {
         TextField(
           controller: _pseudoController,
           textCapitalization: TextCapitalization.words,
-          inputFormatters: [
-            LengthLimitingTextInputFormatter(30),
-          ],
+          autofocus: true,
           decoration: InputDecoration(
-            hintText: 'Ex: Alice, Bob, Charlie...',
+            labelText: 'Pseudo',
+            hintText: 'Ex: Alice, Bob...',
             prefixIcon: const Icon(Icons.person),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
             ),
+            helperText: 'Stocké uniquement sur votre appareil',
           ),
           onSubmitted: (_) => _createProfile(),
         ),

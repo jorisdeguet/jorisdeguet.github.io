@@ -76,6 +76,69 @@ class CryptoService {
       ciphertext: ciphertext,
       deleteAfterRead: deleteAfterRead,
       isCompressed: isCompressed,
+      contentType: MessageContentType.text,
+    );
+
+    // Créer le segment utilisé pour tracking
+    final usedSegment = KeySegment(
+      keyId: sharedKey.id,
+      startBit: segment.startBit,
+      endBit: segment.endBit,
+      usedByPeerId: localPeerId,
+    );
+
+    return (message: encryptedMessage, usedSegment: usedSegment);
+  }
+
+  /// Chiffre des données binaires (images, fichiers) avec One-Time Pad.
+  ///
+  /// [data] - Les données binaires à chiffrer
+  /// [sharedKey] - La clé partagée à utiliser
+  /// [contentType] - Type de contenu (image ou fichier)
+  /// [fileName] - Nom du fichier
+  /// [mimeType] - Type MIME du fichier
+  /// [deleteAfterRead] - Mode ultra-secure, suppression après lecture
+  ///
+  /// Retourne le message chiffré et le segment utilisé pour mise à jour
+  ({EncryptedMessage message, KeySegment usedSegment}) encryptBinary({
+    required Uint8List data,
+    required SharedKey sharedKey,
+    required MessageContentType contentType,
+    String? fileName,
+    String? mimeType,
+    bool deleteAfterRead = false,
+  }) {
+    final bitsNeeded = data.length * 8;
+
+    // Trouver un segment disponible dans la portion du peer
+    final segment = sharedKey.findAvailableSegment(localPeerId, bitsNeeded);
+    if (segment == null) {
+      throw InsufficientKeyException(
+        'Not enough key bits available. Needed: $bitsNeeded bits',
+      );
+    }
+
+    // Extraire les bits de clé
+    final keyBits = sharedKey.extractKeyBits(segment.startBit, segment.endBit);
+
+    // XOR des données avec la clé
+    final ciphertext = _xor(data, keyBits);
+
+    // Marquer les bits comme utilisés
+    sharedKey.markBitsAsUsed(segment.startBit, segment.endBit);
+
+    // Créer le message chiffré
+    final encryptedMessage = EncryptedMessage(
+      id: _generateMessageId(),
+      keyId: sharedKey.id,
+      senderId: localPeerId,
+      keySegments: [(startBit: segment.startBit, endBit: segment.endBit)],
+      ciphertext: ciphertext,
+      deleteAfterRead: deleteAfterRead,
+      isCompressed: false,
+      contentType: contentType,
+      fileName: fileName,
+      mimeType: mimeType,
     );
     
     // Créer le segment utilisé pour tracking
@@ -87,6 +150,38 @@ class CryptoService {
     );
     
     return (message: encryptedMessage, usedSegment: usedSegment);
+  }
+
+  /// Déchiffre un message binaire et retourne les données brutes
+  Uint8List decryptBinary({
+    required EncryptedMessage encryptedMessage,
+    required SharedKey sharedKey,
+    bool markAsUsed = true,
+  }) {
+    // Vérifier que la clé correspond
+    if (encryptedMessage.keyId != sharedKey.id) {
+      throw ArgumentError('Key ID mismatch');
+    }
+
+    // Extraire les bits de clé utilisés pour ce message
+    final totalBits = encryptedMessage.totalBitsUsed;
+    final keyBits = _extractMultipleSegments(
+      sharedKey,
+      encryptedMessage.keySegments,
+      totalBits,
+    );
+
+    // XOR pour déchiffrer
+    final decryptedData = _xor(encryptedMessage.ciphertext, keyBits);
+
+    // Marquer comme utilisé si demandé
+    if (markAsUsed) {
+      for (final seg in encryptedMessage.keySegments) {
+        sharedKey.markBitsAsUsed(seg.startBit, seg.endBit);
+      }
+    }
+
+    return decryptedData;
   }
 
   /// Chiffre un long message qui peut nécessiter plusieurs segments.

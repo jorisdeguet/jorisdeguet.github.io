@@ -1,6 +1,25 @@
 import 'dart:typed_data';
 import 'dart:convert';
 
+/// Type de contenu d'un message
+enum MessageContentType {
+  text,
+  image,
+  file,
+}
+
+/// Qualité de redimensionnement d'image
+enum ImageQuality {
+  small(320, 'Petite (~50KB)'),
+  medium(800, 'Moyenne (~150KB)'),
+  large(1920, 'Grande (~500KB)'),
+  original(0, 'Originale');
+
+  final int maxDimension;
+  final String label;
+  const ImageQuality(this.maxDimension, this.label);
+}
+
 /// Représente un message chiffré avec One-Time Pad.
 /// 
 /// Le message contient les données chiffrées (XOR avec la clé)
@@ -24,14 +43,26 @@ class EncryptedMessage {
   /// Timestamp de création
   final DateTime createdAt;
   
-  /// Indique si le message a été lu/déchiffré par le destinataire
-  bool isRead;
-  
+  /// Liste des participants qui ont lu le message
+  List<String> readBy;
+
+  /// Liste des participants qui ont transféré/reçu le message
+  List<String> transferredBy;
+
   /// Mode ultra-secure : suppression après lecture
   final bool deleteAfterRead;
   
   /// Indique si le message était compressé avant chiffrement
   final bool isCompressed;
+
+  /// Type de contenu
+  final MessageContentType contentType;
+
+  /// Nom du fichier (pour les fichiers et images)
+  final String? fileName;
+
+  /// Type MIME du fichier
+  final String? mimeType;
 
   EncryptedMessage({
     required this.id,
@@ -40,10 +71,17 @@ class EncryptedMessage {
     required this.keySegments,
     required this.ciphertext,
     DateTime? createdAt,
-    this.isRead = false,
+    List<String>? readBy,
+    List<String>? transferredBy,
     this.deleteAfterRead = false,
     this.isCompressed = false,
-  }) : createdAt = createdAt ?? DateTime.now();
+    this.contentType = MessageContentType.text,
+    this.fileName,
+    this.mimeType,
+  }) : createdAt = createdAt ?? DateTime.now(),
+       // Le sender est automatiquement inclus dans les listes
+       readBy = readBy ?? [senderId],
+       transferredBy = transferredBy ?? [senderId];
 
   /// Indique si le message est chiffré (a des segments de clé)
   bool get isEncrypted => keySegments.isNotEmpty;
@@ -60,6 +98,30 @@ class EncryptedMessage {
     return keySegments.fold(0, (sum, seg) => sum + (seg.endBit - seg.startBit));
   }
 
+  /// Vérifie si tous les participants ont transféré le message
+  bool allTransferred(List<String> participants) {
+    return participants.every((p) => transferredBy.contains(p));
+  }
+
+  /// Vérifie si tous les participants ont lu le message
+  bool allRead(List<String> participants) {
+    return participants.every((p) => readBy.contains(p));
+  }
+
+  /// Marque le message comme transféré par un participant
+  void markTransferredBy(String participantId) {
+    if (!transferredBy.contains(participantId)) {
+      transferredBy.add(participantId);
+    }
+  }
+
+  /// Marque le message comme lu par un participant
+  void markReadBy(String participantId) {
+    if (!readBy.contains(participantId)) {
+      readBy.add(participantId);
+    }
+  }
+
   /// Sérialise le message pour envoi sur Firebase
   Map<String, dynamic> toJson() {
     return {
@@ -72,9 +134,13 @@ class EncryptedMessage {
       }).toList(),
       'ciphertext': base64Encode(ciphertext),
       'createdAt': createdAt.toIso8601String(),
-      'isRead': isRead,
+      'readBy': readBy,
+      'transferredBy': transferredBy,
       'deleteAfterRead': deleteAfterRead,
       'isCompressed': isCompressed,
+      'contentType': contentType.name,
+      'fileName': fileName,
+      'mimeType': mimeType,
     };
   }
 
@@ -95,15 +161,23 @@ class EncryptedMessage {
       keySegments: segmentsList,
       ciphertext: base64Decode(json['ciphertext'] as String),
       createdAt: DateTime.parse(json['createdAt'] as String),
-      isRead: json['isRead'] as bool? ?? false,
+      readBy: List<String>.from(json['readBy'] as List? ?? [json['senderId']]),
+      transferredBy: List<String>.from(json['transferredBy'] as List? ?? [json['senderId']]),
       deleteAfterRead: json['deleteAfterRead'] as bool? ?? false,
       isCompressed: json['isCompressed'] as bool? ?? false,
+      contentType: MessageContentType.values.firstWhere(
+        (t) => t.name == json['contentType'],
+        orElse: () => MessageContentType.text,
+      ),
+      fileName: json['fileName'] as String?,
+      mimeType: json['mimeType'] as String?,
     );
   }
 
   /// Copie le message avec modifications
   EncryptedMessage copyWith({
-    bool? isRead,
+    List<String>? readBy,
+    List<String>? transferredBy,
   }) {
     return EncryptedMessage(
       id: id,
@@ -112,14 +186,18 @@ class EncryptedMessage {
       keySegments: keySegments,
       ciphertext: ciphertext,
       createdAt: createdAt,
-      isRead: isRead ?? this.isRead,
+      readBy: readBy ?? List.from(this.readBy),
+      transferredBy: transferredBy ?? List.from(this.transferredBy),
       deleteAfterRead: deleteAfterRead,
       isCompressed: isCompressed,
+      contentType: contentType,
+      fileName: fileName,
+      mimeType: mimeType,
     );
   }
 
   @override
-  String toString() => 'EncryptedMessage($id from $senderId, ${ciphertext.length} bytes${isCompressed ? ', compressed' : ''})';
+  String toString() => 'EncryptedMessage($id from $senderId, ${ciphertext.length} bytes, ${contentType.name}${isCompressed ? ', compressed' : ''})';
 }
 
 /// Représente un message en clair (avant chiffrement ou après déchiffrement)
