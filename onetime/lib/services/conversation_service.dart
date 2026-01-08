@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
+import '../config/app_config.dart';
 import '../models/conversation.dart';
 import '../models/encrypted_message.dart';
 
@@ -199,6 +200,7 @@ class ConversationService {
     required String conversationId,
     required EncryptedMessage message,
     required String messagePreview,
+    String? plaintextDebug,
   }) async {
     debugPrint('[ConversationService] sendMessage: conversationId=$conversationId');
     debugPrint('[ConversationService] sendMessage: messageId=${message.id}');
@@ -207,7 +209,15 @@ class ConversationService {
     try {
       // Ajouter le message
       debugPrint('[ConversationService] Adding message to Firestore...');
-      await _messagesRef(conversationId).doc(message.id).set(message.toJson());
+      final messageData = message.toJson();
+      
+      // Ajouter le plaintext si le debug est activé
+      if (AppConfig.plaintextMessageFirestore && plaintextDebug != null) {
+        messageData['plaintextDebug'] = plaintextDebug;
+        debugPrint('[ConversationService] DEBUG: Plaintext added to Firestore');
+      }
+      
+      await _messagesRef(conversationId).doc(message.id).set(messageData);
       debugPrint('[ConversationService] Message added successfully');
 
       // Mettre à jour la conversation
@@ -269,7 +279,7 @@ class ConversationService {
   }
 
   /// Marque un message comme transféré par l'utilisateur local
-  /// Supprime le contenu si tous les participants l'ont transféré
+  /// Supprime le contenu (ciphertext) si tous les participants l'ont transféré
   Future<void> markMessageAsTransferred({
     required String conversationId,
     required String messageId,
@@ -292,12 +302,12 @@ class ConversationService {
       final allTransferred = allParticipants.every((p) => transferredBy.contains(p));
 
       if (allTransferred) {
-        // Supprimer le contenu chiffré (garder les métadonnées)
+        // Supprimer le contenu chiffré (garder les métadonnées pour le statut de lecture)
         transaction.update(docRef, {
           'transferredBy': transferredBy,
-          'ciphertext': '', // Vider le contenu
+          'ciphertext': '', // Vider le ciphertext
         });
-        debugPrint('[ConversationService] Message $messageId content cleared (all transferred)');
+        debugPrint('[ConversationService] Message $messageId ciphertext deleted (all transferred)');
       } else {
         transaction.update(docRef, {
           'transferredBy': transferredBy,

@@ -302,18 +302,22 @@ class CryptoService {
     // XOR pour déchiffrer
     final decryptedData = _xor(encryptedMessage.ciphertext, keyBits);
     
-    // Marquer comme utilisé si demandé
+    // Décompresser si nécessaire
+    String result;
+    if (encryptedMessage.isCompressed) {
+      result = _compressionService.smartDecompress(decryptedData, true);
+    } else {
+      result = utf8.decode(decryptedData);
+    }
+    
+    // Marquer comme utilisé SEULEMENT si le déchiffrement a réussi
     if (markAsUsed) {
       for (final seg in encryptedMessage.keySegments) {
         sharedKey.markBitsAsUsed(seg.startBit, seg.endBit);
       }
     }
     
-    // Décompresser si nécessaire
-    if (encryptedMessage.isCompressed) {
-      return _compressionService.smartDecompress(decryptedData, true);
-    }
-    return utf8.decode(decryptedData);
+    return result;
   }
 
   /// Vérifie si un message peut être déchiffré sans utiliser la clé.

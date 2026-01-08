@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../services/conversation_service.dart';
+import '../services/pseudo_storage_service.dart';
 import '../models/conversation.dart';
 import 'profile_screen.dart';
 import 'new_conversation_screen.dart';
@@ -18,12 +19,28 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final AuthService _authService = AuthService();
+  final PseudoStorageService _pseudoService = PseudoStorageService();
   final GlobalKey<_ConversationsListScreenState> _conversationsKey = GlobalKey();
+  String? _myPseudo;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMyPseudo();
+  }
+
+  Future<void> _loadMyPseudo() async {
+    final pseudo = await _pseudoService.getMyPseudo();
+    if (mounted) {
+      setState(() {
+        _myPseudo = pseudo;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final userId = _authService.currentUserId ?? '';
-    final userProfile = _authService.currentUser;
+    final displayName = _myPseudo ?? 'Chargement...';
 
     return Scaffold(
       appBar: AppBar(
@@ -33,14 +50,14 @@ class _HomeScreenState extends State<HomeScreen> {
               '1 time',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
-            if (userId.isNotEmpty && userProfile != null) ...[
+            if (_myPseudo != null) ...[
               Text(
                 ' : ',
                 style: TextStyle(color: Colors.grey[600]),
               ),
               Flexible(
                 child: Text(
-                  userProfile.shortId,
+                  displayName,
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.grey[600],
@@ -76,7 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: ConversationsListScreen(key: _conversationsKey, userId: userId),
+      body: ConversationsListScreen(key: _conversationsKey, userId: _authService.currentUserId ?? ''),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _createNewConversation(context),
         tooltip: 'Créer une conversation',
@@ -233,7 +250,7 @@ class _EmptyConversations extends StatelessWidget {
   }
 }
 
-class _ConversationTile extends StatelessWidget {
+class _ConversationTile extends StatefulWidget {
   final Conversation conversation;
   final String currentUserId;
   final VoidCallback onTap;
@@ -245,17 +262,47 @@ class _ConversationTile extends StatelessWidget {
   });
 
   @override
+  State<_ConversationTile> createState() => _ConversationTileState();
+}
+
+class _ConversationTileState extends State<_ConversationTile> {
+  final PseudoStorageService _pseudoService = PseudoStorageService();
+  String _displayName = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDisplayName();
+  }
+
+  Future<void> _loadDisplayName() async {
+    final pseudos = <String>[];
+    
+    for (final peerId in widget.conversation.peerIds) {
+      final pseudo = await _pseudoService.getPseudo(peerId);
+      pseudos.add(pseudo ?? peerId.substring(0, 8));
+    }
+    
+    if (mounted) {
+      setState(() {
+        _displayName = pseudos.isEmpty ? widget.conversation.displayName : pseudos.join(', ');
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final isLastMessageMine = conversation.lastMessageSenderId == currentUserId;
+    final isLastMessageMine = widget.conversation.lastMessageSenderId == widget.currentUserId;
+    final displayName = _displayName.isEmpty ? widget.conversation.displayName : _displayName;
     
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: conversation.hasKey
+        backgroundColor: widget.conversation.hasKey
             ? Theme.of(context).primaryColor.withAlpha(30)
             : Colors.orange.withAlpha(30),
-        child: conversation.hasKey
+        child: widget.conversation.hasKey
             ? Text(
-                conversation.displayName.substring(0, 1).toUpperCase(),
+                displayName.substring(0, 1).toUpperCase(),
                 style: TextStyle(
                   color: Theme.of(context).primaryColor,
                   fontWeight: FontWeight.bold,
@@ -267,7 +314,7 @@ class _ConversationTile extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              conversation.displayName,
+              displayName,
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -275,21 +322,21 @@ class _ConversationTile extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: conversation.hasKey
-                  ? _getKeyColor(conversation.keyRemainingPercent)
+              color: widget.conversation.hasKey
+                  ? _getKeyColor(widget.conversation.keyRemainingPercent)
                   : Colors.orange,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (!conversation.hasKey)
+                if (!widget.conversation.hasKey)
                   const Padding(
                     padding: EdgeInsets.only(right: 4),
                     child: Icon(Icons.warning, size: 12, color: Colors.white),
                   ),
                 Text(
-                  conversation.remainingKeyFormatted,
+                  widget.conversation.remainingKeyFormatted,
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
@@ -310,13 +357,13 @@ class _ConversationTile extends StatelessWidget {
             ),
           Expanded(
             child: Text(
-              conversation.lastMessageDisplay,
+              widget.conversation.lastMessageDisplay,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(color: Colors.grey[600]),
             ),
           ),
           Text(
-            _formatTime(conversation.lastMessageAt),
+            _formatTime(widget.conversation.lastMessageAt),
             style: TextStyle(
               fontSize: 12,
               color: Colors.grey[500],
@@ -324,7 +371,7 @@ class _ConversationTile extends StatelessWidget {
           ),
         ],
       ),
-      onTap: onTap,
+      onTap: widget.onTap,
     );
   }
 

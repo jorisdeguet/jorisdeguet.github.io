@@ -109,7 +109,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = _authService.currentUser;
+    final userId = _authService.currentUserId;
+    final shortId = userId != null && userId.length > 8 
+        ? userId.substring(0, 8) 
+        : userId ?? '';
+    final initials = userId != null && userId.length >= 2
+        ? userId.substring(0, 2).toUpperCase()
+        : '?';
 
     return Scaffold(
       appBar: AppBar(
@@ -117,7 +123,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : user == null
+          : userId == null
               ? const Center(child: Text('Non connecté'))
               : SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
@@ -128,7 +134,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         radius: 50,
                         backgroundColor: Theme.of(context).primaryColor,
                         child: Text(
-                          user.initials,
+                          initials,
                           style: const TextStyle(
                             fontSize: 32,
                             color: Colors.white,
@@ -140,7 +146,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                       // ID utilisateur
                       Text(
-                        user.shortId,
+                        shortId,
                         style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -194,12 +200,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           _InfoRow(
                             icon: Icons.fingerprint,
                             label: 'ID utilisateur',
-                            value: user.shortId,
-                          ),
-                          _InfoRow(
-                            icon: Icons.calendar_today,
-                            label: 'Membre depuis',
-                            value: _formatDate(user.createdAt),
+                            value: shortId,
                           ),
                         ],
                       ),

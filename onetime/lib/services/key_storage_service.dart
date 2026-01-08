@@ -34,8 +34,9 @@ class KeyStorageService {
       };
       await prefs.setString('${_keyPrefix}meta_$conversationId', jsonEncode(metadata));
 
-      // Sauvegarder les bits utilisés (initialement vide)
-      await prefs.setString('$_usedBitsPrefix$conversationId', '');
+      // Sauvegarder le bitmap des bits utilisés
+      final usedBitmapBase64 = base64Encode(key.usedBitmap);
+      await prefs.setString('$_usedBitsPrefix$conversationId', usedBitmapBase64);
 
       debugPrint('[KeyStorageService] saveKey: SUCCESS');
     } catch (e) {
@@ -68,31 +69,51 @@ class KeyStorageService {
       final keyData = base64Decode(keyDataStr);
       final metadata = jsonDecode(metadataStr) as Map<String, dynamic>;
 
+      // Restaurer le bitmap des bits utilisés
+      final usedBitsStr = prefs.getString('$_usedBitsPrefix$conversationId') ?? '';
+      Uint8List? usedBitmap;
+      
+      if (usedBitsStr.isNotEmpty) {
+        try {
+          // Nouveau format: bitmap en base64
+          usedBitmap = base64Decode(usedBitsStr);
+        } catch (e) {
+          // Ancien format: liste de ranges "start-end;start-end"
+          // Créer un bitmap vide et marquer les bits utilisés
+          final bitmapSize = (keyData.length * 8 + 7) ~/ 8;
+          usedBitmap = Uint8List(bitmapSize);
+          
+          final usedRanges = usedBitsStr.split(';');
+          for (final range in usedRanges) {
+            if (range.isNotEmpty) {
+              final parts = range.split('-');
+              if (parts.length == 2) {
+                final start = int.tryParse(parts[0]);
+                final end = int.tryParse(parts[1]);
+                if (start != null && end != null) {
+                  // Marquer les bits dans le bitmap
+                  for (int bit = start; bit <= end; bit++) {
+                    final byteIndex = bit ~/ 8;
+                    final bitOffset = bit % 8;
+                    if (byteIndex < usedBitmap.length) {
+                      usedBitmap[byteIndex] |= (1 << bitOffset);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
       final key = SharedKey(
         id: metadata['id'] as String,
         keyData: Uint8List.fromList(keyData),
         peerIds: List<String>.from(metadata['peerIds'] as List),
         createdAt: DateTime.parse(metadata['createdAt'] as String),
         conversationName: metadata['conversationName'] as String?,
+        usedBitmap: usedBitmap,
       );
-
-      // Restaurer les bits utilisés
-      final usedBitsStr = prefs.getString('$_usedBitsPrefix$conversationId') ?? '';
-      if (usedBitsStr.isNotEmpty) {
-        final usedRanges = usedBitsStr.split(';');
-        for (final range in usedRanges) {
-          if (range.isNotEmpty) {
-            final parts = range.split('-');
-            if (parts.length == 2) {
-              final start = int.tryParse(parts[0]);
-              final end = int.tryParse(parts[1]);
-              if (start != null && end != null) {
-                key.markBitsAsUsed(start, end);
-              }
-            }
-          }
-        }
-      }
 
       debugPrint('[KeyStorageService] getKey: FOUND, ${key.lengthInBits} bits');
       return key;
@@ -107,13 +128,19 @@ class KeyStorageService {
     debugPrint('[KeyStorageService] updateUsedBits: $conversationId, $startBit-$endBit');
 
     try {
-      final prefs = await SharedPreferences.getInstance();
+      // Charger la clé existante
+      final key = await getKey(conversationId);
+      if (key == null) {
+        debugPrint('[KeyStorageService] updateUsedBits: Key not found');
+        return;
+      }
 
-      final currentStr = prefs.getString('$_usedBitsPrefix$conversationId') ?? '';
-      final newRange = '$startBit-$endBit';
-      final updated = currentStr.isEmpty ? newRange : '$currentStr;$newRange';
+      // Marquer les bits comme utilisés
+      key.markBitsAsUsed(startBit, endBit);
 
-      await prefs.setString('$_usedBitsPrefix$conversationId', updated);
+      // Sauvegarder la clé mise à jour avec le nouveau bitmap
+      await saveKey(conversationId, key);
+      
       debugPrint('[KeyStorageService] updateUsedBits: SUCCESS');
     } catch (e) {
       debugPrint('[KeyStorageService] updateUsedBits ERROR: $e');

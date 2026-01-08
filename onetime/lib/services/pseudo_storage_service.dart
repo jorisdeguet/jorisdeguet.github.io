@@ -68,6 +68,12 @@ class PseudoStorageService {
   /// Définit le pseudo d'un utilisateur
   Future<void> setPseudo(String oderId, String pseudo) async {
     await loadPseudos();
+    
+    // Ne rien faire si le pseudo n'a pas changé
+    if (_pseudosCache![oderId] == pseudo) {
+      return;
+    }
+    
     _pseudosCache![oderId] = pseudo;
     await _savePseudos();
     debugPrint('[PseudoStorageService] Pseudo set for $oderId: $pseudo');

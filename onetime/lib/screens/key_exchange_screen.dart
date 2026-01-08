@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 
+import '../config/app_config.dart';
 import '../models/key_exchange_session.dart';
 import '../models/shared_key.dart';
 import '../services/random_key_generator_service.dart';
@@ -15,6 +17,7 @@ import '../services/conversation_service.dart';
 import '../services/auth_service.dart';
 import '../services/pseudo_storage_service.dart';
 import '../services/crypto_service.dart';
+import '../services/qr_segment_cache_service.dart';
 import 'conversation_detail_screen.dart';
 
 /// Écran d'échange de clé via QR codes.
@@ -40,6 +43,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   final KeyExchangeSyncService _syncService = KeyExchangeSyncService();
   final KeyStorageService _keyStorageService = KeyStorageService();
   final PseudoStorageService _pseudoService = PseudoStorageService();
+  final QrSegmentCacheService _cacheService = QrSegmentCacheService();
   late final KeyExchangeService _keyExchangeService;
   
   // Session locale (pour les données de clé)
@@ -65,16 +69,10 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   // Mode torrent: rotation automatique des QR codes
   Timer? _torrentRotationTimer;
   final bool _torrentModeEnabled = true;
-  static const Duration _torrentRotationInterval = Duration(milliseconds: 100);
-
-  final List<int> _keySizeOptions = [
-    1024 * 2,   // 2 segments (pour tests rapides)
-    1024 * 8,   // 1 KB
-    8192 * 8,   // 8 KB
-    32768 * 8,  // 32 KB
-    131072 * 8, // 128 KB
-    524288 * 8, // 512 KB
-  ];
+  Duration _torrentRotationInterval = const Duration(seconds: 1); // Commencer à 1 seconde
+  
+  // Suivi des participants ayant scanné au moins un segment dans le dernier tour
+  Map<String, bool> _participantScannedInRound = {};
 
   @override
   void initState() {
@@ -123,6 +121,12 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
   /// Envoie un message pseudo chiffré pour que les autres participants connaissent notre pseudo
   Future<void> _sendPseudoMessage(String conversationId, SharedKey sharedKey) async {
+    // Vérifier si l'échange de pseudo est activé
+    if (!AppConfig.pseudoExchangeStartConversation) {
+      debugPrint('[KeyExchange] Pseudo exchange disabled by config');
+      return;
+    }
+
     try {
       final myPseudo = await _pseudoService.getMyPseudo();
       if (myPseudo == null || myPseudo.isEmpty) {
@@ -166,18 +170,54 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     }
   }
 
+  /// Log des informations de debug pour la clé (premiers et derniers 1024 bits)
+  void _logKeyDebugInfo(SharedKey key) {
+    try {
+      debugPrint('=== KEY DEBUG INFO ===');
+      debugPrint('[KeyExchange] Total key length: ${key.lengthInBits} bits (${key.lengthInBytes} bytes)');
+      
+      // Extraire les premiers 1024 bits (128 bytes)
+      final first1024Bits = key.lengthInBits >= 1024 
+          ? key.keyData.sublist(0, 128) 
+          : key.keyData;
+      final first1024Base64 = base64Encode(first1024Bits);
+      debugPrint('[KeyExchange] First 1024 bits (base64): $first1024Base64');
+      
+      // Extraire les derniers 1024 bits (128 bytes)
+      if (key.lengthInBits >= 1024) {
+        final lastStart = key.lengthInBytes - 128;
+        final last1024Bits = key.keyData.sublist(lastStart);
+        final last1024Base64 = base64Encode(last1024Bits);
+        debugPrint('[KeyExchange] Last 1024 bits (base64): $last1024Base64');
+      }
+      
+      debugPrint('=== END KEY DEBUG INFO ===');
+    } catch (e) {
+      debugPrint('[KeyExchange] Error logging key debug info: $e');
+    }
+  }
+
   String get _currentUserId => _authService.currentUserId ?? '';
 
   Future<void> _startAsSource() async {
+    final startTime = DateTime.now();
+    debugPrint('[KeyExchange] ${startTime.toIso8601String()} - Button pressed, starting as source');
+    
     if (_currentUserId.isEmpty) return;
 
     setState(() => _errorMessage = null);
 
     try {
+      final step1 = DateTime.now();
+      debugPrint('[KeyExchange] +${step1.difference(startTime).inMilliseconds}ms - Calculating segments');
+      
       // Calculer le nombre de segments
       final totalSegments = (_keySizeBits + KeyExchangeService.segmentSizeBits - 1) ~/
                             KeyExchangeService.segmentSizeBits;
 
+      final step2 = DateTime.now();
+      debugPrint('[KeyExchange] +${step2.difference(startTime).inMilliseconds}ms - Creating Firestore session');
+      
       // Créer la session dans Firestore D'ABORD pour avoir l'ID
       _firestoreSession = await _syncService.createSession(
         sourceId: _currentUserId,
@@ -186,6 +226,9 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         totalSegments: totalSegments,
       );
 
+      final step3 = DateTime.now();
+      debugPrint('[KeyExchange] +${step3.difference(startTime).inMilliseconds}ms - Firestore session created, creating local session');
+      
       // Créer la session locale avec le MÊME ID que Firestore
       _session = _keyExchangeService.createSourceSession(
         totalBits: _keySizeBits,
@@ -194,20 +237,44 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         sessionId: _firestoreSession!.id, // Utiliser l'ID Firestore
       );
 
+      final step4 = DateTime.now();
+      debugPrint('[KeyExchange] +${step4.difference(startTime).inMilliseconds}ms - Local session created, setting up listeners');
+
       // Écouter les changements de la session Firestore
       _sessionSubscription = _syncService
           .watchSession(_firestoreSession!.id)
           .listen(_onSessionUpdate);
+
+      final step5 = DateTime.now();
+      debugPrint('[KeyExchange] +${step5.difference(startTime).inMilliseconds}ms - Listeners setup, updating UI state');
 
       setState(() {
         _role = KeyExchangeRole.source;
         _currentStep = 1;
       });
 
-      // En mode torrent, générer TOUS les segments à l'avance
+      final step6 = DateTime.now();
+      debugPrint('[KeyExchange] +${step6.difference(startTime).inMilliseconds}ms - UI updated, generating segments');
+
+      // Initialiser le suivi des participants pour le mode torrent
       if (_torrentModeEnabled) {
+        _participantScannedInRound = {};
+        for (final participantId in _firestoreSession!.otherParticipants) {
+          _participantScannedInRound[participantId] = false;
+        }
+        
+        final step7 = DateTime.now();
+        debugPrint('[KeyExchange] +${step7.difference(startTime).inMilliseconds}ms - Starting segment generation (torrent mode)');
+        
         _generateAllSegments();
+        
+        final step8 = DateTime.now();
+        debugPrint('[KeyExchange] +${step8.difference(startTime).inMilliseconds}ms - All segments generated, starting torrent rotation');
+        
         _startTorrentRotation();
+        
+        final step9 = DateTime.now();
+        debugPrint('[KeyExchange] +${step9.difference(startTime).inMilliseconds}ms - FIRST QR CODE SHOULD BE VISIBLE NOW');
       } else {
         // Mode manuel: générer un segment à la fois
         _generateNextSegment();
@@ -219,6 +286,25 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
   void _onSessionUpdate(KeyExchangeSessionModel? session) {
     if (session == null) return;
+
+    // Mettre à jour le suivi des participants qui ont scanné dans ce tour
+    if (_role == KeyExchangeRole.source && _firestoreSession != null) {
+      final oldSession = _firestoreSession!;
+      
+      // Comparer les scannedBy entre l'ancienne et la nouvelle session
+      session.scannedBy.forEach((segmentIndex, participantIds) {
+        final oldParticipantIds = oldSession.scannedBy[segmentIndex] ?? [];
+        
+        // Trouver les nouveaux participants qui ont scanné ce segment
+        for (final participantId in participantIds) {
+          if (!oldParticipantIds.contains(participantId)) {
+            // Ce participant a scanné un segment dans ce tour
+            _participantScannedInRound[participantId] = true;
+            debugPrint('[Torrent] Participant $participantId scanned segment $segmentIndex');
+          }
+        }
+      });
+    }
 
     setState(() {
       _firestoreSession = session;
@@ -277,13 +363,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     if (_session == null || _firestoreSession == null) return;
 
     try {
-      // Construire la clé avec les segments reçus (force car vérification via Firestore)
-      final sharedKey = _keyExchangeService.finalizeExchange(
-        _session!,
-        conversationName: widget.conversationName,
-        force: true,
-      );
-
       // Récupérer la session mise à jour pour avoir le conversationId
       final updatedSession = await _syncService.getSession(_firestoreSession!.id);
       final conversationId = updatedSession?.conversationId;
@@ -312,17 +391,53 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         return;
       }
 
+      SharedKey finalKey;
+      
+      // Vérifier si c'est une extension de clé
+      final existingKey = await _keyStorageService.getKey(conversation.id);
+      
+      if (existingKey != null) {
+        // KEY EXTENSION: Étendre la clé existante
+        debugPrint('[KeyExchange] Reader: Loading existing key for extension...');
+        debugPrint('[KeyExchange] Reader: Existing key: ${existingKey.lengthInBits} bits');
+        
+        final newKeyData = _keyExchangeService.finalizeExchange(
+          _session!,
+          conversationName: widget.conversationName,
+          force: true,
+        );
+        
+        debugPrint('[KeyExchange] Reader: New key data: ${newKeyData.lengthInBits} bits');
+        
+        // Étendre la clé existante
+        finalKey = existingKey.extend(newKeyData.keyData);
+        
+        debugPrint('[KeyExchange] Reader: Extended key: ${finalKey.lengthInBits} bits');
+      } else {
+        // NOUVELLE CLÉ
+        finalKey = _keyExchangeService.finalizeExchange(
+          _session!,
+          conversationName: widget.conversationName,
+          force: true,
+        );
+        
+        debugPrint('[KeyExchange] Reader: New key: ${finalKey.lengthInBits} bits');
+      }
+
       // Sauvegarder la clé localement avec le même conversationId
       debugPrint('[KeyExchange] Reader: Saving shared key locally for conversation ${conversation.id}');
-      await _keyStorageService.saveKey(conversation.id, sharedKey);
+      await _keyStorageService.saveKey(conversation.id, finalKey);
       debugPrint('[KeyExchange] Reader: Shared key saved successfully');
 
-      // Envoyer le message pseudo chiffré
-      await _sendPseudoMessage(conversation.id, sharedKey);
+      // DEBUG: Afficher les premiers et derniers 1024 bits de la clé
+      _logKeyDebugInfo(finalKey);
 
-      // Supprimer la session d'échange de Firestore (nettoyage par le reader)
-      await _syncService.deleteSession(_firestoreSession!.id);
-      debugPrint('[KeyExchange] Reader: Key exchange session deleted from Firestore');
+      // Envoyer le message pseudo chiffré
+      await _sendPseudoMessage(conversation.id, finalKey);
+
+      // NE PAS supprimer la session - c'est la source qui s'en charge
+      // await _syncService.deleteSession(_firestoreSession!.id);
+      debugPrint('[KeyExchange] Reader: Key exchange completed (session cleanup by source)');
 
       if (mounted) {
         Navigator.pushReplacement(
@@ -361,16 +476,14 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   }
 
   /// Génère tous les segments à l'avance (pour le mode torrent)
-  void _generateAllSegments() {
+  void _generateAllSegments() async {
     if (_session == null) return;
 
     debugPrint('[Torrent] Generating all ${_session!.totalSegments} segments...');
     
     try {
-      // Générer tous les segments
-      for (int i = 0; i < _session!.totalSegments; i++) {
-        _keyExchangeService.generateNextSegment(_session!);
-      }
+      // Pré-générer tous les segments en arrière-plan
+      await _cacheService.pregenerateSegments(_session!, _keyExchangeService);
       
       // Afficher le premier segment
       _displaySegmentAtIndex(0);
@@ -425,6 +538,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
   /// Trouve le prochain segment qui n'a pas été scanné par tous les participants
   /// Retourne null si tous les segments sont complets
+  /// Vérifie aussi si on a fait un tour complet et adapte la vitesse si nécessaire
   int? _findNextIncompleteSegment() {
     if (_session == null || _firestoreSession == null) return null;
 
@@ -437,12 +551,54 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       
       // Vérifier si ce segment a été scanné par tous
       if (!_firestoreSession!.allParticipantsScannedSegment(segmentIndex)) {
+        // Si on revient au segment 0, on a fait un tour complet
+        if (segmentIndex == 0 && currentDisplayed != 0) {
+          _checkAndAdjustRotationSpeed();
+        }
         return segmentIndex;
       }
     }
 
     // Tous les segments sont complets
     return null;
+  }
+
+  /// Vérifie si certains participants n'ont scanné aucun segment dans le tour
+  /// et augmente la vitesse de rotation si nécessaire
+  void _checkAndAdjustRotationSpeed() {
+    if (_firestoreSession == null) return;
+
+    final otherParticipants = _firestoreSession!.otherParticipants;
+    bool someParticipantMissedAll = false;
+
+    // Vérifier chaque participant
+    for (final participantId in otherParticipants) {
+      final scannedInRound = _participantScannedInRound[participantId] ?? false;
+      
+      if (!scannedInRound) {
+        debugPrint('[Torrent] Participant $participantId missed all segments in round');
+        someParticipantMissedAll = true;
+      }
+      
+      // Réinitialiser pour le prochain tour
+      _participantScannedInRound[participantId] = false;
+    }
+
+    // Si au moins un participant a tout raté, ralentir
+    if (someParticipantMissedAll) {
+      final newInterval = Duration(
+        milliseconds: _torrentRotationInterval.inMilliseconds + 1000
+      );
+      
+      debugPrint('[Torrent] Some participants missed all segments, increasing interval from ${_torrentRotationInterval.inMilliseconds}ms to ${newInterval.inMilliseconds}ms');
+      
+      setState(() {
+        _torrentRotationInterval = newInterval;
+      });
+      
+      // Redémarrer le timer avec le nouveau délai
+      _startTorrentRotation();
+    }
   }
 
   /// Affiche un segment spécifique par son index
@@ -514,12 +670,15 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
       // Vérifier qu'on n'a pas déjà scanné ce segment
       if (_session!.hasScannedSegment(segment.segmentIndex)) {
+        debugPrint('[KeyExchange] Segment ${segment.segmentIndex} already scanned, skipping');
+        // Ne pas afficher d'erreur, juste continuer à scanner
         setState(() {
-          _errorMessage = 'Segment déjà scanné, attendez le suivant...';
           _isScanning = true;
         });
         return;
       }
+
+      debugPrint('[KeyExchange] Scanned segment ${segment.segmentIndex}');
 
       // Enregistrer le segment localement
       _keyExchangeService.recordReadSegment(_session!, segment);
@@ -531,21 +690,17 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         segmentIndex: segment.segmentIndex,
       );
 
+      debugPrint('[KeyExchange] Segment ${segment.segmentIndex} marked as scanned in Firestore');
+
+      // Pas besoin d'arrêter le scan - continuer immédiatement
       setState(() {
-        _isScanning = false;
         _errorMessage = null;
       });
-
-      // Continuer à scanner après une courte pause
-      Future.delayed(const Duration(milliseconds: 800), () {
-        if (mounted && _firestoreSession?.status != KeyExchangeStatus.completed) {
-          setState(() => _isScanning = true);
-        }
-      });
     } catch (e) {
-      setState(() => _errorMessage = 'Erreur: $e');
+      debugPrint('[KeyExchange] Error scanning QR: $e');
+      setState(() => _errorMessage = 'Erreur scan: ${e.toString().substring(0, 50)}...');
       // Reprendre le scan après l'erreur
-      Future.delayed(const Duration(seconds: 2), () {
+      Future.delayed(const Duration(milliseconds: 1500), () {
         if (mounted) {
           setState(() {
             _isScanning = true;
@@ -560,32 +715,70 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     if (_session == null) return;
 
     try {
-      // Forcer la finalisation car la vérification est faite via Firestore
-      final sharedKey = _keyExchangeService.finalizeExchange(
-        _session!,
-        conversationName: widget.conversationName,
-        force: true,
-      );
-
       if (_currentUserId.isEmpty) return;
 
       final conversationService = ConversationService(localUserId: _currentUserId);
       
       // Utiliser la conversation existante ou en créer une nouvelle
       String conversationId;
+      SharedKey finalKey;
+      
       if (widget.existingConversationId != null) {
-        // Mettre à jour la conversation existante avec les bits de clé
+        // Conversation existante : vérifier si c'est une extension ou une création initiale
         conversationId = widget.existingConversationId!;
+        
+        debugPrint('[KeyExchange] Checking for existing key...');
+        final existingKey = await _keyStorageService.getKey(conversationId);
+        
+        if (existingKey != null) {
+          // KEY EXTENSION: La conversation a déjà une clé
+          debugPrint('[KeyExchange] Existing key found: ${existingKey.lengthInBits} bits - extending...');
+          
+          // Forcer la finalisation pour obtenir les nouveaux segments
+          final newKeyData = _keyExchangeService.finalizeExchange(
+            _session!,
+            conversationName: widget.conversationName,
+            force: true,
+          );
+          
+          debugPrint('[KeyExchange] New key data: ${newKeyData.lengthInBits} bits');
+          
+          // Étendre la clé existante avec les nouveaux bits
+          finalKey = existingKey.extend(newKeyData.keyData);
+          
+          debugPrint('[KeyExchange] Extended key: ${finalKey.lengthInBits} bits');
+        } else {
+          // CRÉATION INITIALE: La conversation existe mais sans clé encore
+          debugPrint('[KeyExchange] No existing key - creating initial key for conversation');
+          debugPrint('[KeyExchange] WARNING: Extension requested but no existing key found!');
+          debugPrint('[KeyExchange] This may cause decryption errors. Delete conversation and restart.');
+          
+          finalKey = _keyExchangeService.finalizeExchange(
+            _session!,
+            conversationName: widget.conversationName,
+            force: true,
+          );
+          
+          debugPrint('[KeyExchange] Initial key created: ${finalKey.lengthInBits} bits');
+        }
+        
+        // Mettre à jour la conversation avec le nouveau total de bits
         await conversationService.updateConversationKey(
           conversationId: conversationId,
-          totalKeyBits: sharedKey.lengthInBits,
+          totalKeyBits: finalKey.lengthInBits,
         );
-        debugPrint('[KeyExchange] Existing conversation updated: $conversationId');
+        debugPrint('[KeyExchange] Conversation updated: $conversationId');
       } else {
-        // Créer une nouvelle conversation
+        // NOUVELLE CONVERSATION: Créer tout de zéro
+        finalKey = _keyExchangeService.finalizeExchange(
+          _session!,
+          conversationName: widget.conversationName,
+          force: true,
+        );
+        
         final conversation = await conversationService.createConversation(
-          peerIds: sharedKey.peerIds,
-          totalKeyBits: sharedKey.lengthInBits,
+          peerIds: finalKey.peerIds,
+          totalKeyBits: finalKey.lengthInBits,
           name: widget.conversationName,
         );
         conversationId = conversation.id;
@@ -594,21 +787,39 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
       // Mettre à jour la session Firestore avec le conversationId AVANT de la terminer
       if (_firestoreSession != null) {
-        await _syncService.setConversationId(_firestoreSession!.id, conversationId);
-        debugPrint('[KeyExchange] Session updated with conversationId');
+        try {
+          await _syncService.setConversationId(_firestoreSession!.id, conversationId);
+          debugPrint('[KeyExchange] Session updated with conversationId');
 
-        // Marquer la session comme terminée
-        await _syncService.completeSession(_firestoreSession!.id);
-        debugPrint('[KeyExchange] Session marked as completed');
+          // Marquer la session comme terminée
+          await _syncService.completeSession(_firestoreSession!.id);
+          debugPrint('[KeyExchange] Session marked as completed');
+        } catch (e) {
+          // La session peut avoir été supprimée par le reader, ce n'est pas grave
+          debugPrint('[KeyExchange] Could not update session (may have been deleted by reader): $e');
+        }
       }
 
       // Sauvegarder la clé localement
       debugPrint('[KeyExchange] Saving shared key locally for conversation $conversationId');
-      await _keyStorageService.saveKey(conversationId, sharedKey);
+      await _keyStorageService.saveKey(conversationId, finalKey);
       debugPrint('[KeyExchange] Shared key saved successfully');
 
+      // DEBUG: Afficher les premiers et derniers 1024 bits de la clé
+      _logKeyDebugInfo(finalKey);
+
       // Envoyer le message pseudo chiffré
-      await _sendPseudoMessage(conversationId, sharedKey);
+      await _sendPseudoMessage(conversationId, finalKey);
+
+      // Supprimer la session d'échange de Firestore (nettoyage par la source)
+      if (_firestoreSession != null) {
+        try {
+          await _syncService.deleteSession(_firestoreSession!.id);
+          debugPrint('[KeyExchange] Session deleted from Firestore');
+        } catch (e) {
+          debugPrint('[KeyExchange] Could not delete session: $e');
+        }
+      }
 
       // Récupérer la conversation pour naviguer
       final conversation = await conversationService.getConversation(conversationId);
@@ -635,6 +846,29 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       debugPrint('Error in _finalizeExchange: $e');
       setState(() => _errorMessage = 'Erreur: $e');
     }
+  }
+
+  Widget _buildKeyGenButton(String label, int sizeInBits) {
+    final isSelected = _keySizeBits == sizeInBits;
+    return ElevatedButton(
+      onPressed: () {
+        setState(() => _keySizeBits = sizeInBits);
+        _startAsSource();
+      },
+      style: ElevatedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        backgroundColor: isSelected ? Theme.of(context).primaryColor : null,
+        foregroundColor: isSelected ? Colors.white : null,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.qr_code, size: 32),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
   }
 
   @override
@@ -681,55 +915,31 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           ),
           const SizedBox(height: 24),
 
-          // Sélection de la taille de clé
+          // Boutons de génération de clé (4 tailles)
           Text(
-            'Taille de la clé',
+            'Générer une clé',
             style: Theme.of(context).textTheme.titleMedium,
           ),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<int>(
-            value: _keySizeBits,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.data_usage),
-            ),
-            items: _keySizeOptions.map((size) {
-              final segments = (size + KeyExchangeService.segmentSizeBits - 1) ~/ KeyExchangeService.segmentSizeBits;
-              final kb = size ~/ 8 ~/ 1024;
-              final label = segments <= 2
-                  ? '🧪 TEST: $segments seg.'
-                  : '$kb KB ($segments seg.)';
-              return DropdownMenuItem(
-                value: size,
-                child: Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              );
-            }).toList(),
-            onChanged: (value) {
-              if (value != null) {
-                setState(() => _keySizeBits = value);
-              }
-            },
+          const SizedBox(height: 12),
+          
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildKeyGenButton('8 KB', 8192 * 8),
+              _buildKeyGenButton('32 KB', 32768 * 8),
+              _buildKeyGenButton('128 KB', 131072 * 8),
+              _buildKeyGenButton('512 KB', 524288 * 8),
+            ],
           ),
-          const SizedBox(height: 32),
+          
+          const SizedBox(height: 24),
 
-          // Boutons de rôle
-          ElevatedButton.icon(
-            onPressed: _startAsSource,
-            icon: const Icon(Icons.qr_code),
-            label: const Text('Générer la clé (afficher QR)'),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.all(16),
-            ),
-          ),
-          const SizedBox(height: 16),
+          // Bouton de scan
           OutlinedButton.icon(
             onPressed: _startAsReader,
             icon: const Icon(Icons.qr_code_scanner),
-            label: const Text('Scanner la clé'),
+            label: const Text('Ou scanner une clé'),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.all(16),
             ),
@@ -766,158 +976,154 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     final totalOthers = firestoreSession?.otherParticipants.length ?? 1;
     final allScanned = firestoreSession?.allParticipantsScannedSegment(displayedSegmentIdx) ?? false;
 
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          // Progression globale
-          LinearProgressIndicator(value: progress),
-          const SizedBox(height: 8),
-          Text(
-            'Segment ${session.currentSegmentIndex} / ${session.totalSegments}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 16),
-
-          // Statut des participants pour le segment affiché
-          if (firestoreSession != null)
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: allScanned ? Colors.green[50] : Colors.orange[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: allScanned ? Colors.green : Colors.orange,
-                ),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+    return Column(
+      children: [
+        // Top bar: Progress, segment count, and stop button on one line
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          color: Theme.of(context).primaryColor.withAlpha(25),
+          child: SafeArea(
+            bottom: false,
+            child: Row(
+              children: [
+                // Progress indicator and segment count
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        allScanned ? Icons.check_circle : Icons.hourglass_empty,
-                        color: allScanned ? Colors.green : Colors.orange,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
                       Text(
-                        allScanned
-                            ? 'Tous les participants ont scanné!'
-                            : 'Segment $displayedSegmentIdx - Scannés: $scannedCount / $totalOthers',
-                        style: TextStyle(
-                          color: allScanned ? Colors.green[800] : Colors.orange[800],
+                        'Segments scannés: $scannedCount/$totalOthers',
+                        style: const TextStyle(
+                          fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: LinearProgressIndicator(
+                              value: progress,
+                              backgroundColor: Colors.grey[300],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${displayedSegmentIdx + 1}/${session.totalSegments}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
-                  if (scannedList.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Participants: ${scannedList.join(", ")}',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey[600],
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ],
-              ),
+                ),
+                const SizedBox(width: 12),
+                // Stop button
+                IconButton(
+                  onPressed: _terminateKeyExchange,
+                  icon: const Icon(Icons.stop_circle),
+                  iconSize: 40,
+                  color: session.currentSegmentIndex >= session.totalSegments
+                      ? Colors.green
+                      : Colors.orange,
+                  tooltip: 'Terminer',
+                ),
+              ],
             ),
-          const SizedBox(height: 16),
+          ),
+        ),
 
-          // QR Code avec indicateur de segment
-          Expanded(
+        // QR Code - takes all remaining space
+        Expanded(
+          child: Container(
+            color: Colors.white,
             child: Center(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Badge du numéro de segment (mode torrent)
-                    if (_torrentModeEnabled)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: allScanned ? Colors.green : Colors.blue,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '${displayedSegmentIdx + 1}/${session.totalSegments}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Badge du numéro de segment
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: allScanned ? Colors.green : Colors.blue,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '${displayedSegmentIdx + 1}/${session.totalSegments}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
+                            ),
                           ),
-                        ),
+                          // QR Code
+                          Expanded(
+                            child: QrImageView(
+                              data: _currentQrData!.toQrString(),
+                              version: QrVersions.auto,
+                              errorCorrectionLevel: QrErrorCorrectLevel.M,
+                              backgroundColor: Colors.white,
+                              eyeStyle: const QrEyeStyle(
+                                eyeShape: QrEyeShape.square,
+                                color: Colors.black,
+                              ),
+                              dataModuleStyle: const QrDataModuleStyle(
+                                dataModuleShape: QrDataModuleShape.square,
+                                color: Colors.black,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    QrImageView(
-                      data: _currentQrData!.toQrString(),
-                      version: QrVersions.auto,
-                      size: 280,
-                      errorCorrectionLevel: QrErrorCorrectLevel.L,
-                    ),
-                  ],
+                    );
+                  },
                 ),
               ),
             ),
           ),
+        ),
 
-          const SizedBox(height: 16),
-
-          // ID de session pour les participants
-          if (firestoreSession != null)
-            Text(
-              'Session: ${firestoreSession.id.substring(0, 20)}...',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.grey,
-              ),
-            ),
-          const SizedBox(height: 8),
-
-          // Instructions
-          Text(
-            _torrentModeEnabled
-                ? '🔄 Mode Torrent: rotation automatique tous les ${_torrentRotationInterval.inMilliseconds}ms\nLe QR affiche les segments non-complets'
-                : 'Faites scanner ce QR code par les autres appareils\nLe QR change automatiquement quand tous ont scanné',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 12),
-          ),
-          const SizedBox(height: 16),
-
-          // Bouton Terminer (toujours visible)
-          ElevatedButton.icon(
-            onPressed: _terminateKeyExchange,
-            icon: const Icon(Icons.stop),
-            label: Text(
-              session.currentSegmentIndex >= session.totalSegments
-                  ? 'Terminer l\'échange'
-                  : 'Terminer maintenant (${session.currentSegmentIndex}/${session.totalSegments} segments)',
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: session.currentSegmentIndex >= session.totalSegments
-                  ? Colors.green
-                  : Colors.orange,
+        // Bottom info bar
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          color: Theme.of(context).primaryColor.withAlpha(25),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_errorMessage != null) ...[
+                  Text(
+                    _errorMessage!,
+                    style: const TextStyle(color: Colors.red, fontSize: 11),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                ],
+                Text(
+                  '🔄 ${_torrentRotationInterval.inSeconds}s/code',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 11, color: Colors.grey[700]),
+                ),
+              ],
             ),
           ),
-
-          if (_errorMessage != null) ...[
-            const SizedBox(height: 16),
-            Text(
-              _errorMessage!,
-              style: const TextStyle(color: Colors.red),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -976,10 +1182,11 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     }
 
     try {
-      // Marquer la session comme terminée dans Firestore
-      await _syncService.completeSession(_firestoreSession!.id);
+      // Ne PAS marquer comme terminée ici - on le fera dans _finalizeExchange
+      // après avoir créé la conversation et défini le conversationId
+      // await _syncService.completeSession(_firestoreSession!.id);
 
-      // Finaliser l'échange
+      // Finaliser l'échange (créera la conversation et marquera comme terminée)
       await _finalizeExchange();
     } catch (e) {
       debugPrint('ERROR in _terminateKeyExchange: $e');
@@ -1033,7 +1240,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
                 Text(
                   isCompleted
                       ? 'Échange terminé! Redirection...'
-                      : 'En attente du prochain segment...',
+                      : 'Scanning en cours...',
                   style: TextStyle(
                     color: isCompleted ? Colors.green[800] : Colors.blue[800],
                     fontWeight: FontWeight.bold,
@@ -1045,13 +1252,39 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
         Expanded(
           child: _isScanning
-              ? MobileScanner(
-                  onDetect: (capture) {
-                    final barcodes = capture.barcodes;
-                    if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
-                      _onQrScanned(barcodes.first.rawValue!);
-                    }
-                  },
+              ? Stack(
+                  children: [
+                    MobileScanner(
+                      onDetect: (capture) {
+                        final barcodes = capture.barcodes;
+                        if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
+                          _onQrScanned(barcodes.first.rawValue!);
+                        }
+                      },
+                    ),
+                    // Overlay d'aide au scan
+                    Positioned(
+                      top: 16,
+                      left: 16,
+                      right: 16,
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withAlpha(179),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '📷 Positionnez le QR code dans le cadre\n'
+                          'Le QR change toutes les secondes',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 )
               : Center(
                   child: Column(
