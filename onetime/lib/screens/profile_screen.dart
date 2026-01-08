@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/auth_service.dart';
 import '../services/key_storage_service.dart';
 import '../services/message_storage_service.dart';
 import '../services/conversation_pseudo_service.dart';
 import '../services/unread_message_service.dart';
-import '../services/pseudo_storage_service.dart';
-import 'login_screen.dart';
+import '../l10n/app_localizations.dart';
 
-/// Écran de profil utilisateur avec option de déconnexion.
+/// Profile screen with settings
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  final Function(ThemeMode)? onThemeModeChanged;
+  
+  const ProfileScreen({super.key, this.onThemeModeChanged});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -23,92 +24,77 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final MessageStorageService _messageStorage = MessageStorageService();
   final ConversationPseudoService _convPseudoService = ConversationPseudoService();
   final UnreadMessageService _unreadService = UnreadMessageService();
+  
   bool _isLoading = false;
+  ThemeMode _themeMode = ThemeMode.system;
+  int _totalKeyBytes = 0;
+  int _totalMessageBytes = 0;
 
-  Future<void> _signOut() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Déconnexion'),
-        content: const Text('Voulez-vous vraiment vous déconnecter ?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Déconnecter'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      setState(() => _isLoading = true);
-      try {
-        await _authService.signOut();
-        if (mounted) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const LoginScreen()),
-            (route) => false,
-          );
-        }
-      } finally {
-        if (mounted) {
-          setState(() => _isLoading = false);
-        }
-      }
-    }
+  @override
+  void initState() {
+    super.initState();
+    _loadThemeMode();
+    _calculateStorageUsage();
   }
 
-  Future<void> _deleteAccount() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Supprimer le compte'),
-        content: const Text(
-          'Cette action est irréversible. Toutes vos données seront supprimées.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Supprimer'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _loadThemeMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final themeModeString = prefs.getString('theme_mode') ?? 'system';
+    setState(() {
+      _themeMode = ThemeMode.values.firstWhere(
+        (mode) => mode.name == themeModeString,
+        orElse: () => ThemeMode.system,
+      );
+    });
+  }
 
-    if (confirm == true) {
-      setState(() => _isLoading = true);
-      try {
-        await _authService.deleteAccount();
-        if (mounted) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const LoginScreen()),
-            (route) => false,
-          );
+  Future<void> _saveThemeMode(ThemeMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('theme_mode', mode.name);
+    setState(() {
+      _themeMode = mode;
+    });
+    widget.onThemeModeChanged?.call(mode);
+  }
+
+  Future<void> _calculateStorageUsage() async {
+    try {
+      final conversationIds = await _keyStorage.listConversationsWithKeys();
+      int keyBytes = 0;
+      int messageBytes = 0;
+      
+      for (final convId in conversationIds) {
+        // Calculate key size
+        final key = await _keyStorage.getKey(convId);
+        if (key != null) {
+          keyBytes += key.lengthInBytes;
         }
-      } on AuthException catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.message)),
-          );
-        }
-      } finally {
-        if (mounted) {
-          setState(() => _isLoading = false);
+        
+        // Calculate message size (approximate)
+        final messages = await _messageStorage.getConversationMessages(convId);
+        for (final msg in messages) {
+          if (msg.textContent != null) {
+            messageBytes += msg.textContent!.length;
+          }
+          if (msg.binaryContent != null) {
+            messageBytes += msg.binaryContent!.lengthInBytes;
+          }
         }
       }
+      
+      if (mounted) {
+        setState(() {
+          _totalKeyBytes = keyBytes;
+          _totalMessageBytes = messageBytes;
+        });
+      }
+    } catch (e) {
+      // Ignore errors
     }
   }
 
   Future<void> _nukeAllData() async {
+    final l10n = AppLocalizations.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -116,23 +102,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Icon(Icons.warning, color: Colors.red[700]),
             const SizedBox(width: 8),
-            const Text('NUKE - Tout effacer'),
+            Text(l10n.get('profile_nuke_title')),
           ],
         ),
-        content: const Text(
-          '⚠️ ATTENTION ⚠️\n\n'
-          'Ceci va EFFACER TOUTES vos données locales:\n'
-          '• Toutes les clés de chiffrement\n'
-          '• Tous les messages déchiffrés\n'
-          '• Tous les pseudos\n'
-          '• Tout l\'historique de conversation\n\n'
-          'Cette action est IRRÉVERSIBLE et immédiate.\n\n'
-          'Êtes-vous ABSOLUMENT SÛR ?',
-        ),
+        content: Text(l10n.get('profile_nuke_confirm')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
+            child: Text(l10n.commonCancel),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
@@ -140,7 +117,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            child: const Text('💣 NUKE TOUT'),
+            child: const Text('💣 NUKE'),
           ),
         ],
       ),
@@ -159,18 +136,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
           await _unreadService.deleteUnreadCount(convId);
         }
         
-        // Delete global pseudos
+        // Delete global data
         await _convPseudoService.deleteAllPseudos();
         await _unreadService.deleteAllUnreadCounts();
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('💥 Toutes les données locales ont été effacées'),
+            SnackBar(
+              content: Text(l10n.get('profile_nuke_success')),
               backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
+              duration: const Duration(seconds: 3),
             ),
           );
+          
+          // Recalculate storage
+          await _calculateStorageUsage();
           
           // Return to home
           Navigator.pop(context);
@@ -178,7 +158,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erreur: $e')),
+            SnackBar(content: Text('${l10n.get('error_generic')}: $e')),
           );
         }
       } finally {
@@ -189,173 +169,148 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  void _copyId() {
-    final id = _authService.currentUserId ?? '';
-    Clipboard.setData(ClipboardData(text: id));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('ID copié dans le presse-papier')),
-    );
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final userId = _authService.currentUserId;
-    final shortId = userId != null && userId.length > 8 
-        ? userId.substring(0, 8) 
-        : userId ?? '';
-    final initials = userId != null && userId.length >= 2
-        ? userId.substring(0, 2).toUpperCase()
-        : '?';
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profil'),
+        title: Text(l10n.get('profile_title')),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : userId == null
-              ? const Center(child: Text('Non connecté'))
+              ? Center(child: Text(l10n.get('auth_not_connected')))
               : SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Avatar avec initiales
-                      CircleAvatar(
-                        radius: 50,
-                        backgroundColor: Theme.of(context).primaryColor,
-                        child: Text(
-                          initials,
-                          style: const TextStyle(
-                            fontSize: 32,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // ID utilisateur
-                      Text(
-                        shortId,
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Bouton copier
-                      GestureDetector(
-                        onTap: _copyId,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).primaryColor.withAlpha(25),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
+                      // Dark mode selector
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(
-                                Icons.fingerprint,
-                                size: 16,
-                                color: Theme.of(context).primaryColor,
+                              Row(
+                                children: [
+                                  Icon(Icons.brightness_6, size: 20, color: Theme.of(context).colorScheme.primary),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    l10n.get('settings_theme'),
+                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Copier l\'ID',
-                                style: TextStyle(
-                                  color: Theme.of(context).primaryColor,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Icon(
-                                Icons.copy,
-                                size: 14,
-                                color: Theme.of(context).primaryColor,
+                              const SizedBox(height: 12),
+                              SegmentedButton<ThemeMode>(
+                                segments: [
+                                  ButtonSegment(
+                                    value: ThemeMode.light,
+                                    label: Text(l10n.get('settings_theme_light')),
+                                    icon: const Icon(Icons.light_mode, size: 18),
+                                  ),
+                                  ButtonSegment(
+                                    value: ThemeMode.dark,
+                                    label: Text(l10n.get('settings_theme_dark')),
+                                    icon: const Icon(Icons.dark_mode, size: 18),
+                                  ),
+                                  ButtonSegment(
+                                    value: ThemeMode.system,
+                                    label: Text(l10n.get('settings_theme_system')),
+                                    icon: const Icon(Icons.brightness_auto, size: 18),
+                                  ),
+                                ],
+                                selected: {_themeMode},
+                                onSelectionChanged: (Set<ThemeMode> newSelection) {
+                                  _saveThemeMode(newSelection.first);
+                                },
                               ),
                             ],
                           ),
                         ),
                       ),
-                      const SizedBox(height: 32),
-
-                      // Informations
-                      _InfoCard(
-                        title: 'Informations du compte',
-                        children: [
-                          _InfoRow(
-                            icon: Icons.fingerprint,
-                            label: 'ID utilisateur',
-                            value: shortId,
-                          ),
-                        ],
-                      ),
                       const SizedBox(height: 16),
 
-                      // Explication sécurité
-                      _InfoCard(
-                        title: 'Sécurité',
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Icon(Icons.shield, size: 20, color: Colors.green[600]),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    'Votre identifiant unique est généré automatiquement. '
-                                    'Les clés de chiffrement sont échangées en personne via QR code. '
-                                    'Tous les messages sont chiffrés avec le One-Time Pad.',
-                                    style: TextStyle(
-                                      color: Colors.grey[600],
-                                      fontSize: 13,
+                      // Storage usage
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.storage, size: 20, color: Theme.of(context).colorScheme.primary),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    l10n.get('settings_storage'),
+                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              _StorageRow(
+                                icon: Icons.key,
+                                label: l10n.get('settings_storage_keys'),
+                                value: _formatBytes(_totalKeyBytes),
+                              ),
+                              const SizedBox(height: 8),
+                              _StorageRow(
+                                icon: Icons.message,
+                                label: l10n.get('settings_storage_messages'),
+                                value: _formatBytes(_totalMessageBytes),
+                              ),
+                              const Divider(height: 20),
+                              _StorageRow(
+                                icon: Icons.folder,
+                                label: l10n.get('settings_storage_total'),
+                                value: _formatBytes(_totalKeyBytes + _totalMessageBytes),
+                                bold: true,
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                       const SizedBox(height: 24),
 
-                      // Actions
+                      // Nuke section
+                      Text(
+                        l10n.get('settings_danger_zone'),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: Colors.red[700],
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        l10n.get('settings_nuke_explanation'),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton.icon(
-                          onPressed: _signOut,
-                          icon: const Icon(Icons.logout),
-                          label: const Text('Se déconnecter'),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
                           onPressed: _nukeAllData,
                           icon: const Icon(Icons.delete_sweep),
-                          label: const Text('💣 NUKE - Effacer toutes les données locales'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange,
-                            foregroundColor: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: TextButton.icon(
-                          onPressed: _deleteAccount,
-                          icon: const Icon(Icons.delete_forever),
-                          label: const Text('Supprimer le compte'),
-                          style: TextButton.styleFrom(
+                          label: const Text('💣 NUKE'),
+                          style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.red,
+                            side: const BorderSide(color: Colors.red),
                           ),
                         ),
                       ),
@@ -364,72 +319,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
     );
   }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
-  }
 }
 
-class _InfoCard extends StatelessWidget {
-  final String title;
-  final List<Widget> children;
-
-  const _InfoCard({required this.title, required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 12),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
+class _StorageRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
+  final bool bold;
 
-  const _InfoRow({
+  const _StorageRow({
     required this.icon,
     required this.label,
     required this.value,
+    this.bold = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: Colors.grey[600]),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(color: Colors.grey[600]),
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
             ),
           ),
-          Text(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.w500),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+            color: Theme.of(context).colorScheme.primary,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

@@ -17,6 +17,7 @@ import '../services/message_storage_service.dart';
 import '../services/conversation_pseudo_service.dart';
 import '../services/unread_message_service.dart';
 import '../services/pseudo_storage_service.dart';
+import '../l10n/app_localizations.dart';
 import 'key_exchange_screen.dart';
 import 'media_send_screen.dart';
 
@@ -257,6 +258,14 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
             ),
           );
 
+          // Check if this is a pseudo exchange message and notify
+          if (PseudoExchangeMessage.isPseudoExchange(decrypted)) {
+            final pseudoMsg = PseudoExchangeMessage.fromJson(decrypted);
+            if (pseudoMsg != null && message.senderId != _currentUserId) {
+              _onPseudoReceived(pseudoMsg.oderId, pseudoMsg.pseudo);
+            }
+          }
+
           // Mark key as used
           _onKeyUsed();
 
@@ -266,9 +275,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
             messageId: message.id,
             allParticipants: widget.conversation.peerIds,
           );
-
-          // Increment unread count (will be cleared when conversation is opened)
-          await _unreadService.incrementUnread(widget.conversation.id);
 
           debugPrint('[ConversationDetail] Text message processed and saved locally');
         } catch (e) {
@@ -311,9 +317,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
             allParticipants: widget.conversation.peerIds,
           );
 
-          // Increment unread count (will be cleared when conversation is opened)
-          await _unreadService.incrementUnread(widget.conversation.id);
-
           debugPrint('[ConversationDetail] Binary message processed and saved locally');
         } catch (e) {
           debugPrint('[ConversationDetail] Error processing binary message: $e');
@@ -334,28 +337,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       
       for (final msg in firestoreMessages) {
         if (msg.senderId != _currentUserId && _sharedKey != null) {
-          // Check if it's a pseudo message first
-          if (msg.contentType == MessageContentType.text && msg.isEncrypted) {
-            try {
-              final cryptoService = CryptoService(localPeerId: _currentUserId);
-              final decrypted = cryptoService.decrypt(
-                encryptedMessage: msg,
-                sharedKey: _sharedKey!,
-                markAsUsed: false, // Don't mark yet, just peek
-              );
-              
-              // Check if it's a pseudo exchange message
-              if (PseudoExchangeMessage.isPseudoExchange(decrypted)) {
-                final pseudoMsg = PseudoExchangeMessage.fromJson(decrypted);
-                if (pseudoMsg != null) {
-                  _onPseudoReceived(pseudoMsg.oderId, pseudoMsg.pseudo);
-                }
-              }
-            } catch (e) {
-              debugPrint('[ConversationDetail] Error peeking at message for pseudo: $e');
-            }
-          }
-          
           // Process the message (AWAIT it now)
           try {
             await _processNewMessage(msg);
@@ -454,7 +435,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
       final pseudoMessage = PseudoExchangeMessage(
         oderId: _currentUserId,
-        pseudo: '😊 $myPseudo',
+        pseudo: myPseudo, // No smiley in stored message
       );
 
       // Chiffrer le message pseudo
@@ -1003,7 +984,8 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
             child: StreamBuilder<List<_DisplayMessage>>(
               stream: _getCombinedMessagesStream(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
+                // Show loading only if no data yet
+                if (snapshot.data == null) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
@@ -1115,7 +1097,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
                       child: TextField(
                         controller: _messageController,
                         decoration: InputDecoration(
-                          hintText: 'Message chiffré...',
+                          hintText: AppLocalizations.of(context).get('conversation_type_message'),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(24),
                           ),
@@ -1964,43 +1946,57 @@ class _MessageBubbleNewState extends State<_MessageBubbleNew> {
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: widget.isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
-        decoration: BoxDecoration(
-          color: widget.isMine
-              ? Theme.of(context).primaryColor
-              : Colors.grey[200],
-          borderRadius: BorderRadius.circular(16).copyWith(
-            bottomRight: widget.isMine ? const Radius.circular(4) : null,
-            bottomLeft: !widget.isMine ? const Radius.circular(4) : null,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!widget.isMine && widget.senderName != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  widget.senderName!,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey[700],
-                  ),
-                ),
-              ),
-            _buildContent(context),
-            const SizedBox(height: 4),
-            _buildFooter(context),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      child: Row(
+        mainAxisAlignment: widget.isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // Time and read status on left for SENT messages
+          if (widget.isMine) ...[
+            _buildTimeAndStatus(context),
+            const SizedBox(width: 8),
           ],
-        ),
+          // Message bubble
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.65,
+            ),
+            decoration: BoxDecoration(
+              color: widget.isMine
+                  ? Theme.of(context).colorScheme.primaryContainer
+                  : Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(16).copyWith(
+                bottomRight: widget.isMine ? const Radius.circular(4) : null,
+                bottomLeft: !widget.isMine ? const Radius.circular(4) : null,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!widget.isMine && widget.senderName != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      widget.senderName!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                _buildContent(context),
+              ],
+            ),
+          ),
+          // Time and read status on right for RECEIVED messages
+          if (!widget.isMine) ...[
+            const SizedBox(width: 8),
+            _buildTimeAndStatus(context),
+          ],
+        ],
       ),
     );
   }
@@ -2021,14 +2017,18 @@ class _MessageBubbleNewState extends State<_MessageBubbleNew> {
                   Icon(
                     Icons.person_add,
                     size: 20,
-                    color: widget.isMine ? Colors.white70 : Colors.green,
+                    color: widget.isMine 
+                        ? Theme.of(context).colorScheme.onPrimaryContainer.withAlpha(179)
+                        : Colors.green,
                   ),
                   const SizedBox(width: 8),
                   Flexible(
                     child: Text(
-                      pseudoMsg.pseudo,
+                      '😊 ${pseudoMsg.pseudo}', // Add smiley only in display
                       style: TextStyle(
-                        color: widget.isMine ? Colors.white : Colors.black87,
+                        color: widget.isMine 
+                            ? Theme.of(context).colorScheme.onPrimaryContainer
+                            : Theme.of(context).colorScheme.onSurface,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -2042,7 +2042,9 @@ class _MessageBubbleNewState extends State<_MessageBubbleNew> {
           return Text(
             widget.message.textContent ?? '',
             style: TextStyle(
-              color: widget.isMine ? Colors.white : Colors.black87,
+              color: widget.isMine 
+                  ? Theme.of(context).colorScheme.onPrimaryContainer
+                  : Theme.of(context).colorScheme.onSurface,
             ),
           );
         case MessageContentType.image:
@@ -2061,7 +2063,9 @@ class _MessageBubbleNewState extends State<_MessageBubbleNew> {
             child: CircularProgressIndicator(
               strokeWidth: 2,
               valueColor: AlwaysStoppedAnimation(
-                widget.isMine ? Colors.white : Colors.grey[600],
+                widget.isMine 
+                    ? Theme.of(context).colorScheme.onPrimaryContainer
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
           ),
@@ -2069,7 +2073,9 @@ class _MessageBubbleNewState extends State<_MessageBubbleNew> {
           Text(
             'Déchiffrement...',
             style: TextStyle(
-              color: widget.isMine ? Colors.white70 : Colors.grey[600],
+              color: widget.isMine 
+                  ? Theme.of(context).colorScheme.onPrimaryContainer.withAlpha(179)
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
               fontStyle: FontStyle.italic,
             ),
           ),
@@ -2085,13 +2091,17 @@ class _MessageBubbleNewState extends State<_MessageBubbleNew> {
         children: [
           Icon(
             Icons.broken_image,
-            color: widget.isMine ? Colors.white70 : Colors.grey[600],
+            color: widget.isMine 
+                ? Theme.of(context).colorScheme.onPrimaryContainer.withAlpha(179)
+                : Theme.of(context).colorScheme.onSurfaceVariant,
           ),
           const SizedBox(width: 8),
           Text(
             'Image non disponible',
             style: TextStyle(
-              color: widget.isMine ? Colors.white70 : Colors.grey[600],
+              color: widget.isMine 
+                  ? Theme.of(context).colorScheme.onPrimaryContainer.withAlpha(179)
+                  : Theme.of(context).colorScheme.onSurfaceVariant,
               fontStyle: FontStyle.italic,
             ),
           ),
@@ -2147,45 +2157,80 @@ class _MessageBubbleNewState extends State<_MessageBubbleNew> {
     );
   }
 
-  Widget _buildFooter(BuildContext context) {
-    return Row(
+  Widget _buildTimeAndStatus(BuildContext context) {
+    // Get read status from Firestore message if available
+    int totalParticipants = 0;
+    int readCount = 0;
+    
+    if (widget.message.firestoreMessage != null) {
+      final msg = widget.message.firestoreMessage!;
+      totalParticipants = (msg.readBy.length + msg.transferredBy.length);
+      readCount = msg.readBy.length;
+    }
+    
+    String readStatus = '';
+    if (widget.isMine && totalParticipants > 0) {
+      if (readCount == totalParticipants) {
+        readStatus = 'lu';
+      } else if (readCount > 0) {
+        readStatus = 'lu $readCount/$totalParticipants';
+      }
+    }
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           _formatTime(widget.message.createdAt),
           style: TextStyle(
             fontSize: 10,
-            color: widget.isMine ? Colors.white70 : Colors.grey[600],
+            color: Colors.grey[600],
           ),
         ),
-        const SizedBox(width: 4),
-        Icon(
-          Icons.lock,
-          size: 12,
-          color: widget.isMine ? Colors.white70 : Colors.grey[600],
-        ),
+        if (readStatus.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text(
+            readStatus,
+            style: TextStyle(
+              fontSize: 9,
+              color: Colors.grey[500],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildFooter(BuildContext context) {
+    final iconColor = widget.isMine 
+        ? Theme.of(context).colorScheme.onPrimaryContainer.withAlpha(179)
+        : Theme.of(context).colorScheme.onSurfaceVariant;
+        
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
         if (widget.message.contentType == MessageContentType.image) ...[
-          const SizedBox(width: 4),
           Icon(
             Icons.image,
             size: 12,
-            color: widget.isMine ? Colors.white70 : Colors.grey[600],
+            color: iconColor,
           ),
+          const SizedBox(width: 4),
         ],
         if (widget.message.contentType == MessageContentType.file) ...[
-          const SizedBox(width: 4),
           Icon(
             Icons.attach_file,
             size: 12,
-            color: widget.isMine ? Colors.white70 : Colors.grey[600],
+            color: iconColor,
           ),
+          const SizedBox(width: 4),
         ],
         if (widget.message.isCompressed) ...[
-          const SizedBox(width: 4),
           Icon(
             Icons.compress,
             size: 12,
-            color: widget.isMine ? Colors.white70 : Colors.grey[600],
+            color: iconColor,
           ),
         ],
         if (widget.message.deleteAfterRead) ...[
@@ -2193,7 +2238,7 @@ class _MessageBubbleNewState extends State<_MessageBubbleNew> {
           Icon(
             Icons.timer,
             size: 12,
-            color: widget.isMine ? Colors.white70 : Colors.grey[600],
+            color: iconColor,
           ),
         ],
       ],

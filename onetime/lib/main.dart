@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'services/auth_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
+import 'l10n/app_localizations.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -11,14 +14,55 @@ void main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  ThemeMode _themeMode = ThemeMode.system;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThemeMode();
+  }
+
+  Future<void> _loadThemeMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final themeModeString = prefs.getString('theme_mode') ?? 'system';
+    setState(() {
+      _themeMode = ThemeMode.values.firstWhere(
+        (mode) => mode.name == themeModeString,
+        orElse: () => ThemeMode.system,
+      );
+    });
+  }
+
+  void _updateThemeMode(ThemeMode mode) {
+    setState(() {
+      _themeMode = mode;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'OneTime Pad',
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('en'),
+        Locale('fr'),
+      ],
+      themeMode: _themeMode,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.deepPurple,
@@ -33,14 +77,16 @@ class MyApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const AuthWrapper(),
+      home: AuthWrapper(onThemeModeChanged: _updateThemeMode),
     );
   }
 }
 
 /// Wrapper qui redirige selon l'état d'authentification
 class AuthWrapper extends StatefulWidget {
-  const AuthWrapper({super.key});
+  final Function(ThemeMode)? onThemeModeChanged;
+  
+  const AuthWrapper({super.key, this.onThemeModeChanged});
 
   @override
   State<AuthWrapper> createState() => _AuthWrapperState();
@@ -76,7 +122,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
 
     if (_isSignedIn) {
-      return const HomeScreen();
+      return HomeScreen(onThemeModeChanged: widget.onThemeModeChanged);
     }
 
     return const LoginScreen();

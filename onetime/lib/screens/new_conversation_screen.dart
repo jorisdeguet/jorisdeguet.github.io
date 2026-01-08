@@ -21,7 +21,6 @@ class NewConversationScreen extends StatefulWidget {
 
 class _NewConversationScreenState extends State<NewConversationScreen> {
   final AuthService _authService = AuthService();
-  final TextEditingController _nameController = TextEditingController();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   String? _conversationId;
@@ -29,9 +28,9 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
   String? _errorMessage;
 
   @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _createConversation();
   }
 
   String get _currentUserId => _authService.currentUserId ?? '';
@@ -55,7 +54,7 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
       final conversation = await conversationService.createConversation(
         peerIds: [], // Vide pour l'instant, les autres rejoindront
         totalKeyBits: 0, // Pas de clé pour l'instant
-        name: _nameController.text.isEmpty ? null : _nameController.text,
+        name: null,
       );
 
       setState(() {
@@ -123,7 +122,7 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
           MaterialPageRoute(
             builder: (_) => KeyExchangeScreen(
               peerIds: peerIds,
-              conversationName: _nameController.text.isEmpty ? null : _nameController.text,
+              conversationName: null,
               existingConversationId: _conversationId,
             ),
           ),
@@ -138,37 +137,68 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_conversationId == null ? 'Nouvelle conversation' : 'Invitation'),
+        title: const Text('Nouvelle conversation'),
+        actions: [
+          if (!_isCreating)
+            StreamBuilder<List<Map<String, String>>>(
+              stream: _watchParticipants(),
+              builder: (context, snapshot) {
+                final participants = snapshot.data ?? [];
+                final canFinalize = participants.length >= 2;
+
+                return IconButton(
+                  onPressed: canFinalize ? _finalizeParticipants : null,
+                  icon: const Icon(Icons.check),
+                  tooltip: canFinalize ? 'Valider les participants' : 'En attente de participants',
+                );
+              },
+            ),
+        ],
       ),
-      body: _conversationId == null
-          ? _buildCreationForm()
+      body: _isCreating
+          ? const Center(child: CircularProgressIndicator())
           : _buildQrCodeView(),
     );
   }
 
-  Widget _buildCreationForm() {
+  Widget _buildQrCodeView() {
+    if (_conversationId == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const SizedBox(height: 16),
+            Text(_errorMessage ?? 'Erreur de création'),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Retour'),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Instructions
+          // Instructions en haut (sans icône)
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  const Icon(Icons.group_add, size: 48, color: Colors.deepPurple),
-                  const SizedBox(height: 16),
                   Text(
-                    'Créer une conversation',
+                    'Réunissez les participants',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Réunissez les participants physiquement.\n'
-                    'Un QR code sera généré pour qu\'ils rejoignent.',
+                    'Les participants scannent ce QR code pour rejoindre la conversation',
                     textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14),
                   ),
                 ],
               ),
@@ -176,55 +206,7 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
           ),
           const SizedBox(height: 24),
 
-          // Nom de la conversation (optionnel)
-          TextField(
-            controller: _nameController,
-            decoration: InputDecoration(
-              labelText: 'Nom de la conversation (optionnel)',
-              hintText: 'Ex: Projet secret',
-              prefixIcon: const Icon(Icons.label_outline),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Bouton créer
-          ElevatedButton.icon(
-            onPressed: _isCreating ? null : _createConversation,
-            icon: _isCreating
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.qr_code),
-            label: Text(_isCreating ? 'Création...' : 'Générer le QR code'),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.all(16),
-            ),
-          ),
-
-          if (_errorMessage != null) ...[
-            const SizedBox(height: 16),
-            Text(
-              _errorMessage!,
-              style: const TextStyle(color: Colors.red),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildQrCodeView() {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          // QR Code
+          // QR Code au centre
           Expanded(
             child: Center(
               child: Container(
@@ -249,17 +231,9 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 16),
-
-          // Instructions
-          const Text(
-            'Les participants scannent ce QR code\npour rejoindre la conversation',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14),
-          ),
           const SizedBox(height: 24),
 
-          // Liste des participants
+          // Liste des participants (badges en ligne)
           StreamBuilder<List<Map<String, String>>>(
             stream: _watchParticipants(),
             builder: (context, snapshot) {
@@ -293,48 +267,17 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
                           runSpacing: 8,
                           children: participants.map((p) {
                             final isMe = p['id'] == _currentUserId;
+                            final shortId = p['id']!.length >= 5 
+                                ? p['id']!.substring(0, 5) 
+                                : p['id']!;
                             return Chip(
-                              avatar: CircleAvatar(
-                                backgroundColor: isMe ? Colors.green : Colors.grey[300],
-                                child: Text(
-                                  p['name']![0].toUpperCase(),
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isMe ? Colors.white : Colors.black,
-                                  ),
-                                ),
-                              ),
-                              label: Text(p['name']!),
-                              backgroundColor: isMe ? Colors.green[50] : null,
+                              label: Text(shortId),
+                              backgroundColor: isMe ? Colors.green[100] : null,
                             );
                           }).toList(),
                         ),
                     ],
                   ),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 16),
-
-          // Bouton pour finaliser
-          StreamBuilder<List<Map<String, String>>>(
-            stream: _watchParticipants(),
-            builder: (context, snapshot) {
-              final participants = snapshot.data ?? [];
-              final canFinalize = participants.length >= 2;
-
-              return ElevatedButton.icon(
-                onPressed: canFinalize ? _finalizeParticipants : null,
-                icon: const Icon(Icons.check),
-                label: Text(
-                  canFinalize
-                      ? 'Valider les participants (${participants.length})'
-                      : 'En attente de participants...',
-                ),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.all(16),
-                  backgroundColor: canFinalize ? Colors.green : null,
                 ),
               );
             },

@@ -140,7 +140,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
       final pseudoMessage = PseudoExchangeMessage(
         oderId: _currentUserId,
-        pseudo: '😊 $myPseudo',
+        pseudo: myPseudo, // No smiley in stored message
       );
 
       final cryptoService = CryptoService(localPeerId: _currentUserId);

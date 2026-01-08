@@ -15,7 +15,9 @@ import 'join_conversation_screen.dart';
 
 /// Écran d'accueil après connexion.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final Function(ThemeMode)? onThemeModeChanged;
+  
+  const HomeScreen({super.key, this.onThemeModeChanged});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -90,7 +92,7 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              MaterialPageRoute(builder: (_) => ProfileScreen(onThemeModeChanged: widget.onThemeModeChanged)),
             ),
             icon: const Icon(Icons.account_circle_outlined),
             tooltip: 'Profil',
@@ -319,6 +321,18 @@ class _ConversationTileState extends State<_ConversationTile> {
       
       if (lastMsg.contentType == MessageContentType.text) {
         text = lastMsg.textContent ?? '';
+        
+        // Check if it's a pseudo exchange message - don't show it
+        if (PseudoExchangeMessage.isPseudoExchange(text)) {
+          // Don't show pseudo messages as last message
+          if (mounted) {
+            setState(() {
+              _lastMessageText = '';
+            });
+          }
+          return;
+        }
+        
         // Limiter à 50 caractères
         if (text.length > 50) {
           text = '${text.substring(0, 47)}...';
@@ -338,7 +352,10 @@ class _ConversationTileState extends State<_ConversationTile> {
   }
 
   Future<void> _loadUnreadCount() async {
-    final count = await _unreadService.getUnreadCount(widget.conversation.id);
+    final count = await _unreadService.getUnreadCountExcludingUser(
+      widget.conversation.id,
+      widget.currentUserId,
+    );
     if (mounted) {
       setState(() {
         _unreadCount = count;
