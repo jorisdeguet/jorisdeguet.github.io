@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/auth_service.dart';
+import '../services/key_storage_service.dart';
+import '../services/message_storage_service.dart';
+import '../services/conversation_pseudo_service.dart';
+import '../services/unread_message_service.dart';
+import '../services/pseudo_storage_service.dart';
 import 'login_screen.dart';
 
 /// Écran de profil utilisateur avec option de déconnexion.
@@ -14,6 +19,10 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
+  final KeyStorageService _keyStorage = KeyStorageService();
+  final MessageStorageService _messageStorage = MessageStorageService();
+  final ConversationPseudoService _convPseudoService = ConversationPseudoService();
+  final UnreadMessageService _unreadService = UnreadMessageService();
   bool _isLoading = false;
 
   Future<void> _signOut() async {
@@ -89,6 +98,87 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(e.message)),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
+      }
+    }
+  }
+
+  Future<void> _nukeAllData() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning, color: Colors.red[700]),
+            const SizedBox(width: 8),
+            const Text('NUKE - Tout effacer'),
+          ],
+        ),
+        content: const Text(
+          '⚠️ ATTENTION ⚠️\n\n'
+          'Ceci va EFFACER TOUTES vos données locales:\n'
+          '• Toutes les clés de chiffrement\n'
+          '• Tous les messages déchiffrés\n'
+          '• Tous les pseudos\n'
+          '• Tout l\'historique de conversation\n\n'
+          'Cette action est IRRÉVERSIBLE et immédiate.\n\n'
+          'Êtes-vous ABSOLUMENT SÛR ?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('💣 NUKE TOUT'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() => _isLoading = true);
+      try {
+        // Delete all local storage
+        final conversationIds = await _keyStorage.listConversationsWithKeys();
+        
+        for (final convId in conversationIds) {
+          await _keyStorage.deleteKey(convId);
+          await _messageStorage.deleteConversationMessages(convId);
+          await _convPseudoService.deletePseudos(convId);
+          await _unreadService.deleteUnreadCount(convId);
+        }
+        
+        // Delete global pseudos
+        await _convPseudoService.deleteAllPseudos();
+        await _unreadService.deleteAllUnreadCounts();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('💥 Toutes les données locales ont été effacées'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          
+          // Return to home
+          Navigator.pop(context);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erreur: $e')),
           );
         }
       } finally {
@@ -242,6 +332,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           onPressed: _signOut,
                           icon: const Icon(Icons.logout),
                           label: const Text('Se déconnecter'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _nukeAllData,
+                          icon: const Icon(Icons.delete_sweep),
+                          label: const Text('💣 NUKE - Effacer toutes les données locales'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                            foregroundColor: Colors.white,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),

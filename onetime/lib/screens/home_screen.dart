@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../services/conversation_service.dart';
+import '../services/conversation_pseudo_service.dart';
+import '../services/message_storage_service.dart';
+import '../services/unread_message_service.dart';
 import '../services/pseudo_storage_service.dart';
 import '../models/conversation.dart';
+import '../models/encrypted_message.dart';
 import 'profile_screen.dart';
 import 'new_conversation_screen.dart';
 import 'conversation_detail_screen.dart';
@@ -266,33 +270,84 @@ class _ConversationTile extends StatefulWidget {
 }
 
 class _ConversationTileState extends State<_ConversationTile> {
-  final PseudoStorageService _pseudoService = PseudoStorageService();
+  final ConversationPseudoService _convPseudoService = ConversationPseudoService();
+  final MessageStorageService _messageStorage = MessageStorageService();
+  final UnreadMessageService _unreadService = UnreadMessageService();
   String _displayName = '';
+  String _lastMessageText = '';
+  int _unreadCount = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadDisplayName();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    await Future.wait([
+      _loadDisplayName(),
+      _loadLastMessage(),
+      _loadUnreadCount(),
+    ]);
   }
 
   Future<void> _loadDisplayName() async {
-    final pseudos = <String>[];
+    final pseudos = await _convPseudoService.getPseudos(widget.conversation.id);
+    final displayNames = <String>[];
     
     for (final peerId in widget.conversation.peerIds) {
-      final pseudo = await _pseudoService.getPseudo(peerId);
-      pseudos.add(pseudo ?? peerId.substring(0, 8));
+      if (peerId != widget.currentUserId) {
+        displayNames.add(pseudos[peerId] ?? peerId.substring(0, 8));
+      }
     }
     
     if (mounted) {
       setState(() {
-        _displayName = pseudos.isEmpty ? widget.conversation.displayName : pseudos.join(', ');
+        _displayName = displayNames.isEmpty 
+            ? widget.conversation.displayName 
+            : displayNames.join(', ');
+      });
+    }
+  }
+
+  Future<void> _loadLastMessage() async {
+    final messages = await _messageStorage.getConversationMessages(widget.conversation.id);
+    
+    if (messages.isNotEmpty) {
+      final lastMsg = messages.last;
+      String text;
+      
+      if (lastMsg.contentType == MessageContentType.text) {
+        text = lastMsg.textContent ?? '';
+        // Limiter à 50 caractères
+        if (text.length > 50) {
+          text = '${text.substring(0, 47)}...';
+        }
+      } else if (lastMsg.contentType == MessageContentType.image) {
+        text = '📷 Image';
+      } else {
+        text = '📎 ${lastMsg.fileName ?? "Fichier"}';
+      }
+      
+      if (mounted) {
+        setState(() {
+          _lastMessageText = text;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadUnreadCount() async {
+    final count = await _unreadService.getUnreadCount(widget.conversation.id);
+    if (mounted) {
+      setState(() {
+        _unreadCount = count;
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isLastMessageMine = widget.conversation.lastMessageSenderId == widget.currentUserId;
     final displayName = _displayName.isEmpty ? widget.conversation.displayName : _displayName;
     
     return ListTile(
@@ -350,18 +405,35 @@ class _ConversationTileState extends State<_ConversationTile> {
       ),
       subtitle: Row(
         children: [
-          if (isLastMessageMine)
-            const Padding(
-              padding: EdgeInsets.only(right: 4),
-              child: Icon(Icons.done_all, size: 16, color: Colors.grey),
-            ),
           Expanded(
             child: Text(
-              widget.conversation.lastMessageDisplay,
+              _lastMessageText.isEmpty ? 'Aucun message' : _lastMessageText,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: Colors.grey[600]),
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontWeight: _unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
+              ),
             ),
           ),
+          if (_unreadCount > 0) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                _unreadCount.toString(),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(width: 4),
           Text(
             _formatTime(widget.conversation.lastMessageAt),
             style: TextStyle(

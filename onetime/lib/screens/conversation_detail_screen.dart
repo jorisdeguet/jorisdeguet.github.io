@@ -14,6 +14,8 @@ import '../services/crypto_service.dart';
 import '../services/key_storage_service.dart';
 import '../services/media_service.dart';
 import '../services/message_storage_service.dart';
+import '../services/conversation_pseudo_service.dart';
+import '../services/unread_message_service.dart';
 import '../services/pseudo_storage_service.dart';
 import 'key_exchange_screen.dart';
 import 'media_send_screen.dart';
@@ -106,8 +108,9 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   final AuthService _authService = AuthService();
   final KeyStorageService _keyStorageService = KeyStorageService();
   final MediaService _mediaService = MediaService();
-  final PseudoStorageService _pseudoService = PseudoStorageService();
   final MessageStorageService _messageStorage = MessageStorageService();
+  final ConversationPseudoService _convPseudoService = ConversationPseudoService();
+  final UnreadMessageService _unreadService = UnreadMessageService();
   late final ConversationService _conversationService;
   late final CryptoService _cryptoService;
   final _messageController = TextEditingController();
@@ -115,9 +118,13 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   
   bool _isLoading = false;
   SharedKey? _sharedKey;
+  bool _hasSentPseudo = false;
 
   // Cache des pseudos pour affichage
   Map<String, String> _displayNames = {};
+  
+  // Track messages being processed to avoid duplicates
+  final Set<String> _processingMessages = {};
 
   @override
   void initState() {
@@ -127,11 +134,34 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     _cryptoService = CryptoService(localPeerId: userId);
     _loadSharedKey();
     _loadDisplayNames();
+    _checkIfPseudoSent();
+    
+    // Mark all messages as read when opening conversation
+    _unreadService.markAllAsRead(widget.conversation.id);
+  }
+
+  /// Check if user has already sent their pseudo in this conversation
+  Future<void> _checkIfPseudoSent() async {
+    final messages = await _messageStorage.getConversationMessages(widget.conversation.id);
+    
+    // Check if any message from current user is a pseudo message
+    for (final msg in messages) {
+      if (msg.senderId == _currentUserId && msg.textContent != null) {
+        if (PseudoExchangeMessage.isPseudoExchange(msg.textContent!)) {
+          if (mounted) {
+            setState(() {
+              _hasSentPseudo = true;
+            });
+          }
+          return;
+        }
+      }
+    }
   }
 
   /// Charge les noms d'affichage des participants
   Future<void> _loadDisplayNames() async {
-    final names = await _pseudoService.getDisplayNames(widget.conversation.peerIds);
+    final names = await _convPseudoService.getPseudos(widget.conversation.id);
     if (mounted) {
       setState(() {
         _displayNames = names;
@@ -140,24 +170,24 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   }
 
   /// Callback appelé quand un message pseudo est reçu
-  void _onPseudoReceived(String oderId, String pseudo) async {
-    debugPrint('[ConversationDetail] onPseudoReceived called: $oderId -> $pseudo');
+  void _onPseudoReceived(String userId, String pseudo) async {
+    debugPrint('[ConversationDetail] onPseudoReceived called: $userId -> $pseudo');
     
-    // Vérifier si le pseudo a changé avant de tout recharger
-    final currentPseudo = _displayNames[oderId];
-    if (currentPseudo == pseudo) {
-      debugPrint('[ConversationDetail] Pseudo unchanged, skipping reload');
+    // Check if pseudo already matches to avoid infinite loop
+    final current = _displayNames[userId];
+    if (current == pseudo) {
+      debugPrint('[ConversationDetail] Pseudo unchanged, skipping');
       return;
     }
     
-    await _pseudoService.setPseudo(oderId, pseudo);
+    // Save pseudo in conversation-specific storage
+    await _convPseudoService.setPseudo(widget.conversation.id, userId, pseudo);
     
-    // Mettre à jour directement le cache local sans recharger
+    // Update local cache without triggering full reload
     if (mounted) {
       setState(() {
-        _displayNames[oderId] = pseudo;
+        _displayNames[userId] = pseudo;
       });
-      debugPrint('[ConversationDetail] Display name updated for $oderId');
     }
   }
 
@@ -183,6 +213,11 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       return;
     }
 
+    // Skip if already being processed
+    if (_processingMessages.contains(message.id)) {
+      return;
+    }
+
     // Check if already processed
     final existing = await _messageStorage.getDecryptedMessage(
       conversationId: widget.conversation.id,
@@ -192,93 +227,111 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       return; // Already processed
     }
 
-    debugPrint('[ConversationDetail] Processing new message ${message.id}');
+    // Mark as being processed
+    _processingMessages.add(message.id);
 
-    // Decrypt the message
-    if (message.contentType == MessageContentType.text) {
-      try {
-        final cryptoService = CryptoService(localPeerId: _currentUserId);
-        final decrypted = cryptoService.decrypt(
-          encryptedMessage: message,
-          sharedKey: _sharedKey!,
-          markAsUsed: true,
-        );
+    try {
+      debugPrint('[ConversationDetail] Processing new message ${message.id}');
 
-        // Save decrypted message locally
-        await _messageStorage.saveDecryptedMessage(
-          conversationId: widget.conversation.id,
-          message: DecryptedMessageData(
-            id: message.id,
-            senderId: message.senderId,
-            createdAt: message.createdAt,
-            contentType: message.contentType,
-            textContent: decrypted,
-            isCompressed: message.isCompressed,
-            deleteAfterRead: message.deleteAfterRead,
-          ),
-        );
+      // Decrypt the message
+      if (message.contentType == MessageContentType.text) {
+        try {
+          final cryptoService = CryptoService(localPeerId: _currentUserId);
+          final decrypted = cryptoService.decrypt(
+            encryptedMessage: message,
+            sharedKey: _sharedKey!,
+            markAsUsed: true,
+          );
 
-        // Mark key as used
-        _onKeyUsed();
+          // Save decrypted message locally
+          await _messageStorage.saveDecryptedMessage(
+            conversationId: widget.conversation.id,
+            message: DecryptedMessageData(
+              id: message.id,
+              senderId: message.senderId,
+              createdAt: message.createdAt,
+              contentType: message.contentType,
+              textContent: decrypted,
+              isCompressed: message.isCompressed,
+              deleteAfterRead: message.deleteAfterRead,
+            ),
+          );
 
-        // Mark as transferred on Firestore
-        await _conversationService.markMessageAsTransferred(
-          conversationId: widget.conversation.id,
-          messageId: message.id,
-          allParticipants: widget.conversation.peerIds,
-        );
+          // Mark key as used
+          _onKeyUsed();
 
-        debugPrint('[ConversationDetail] Text message processed and saved locally');
-      } catch (e) {
-        debugPrint('[ConversationDetail] Error processing text message: $e');
+          // Mark as transferred on Firestore
+          await _conversationService.markMessageAsTransferred(
+            conversationId: widget.conversation.id,
+            messageId: message.id,
+            allParticipants: widget.conversation.peerIds,
+          );
+
+          // Increment unread count (will be cleared when conversation is opened)
+          await _unreadService.incrementUnread(widget.conversation.id);
+
+          debugPrint('[ConversationDetail] Text message processed and saved locally');
+        } catch (e) {
+          debugPrint('[ConversationDetail] Error processing text message: $e');
+          rethrow;
+        }
+      } else {
+        // Binary message (image/file)
+        try {
+          final cryptoService = CryptoService(localPeerId: _currentUserId);
+          final decrypted = cryptoService.decryptBinary(
+            encryptedMessage: message,
+            sharedKey: _sharedKey!,
+            markAsUsed: true,
+          );
+
+          // Save decrypted binary locally
+          await _messageStorage.saveDecryptedMessage(
+            conversationId: widget.conversation.id,
+            message: DecryptedMessageData(
+              id: message.id,
+              senderId: message.senderId,
+              createdAt: message.createdAt,
+              contentType: message.contentType,
+              binaryContent: decrypted,
+              fileName: message.fileName,
+              mimeType: message.mimeType,
+              isCompressed: message.isCompressed,
+              deleteAfterRead: message.deleteAfterRead,
+            ),
+          );
+
+          // Mark key as used
+          _onKeyUsed();
+
+          // Mark as transferred on Firestore
+          await _conversationService.markMessageAsTransferred(
+            conversationId: widget.conversation.id,
+            messageId: message.id,
+            allParticipants: widget.conversation.peerIds,
+          );
+
+          // Increment unread count (will be cleared when conversation is opened)
+          await _unreadService.incrementUnread(widget.conversation.id);
+
+          debugPrint('[ConversationDetail] Binary message processed and saved locally');
+        } catch (e) {
+          debugPrint('[ConversationDetail] Error processing binary message: $e');
+          rethrow;
+        }
       }
-    } else {
-      // Binary message (image/file)
-      try {
-        final cryptoService = CryptoService(localPeerId: _currentUserId);
-        final decrypted = cryptoService.decryptBinary(
-          encryptedMessage: message,
-          sharedKey: _sharedKey!,
-          markAsUsed: true,
-        );
-
-        // Save decrypted binary locally
-        await _messageStorage.saveDecryptedMessage(
-          conversationId: widget.conversation.id,
-          message: DecryptedMessageData(
-            id: message.id,
-            senderId: message.senderId,
-            createdAt: message.createdAt,
-            contentType: message.contentType,
-            binaryContent: decrypted,
-            fileName: message.fileName,
-            mimeType: message.mimeType,
-            isCompressed: message.isCompressed,
-            deleteAfterRead: message.deleteAfterRead,
-          ),
-        );
-
-        // Mark key as used
-        _onKeyUsed();
-
-        // Mark as transferred on Firestore
-        await _conversationService.markMessageAsTransferred(
-          conversationId: widget.conversation.id,
-          messageId: message.id,
-          allParticipants: widget.conversation.peerIds,
-        );
-
-        debugPrint('[ConversationDetail] Binary message processed and saved locally');
-      } catch (e) {
-        debugPrint('[ConversationDetail] Error processing binary message: $e');
-      }
+    } finally {
+      // Remove from processing set
+      _processingMessages.remove(message.id);
     }
   }
 
   /// Combine local decrypted messages with Firestore messages
   Stream<List<_DisplayMessage>> _getCombinedMessagesStream() async* {
     await for (final firestoreMessages in _conversationService.watchMessages(widget.conversation.id)) {
-      // Process new Firestore messages
+      // Process new Firestore messages (wait for them to complete)
+      final processedIds = <String>{};
+      
       for (final msg in firestoreMessages) {
         if (msg.senderId != _currentUserId && _sharedKey != null) {
           // Check if it's a pseudo message first
@@ -303,10 +356,13 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
             }
           }
           
-          // Process in background (don't await to avoid blocking stream)
-          _processNewMessage(msg).catchError((e) {
+          // Process the message (AWAIT it now)
+          try {
+            await _processNewMessage(msg);
+            processedIds.add(msg.id);
+          } catch (e) {
             debugPrint('[ConversationDetail] Error processing message in stream: $e');
-          });
+          }
         }
       }
 
@@ -324,9 +380,9 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
         combined.add(_DisplayMessage.fromLocal(local));
       }
       
-      // Add Firestore messages that are not in local storage
+      // Add Firestore messages that are not in local storage and not being processed
       for (final firestore in firestoreMessages) {
-        if (!localIds.contains(firestore.id)) {
+        if (!localIds.contains(firestore.id) && !processedIds.contains(firestore.id)) {
           combined.add(_DisplayMessage.fromFirestore(firestore));
         }
       }
@@ -371,6 +427,105 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   }
 
   String get _currentUserId => _authService.currentUserId ?? '';
+
+  Future<void> _sendMyPseudo() async {
+    if (_sharedKey == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Impossible d\'envoyer: pas de clé de chiffrement'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final myPseudo = await PseudoStorageService().getMyPseudo();
+      if (myPseudo == null || myPseudo.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Veuillez définir votre pseudo dans les paramètres')),
+          );
+        }
+        return;
+      }
+
+      final pseudoMessage = PseudoExchangeMessage(
+        oderId: _currentUserId,
+        pseudo: '😊 $myPseudo',
+      );
+
+      // Chiffrer le message pseudo
+      final result = _cryptoService.encrypt(
+        plaintext: pseudoMessage.toJson(),
+        sharedKey: _sharedKey!,
+        compress: true,
+      );
+
+      final message = result.message;
+
+      // Store decrypted message locally FIRST
+      await _messageStorage.saveDecryptedMessage(
+        conversationId: widget.conversation.id,
+        message: DecryptedMessageData(
+          id: message.id,
+          senderId: message.senderId,
+          createdAt: message.createdAt,
+          contentType: message.contentType,
+          textContent: pseudoMessage.toJson(),
+          isCompressed: message.isCompressed,
+          deleteAfterRead: message.deleteAfterRead,
+        ),
+      );
+
+      // Mettre à jour les bits utilisés
+      await _keyStorageService.updateUsedBits(
+        widget.conversation.id,
+        result.usedSegment.startBit,
+        result.usedSegment.endBit,
+      );
+
+      // Recharger la clé
+      await _loadSharedKey();
+
+      // Envoyer le message
+      await _conversationService.sendMessage(
+        conversationId: widget.conversation.id,
+        message: message,
+        messagePreview: '👤 Pseudo partagé',
+      );
+
+      // Mark as transferred immediately
+      await _conversationService.markMessageAsTransferred(
+        conversationId: widget.conversation.id,
+        messageId: message.id,
+        allParticipants: widget.conversation.peerIds,
+      );
+
+      // Update state to show message input
+      if (mounted) {
+        setState(() {
+          _hasSentPseudo = true;
+        });
+      }
+
+      debugPrint('[ConversationDetail] Pseudo message sent successfully');
+    } catch (e, stackTrace) {
+      debugPrint('[ConversationDetail] ERROR sending pseudo: $e');
+      debugPrint('[ConversationDetail] Stack trace: $stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
@@ -854,14 +1009,8 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
                 final messages = snapshot.data ?? [];
                 
-                // Filtrer les messages pseudo pour ne pas les afficher
-                final visibleMessages = messages.where((msg) {
-                  // Si le message est local et texte, vérifier si c'est un pseudo
-                  if (msg.isLocal && msg.textContent != null) {
-                    return !PseudoExchangeMessage.isPseudoExchange(msg.textContent!);
-                  }
-                  return true;
-                }).toList();
+                // Don't filter pseudo messages - show them in the thread
+                final visibleMessages = messages;
 
                 if (visibleMessages.isEmpty) {
                   return const Center(
@@ -902,65 +1051,103 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
             ),
           ),
 
-          // Barre de saisie
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withAlpha(20),
-                  blurRadius: 4,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
-            child: SafeArea(
-              child: Row(
-                children: [
-                  // Bouton d'attachement (image/fichier)
-                  IconButton(
-                    onPressed: _isLoading || _sharedKey == null ? null : _showAttachmentMenu,
-                    icon: const Icon(Icons.attach_file),
-                    tooltip: 'Envoyer image/fichier',
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: _messageController,
-                      decoration: InputDecoration(
-                        hintText: 'Message chiffré...',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                      ),
-                      maxLines: null,
-                      keyboardType: TextInputType.text,
-                      enableIMEPersonalizedLearning: false,
-                      enableSuggestions: false,
-                      autocorrect: false,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _sendMessage(),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  FloatingActionButton.small(
-                    onPressed: _isLoading ? null : _sendMessage,
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.send),
+          // Barre de saisie ou bouton pseudo
+          if (!_hasSentPseudo)
+            // Show "Send my pseudo" button
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(20),
+                    blurRadius: 4,
+                    offset: const Offset(0, -2),
                   ),
                 ],
               ),
+              child: SafeArea(
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoading || _sharedKey == null ? null : _sendMyPseudo,
+                    icon: _isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.person_add),
+                    label: const Text('👋 Envoyer mon pseudo'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.all(16),
+                      backgroundColor: Theme.of(context).primaryColor,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          else
+            // Show message input
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(20),
+                    blurRadius: 4,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                child: Row(
+                  children: [
+                    // Bouton d'attachement (image/fichier)
+                    IconButton(
+                      onPressed: _isLoading || _sharedKey == null ? null : _showAttachmentMenu,
+                      icon: const Icon(Icons.attach_file),
+                      tooltip: 'Envoyer image/fichier',
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: _messageController,
+                        decoration: InputDecoration(
+                          hintText: 'Message chiffré...',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                        ),
+                        maxLines: null,
+                        keyboardType: TextInputType.text,
+                        enableIMEPersonalizedLearning: false,
+                        enableSuggestions: false,
+                        autocorrect: false,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _sendMessage(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FloatingActionButton.small(
+                      onPressed: _isLoading ? null : _sendMessage,
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.send),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -1823,6 +2010,35 @@ class _MessageBubbleNewState extends State<_MessageBubbleNew> {
       // Display from local decrypted data
       switch (widget.message.contentType) {
         case MessageContentType.text:
+          // Check if this is a pseudo exchange message
+          if (widget.message.textContent != null && 
+              PseudoExchangeMessage.isPseudoExchange(widget.message.textContent!)) {
+            final pseudoMsg = PseudoExchangeMessage.fromJson(widget.message.textContent!);
+            if (pseudoMsg != null) {
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.person_add,
+                    size: 20,
+                    color: widget.isMine ? Colors.white70 : Colors.green,
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      pseudoMsg.pseudo,
+                      style: TextStyle(
+                        color: widget.isMine ? Colors.white : Colors.black87,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
+          }
+          
+          // Regular text message
           return Text(
             widget.message.textContent ?? '',
             style: TextStyle(

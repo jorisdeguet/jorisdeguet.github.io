@@ -134,9 +134,13 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         return;
       }
 
+      // Wait 3 seconds before sending
+      debugPrint('[KeyExchange] Waiting 3 seconds before sending pseudo...');
+      await Future.delayed(const Duration(seconds: 3));
+
       final pseudoMessage = PseudoExchangeMessage(
         oderId: _currentUserId,
-        pseudo: myPseudo,
+        pseudo: '😊 $myPseudo',
       );
 
       final cryptoService = CryptoService(localPeerId: _currentUserId);
