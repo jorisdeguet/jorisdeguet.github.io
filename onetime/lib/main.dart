@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'services/auth_service.dart';
+import 'services/key_pre_generation_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'l10n/app_localizations.dart';
@@ -11,6 +12,10 @@ import 'l10n/app_localizations.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+  
+  // Initialiser le service de pré-génération de clés
+  KeyPreGenerationService().initialize();
+  
   runApp(const MyApp());
 }
 

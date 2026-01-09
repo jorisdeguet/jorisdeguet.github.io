@@ -8,6 +8,7 @@ import '../services/crypto_service.dart';
 import '../services/key_storage_service.dart';
 import '../services/conversation_service.dart';
 import '../services/message_storage_service.dart';
+import '../services/format_service.dart';
 
 /// Écran complet pour l'envoi d'un média avec preview et debug
 class MediaSendScreen extends StatefulWidget {
@@ -42,7 +43,7 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
     super.initState();
     _currentResult = widget.mediaResult;
     _addLog('Média sélectionné: ${widget.mediaResult.fileName}');
-    _addLog('Taille originale: ${_formatBytes(widget.mediaResult.data.length)}');
+    _addLog('Taille originale: ${FormatService.formatBytes(widget.mediaResult.data.length)}');
     _calculateKeyUsage();
   }
 
@@ -63,15 +64,6 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
     _addLog('Clé disponible: ${_mediaService.formatKeyBits(availableBits)}');
     _addLog('Bits nécessaires: ${_mediaService.formatKeyBits(neededBits)}');
     _addLog('Utilisation: $usagePercent%');
-  }
-
-  String _formatBytes(int bytes) {
-    if (bytes >= 1024 * 1024) {
-      return '${(bytes / 1024 / 1024).toStringAsFixed(2)} MB';
-    } else if (bytes >= 1024) {
-      return '${(bytes / 1024).toStringAsFixed(2)} KB';
-    }
-    return '$bytes B';
   }
 
   Future<void> _changeQuality(ImageQuality quality) async {
@@ -113,7 +105,7 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
 
       final encryptTime = DateTime.now().difference(startTime).inMilliseconds;
       _addLog('Chiffré en ${encryptTime}ms');
-      _addLog('Données chiffrées: ${_formatBytes(result.message.ciphertext.length)}');
+      _addLog('Données chiffrées: ${FormatService.formatBytes(result.message.ciphertext.length)}');
       _addLog('Segments utilisés: ${result.message.keySegments.length}');
 
       // Store decrypted message locally FIRST
@@ -303,7 +295,7 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
                             : const Icon(Icons.send),
                         label: Text(
                           canSend
-                              ? 'Envoyer (${_formatBytes(neededBits ~/ 8)})'
+                              ? 'Envoyer (${FormatService.formatBytes(neededBits ~/ 8)})'
                               : 'Pas assez de clé disponible',
                         ),
                         style: ElevatedButton.styleFrom(

@@ -18,6 +18,7 @@ import '../services/auth_service.dart';
 import '../services/pseudo_storage_service.dart';
 import '../services/crypto_service.dart';
 import '../services/qr_segment_cache_service.dart';
+import '../services/key_pre_generation_service.dart';
 import 'conversation_detail_screen.dart';
 
 /// Écran d'échange de clé via QR codes.
@@ -57,6 +58,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   int _currentStep = 0;
   KeySegmentQrData? _currentQrData;
   bool _isScanning = false;
+  bool _isFinalizing = false;
   String? _errorMessage;
   
   // Taille de clé à générer (en bits)
@@ -69,8 +71,9 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   // Mode torrent: rotation automatique des QR codes
   Timer? _torrentRotationTimer;
   final bool _torrentModeEnabled = true;
-  Duration _torrentRotationInterval = const Duration(seconds: 1); // Commencer à 1 seconde
-  
+  // Use 600ms (0.6s) per QR rotation to speed up manual testing
+  Duration _torrentRotationInterval = const Duration(milliseconds: 600); // Commencer à 1 seconde
+
   // Suivi des participants ayant scanné au moins un segment dans le dernier tour
   Map<String, bool> _participantScannedInRound = {};
 
@@ -212,6 +215,14 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     setState(() => _errorMessage = null);
 
     try {
+      // CHECK FOR PRE-GENERATED SESSION
+      final preGenService = KeyPreGenerationService();
+      final preGenSession = preGenService.consumeSession(_keySizeBits);
+      
+      // Utiliser l'ID pré-généré si disponible, sinon en créer un nouveau
+      // Note: On utilise un nouvel ID Firestore de toute façon pour garantir l'unicité et le bon format
+      // mais on réutilise les données de clé pré-générées
+      
       final step1 = DateTime.now();
       debugPrint('[KeyExchange] +${step1.difference(startTime).inMilliseconds}ms - Calculating segments');
       
@@ -234,12 +245,18 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       debugPrint('[KeyExchange] +${step3.difference(startTime).inMilliseconds}ms - Firestore session created, creating local session');
       
       // Créer la session locale avec le MÊME ID que Firestore
+      // Et injecter les segments pré-générés si disponibles
       _session = _keyExchangeService.createSourceSession(
         totalBits: _keySizeBits,
         peerIds: widget.peerIds,
         sourceId: _currentUserId,
         sessionId: _firestoreSession!.id, // Utiliser l'ID Firestore
+        preGeneratedSegments: preGenSession?.preGeneratedSegments,
       );
+      
+      if (preGenSession != null) {
+        debugPrint('[KeyExchange] Using ${preGenSession.preGeneratedSegments.length} pre-generated segments');
+      }
 
       final step4 = DateTime.now();
       debugPrint('[KeyExchange] +${step4.difference(startTime).inMilliseconds}ms - Local session created, setting up listeners');
@@ -270,12 +287,34 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         final step7 = DateTime.now();
         debugPrint('[KeyExchange] +${step7.difference(startTime).inMilliseconds}ms - Starting segment generation (torrent mode)');
         
-        _generateAllSegments();
+        // --- MODIFICATION: Generate FIRST segment only, then start torrent rotation which will trigger background generation ---
         
+        // 1. Generate first segment immediately (or use pre-generated if available)
+        // Since we injected pre-generated segments, _currentQrData might need to be set from them
+        if (preGenSession != null && preGenSession.preGeneratedSegments.isNotEmpty) {
+           debugPrint('[KeyExchange] Displaying first pre-generated segment immediately');
+           _displaySegmentAtIndex(0);
+        } else {
+           debugPrint('[KeyExchange] Generating first segment immediately for display');
+           _generateNextSegment(); // Generates index 0
+        }
+        
+        // 2. Start torrent rotation - it will handle generating missing segments
         final step8 = DateTime.now();
-        debugPrint('[KeyExchange] +${step8.difference(startTime).inMilliseconds}ms - All segments generated, starting torrent rotation');
+        debugPrint('[KeyExchange] +${step8.difference(startTime).inMilliseconds}ms - First segment ready, starting torrent rotation');
         
         _startTorrentRotation();
+        
+        // 3. Trigger background generation of remaining segments
+        // Only if we don't have enough pre-generated segments
+        if (preGenSession == null || preGenSession.preGeneratedSegments.length < totalSegments) {
+          debugPrint('[KeyExchange] Triggering background generation of remaining segments');
+          _generateRemainingSegmentsInBackground();
+        } else {
+          debugPrint('[KeyExchange] All segments already pre-generated!');
+        }
+        
+        // ---------------------------------------------------------------------------------------------------------------------
         
         final step9 = DateTime.now();
         debugPrint('[KeyExchange] +${step9.difference(startTime).inMilliseconds}ms - FIRST QR CODE SHOULD BE VISIBLE NOW');
@@ -366,6 +405,10 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   Future<void> _finalizeExchangeForReader() async {
     if (_session == null || _firestoreSession == null) return;
 
+    // Eviter l'exécution concurrente (double finalisation)
+    if (_isFinalizing) return;
+    _isFinalizing = true;
+
     try {
       // Récupérer la session mise à jour pour avoir le conversationId
       final updatedSession = await _syncService.getSession(_firestoreSession!.id);
@@ -376,6 +419,10 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       if (conversationId == null || conversationId.isEmpty) {
         debugPrint('[KeyExchange] Reader: No conversationId found, waiting...');
         setState(() => _errorMessage = 'En attente de la création de la conversation par la source...');
+        
+        // Reset flag to allow retry
+        _isFinalizing = false;
+
         // Réessayer dans 2 secondes
         Future.delayed(const Duration(seconds: 2), () {
           if (mounted) {
@@ -392,6 +439,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       if (conversation == null) {
         debugPrint('[KeyExchange] Reader: Conversation not found: $conversationId');
         setState(() => _errorMessage = 'Conversation non trouvée. Réessayez.');
+        _isFinalizing = false;
         return;
       }
 
@@ -454,6 +502,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     } catch (e) {
       debugPrint('Error in _finalizeExchangeForReader: $e');
       setState(() => _errorMessage = 'Erreur: $e');
+      _isFinalizing = false;
     }
   }
 
@@ -479,7 +528,22 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     }
   }
 
+  /// Generate remaining segments in background without blocking UI
+  void _generateRemainingSegmentsInBackground() async {
+    if (_session == null) return;
+    
+    // Defer to next event loop to let UI render first frame
+    await Future.delayed(Duration.zero);
+    
+    // Use the cache service to generate segments, but we don't await it here
+    // so it doesn't block if called from a sync context (though here it is async)
+    _cacheService.pregenerateSegments(_session!, _keyExchangeService).then((_) {
+       debugPrint('[KeyExchange] Background generation complete');
+    });
+  }
+
   /// Génère tous les segments à l'avance (pour le mode torrent)
+  // DEPRECATED: Replaced by _generateRemainingSegmentsInBackground
   void _generateAllSegments() async {
     if (_session == null) return;
 
@@ -996,12 +1060,15 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // List of participants who scanned current segment
                       Text(
-                        'Segments scannés: $scannedCount/$totalOthers',
+                        'Participants: ${scannedList.isEmpty ? "Personne" : scannedList.join(", ")}', // Show names/IDs
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
                       Row(
@@ -1118,8 +1185,9 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
                   ),
                   const SizedBox(height: 4),
                 ],
+                // Show interval in seconds with one decimal (e.g. 0.6s)
                 Text(
-                  '🔄 ${_torrentRotationInterval.inSeconds}s/code',
+                  '🔄 ${(_torrentRotationInterval.inMilliseconds / 1000).toStringAsFixed(1)}s/code',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 11, color: Colors.grey[700]),
                 ),
@@ -1279,12 +1347,12 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
                         ),
                         child: Text(
                           '📷 Positionnez le QR code dans le cadre\n'
-                          'Le QR change toutes les secondes',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                          ),
+                          'Le QR change toutes les ${(_torrentRotationInterval.inMilliseconds / 1000).toStringAsFixed(1)}s',
+                           textAlign: TextAlign.center,
+                           style: const TextStyle(
+                             color: Colors.white,
+                             fontSize: 12,
+                           ),
                         ),
                       ),
                     ),

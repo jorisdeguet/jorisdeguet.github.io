@@ -7,6 +7,8 @@ import 'package:image/image.dart' as img;
 
 import '../models/encrypted_message.dart';
 
+import 'format_service.dart';
+
 /// Service pour la gestion des médias (images et fichiers).
 class MediaService {
   final ImagePicker _imagePicker = ImagePicker();
@@ -154,13 +156,7 @@ class MediaService {
 
   /// Formate la taille en format lisible
   String formatSize(int bytes) {
-    if (bytes < 1024) {
-      return '$bytes B';
-    } else if (bytes < 1024 * 1024) {
-      return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    } else {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
+    return FormatService.formatBytes(bytes);
   }
 
   /// Formate les bits de clé en format lisible

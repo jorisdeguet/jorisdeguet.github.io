@@ -33,6 +33,8 @@ class QrSegmentCacheService {
       // Générer tous les segments
       for (int i = 0; i < session.totalSegments; i++) {
         service.generateNextSegment(session);
+        // Yield to event loop every 5 segments to keep UI responsive
+        if (i % 5 == 0) await Future.delayed(Duration.zero);
       }
 
       // Stocker les données générées (pas besoin de cache pour l'instant,

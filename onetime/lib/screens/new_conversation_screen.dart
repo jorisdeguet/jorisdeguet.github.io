@@ -138,22 +138,6 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Nouvelle conversation'),
-        actions: [
-          if (!_isCreating)
-            StreamBuilder<List<Map<String, String>>>(
-              stream: _watchParticipants(),
-              builder: (context, snapshot) {
-                final participants = snapshot.data ?? [];
-                final canFinalize = participants.length >= 2;
-
-                return IconButton(
-                  onPressed: canFinalize ? _finalizeParticipants : null,
-                  icon: const Icon(Icons.check),
-                  tooltip: canFinalize ? 'Valider les participants' : 'En attente de participants',
-                );
-              },
-            ),
-        ],
       ),
       body: _isCreating
           ? const Center(child: CircularProgressIndicator())
@@ -184,60 +168,12 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          // Instructions en haut (sans icône)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Text(
-                    'Réunissez les participants',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Les participants scannent ce QR code pour rejoindre la conversation',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 14),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // QR Code au centre
-          Expanded(
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withAlpha(25),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: QrImageView(
-                  data: _conversationId!,
-                  version: QrVersions.auto,
-                  size: 250,
-                  errorCorrectionLevel: QrErrorCorrectLevel.M,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Liste des participants (badges en ligne)
+          // Liste des participants (Moved above QR)
           StreamBuilder<List<Map<String, String>>>(
             stream: _watchParticipants(),
             builder: (context, snapshot) {
               final participants = snapshot.data ?? [];
+              final canFinalize = participants.length >= 2;
               
               return Card(
                 child: Padding(
@@ -253,6 +189,19 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
                             'Participants (${participants.length})',
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
+                          const Spacer(),
+                          // Bouton vert visible seulement si > 1 participant
+                          if (canFinalize)
+                            ElevatedButton.icon(
+                              onPressed: _finalizeParticipants,
+                              icon: const Icon(Icons.check),
+                              label: const Text('Valider'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              ),
+                            ),
                         ],
                       ),
                       const Divider(),
@@ -282,6 +231,42 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
               );
             },
           ),
+          const SizedBox(height: 24),
+          
+          // Instructions (Updated text, removed title)
+          const Text(
+            'Les participants scannent ce QR code pour rejoindre la conversation',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16),
+          ),
+          const SizedBox(height: 24),
+
+          // QR Code au centre
+          Expanded(
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(25),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: QrImageView(
+                  data: _conversationId!,
+                  version: QrVersions.auto,
+                  size: 250,
+                  errorCorrectionLevel: QrErrorCorrectLevel.M,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
 
           if (_errorMessage != null) ...[
             const SizedBox(height: 16),

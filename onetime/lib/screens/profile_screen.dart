@@ -6,6 +6,7 @@ import '../services/key_storage_service.dart';
 import '../services/message_storage_service.dart';
 import '../services/conversation_pseudo_service.dart';
 import '../services/unread_message_service.dart';
+import '../services/format_service.dart';
 import '../l10n/app_localizations.dart';
 
 /// Profile screen with settings
@@ -169,12 +170,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  String _formatBytes(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -265,19 +260,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               _StorageRow(
                                 icon: Icons.key,
                                 label: l10n.get('settings_storage_keys'),
-                                value: _formatBytes(_totalKeyBytes),
+                                value: FormatService.formatBytes(_totalKeyBytes),
                               ),
                               const SizedBox(height: 8),
                               _StorageRow(
                                 icon: Icons.message,
                                 label: l10n.get('settings_storage_messages'),
-                                value: _formatBytes(_totalMessageBytes),
+                                value: FormatService.formatBytes(_totalMessageBytes),
                               ),
                               const Divider(height: 20),
                               _StorageRow(
                                 icon: Icons.folder,
                                 label: l10n.get('settings_storage_total'),
-                                value: _formatBytes(_totalKeyBytes + _totalMessageBytes),
+                                value: FormatService.formatBytes(_totalKeyBytes + _totalMessageBytes),
                                 bold: true,
                               ),
                             ],

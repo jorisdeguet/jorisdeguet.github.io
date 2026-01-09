@@ -28,6 +28,7 @@ export 'services/firebase_message_service.dart';
 export 'services/auth_service.dart';
 export 'services/user_service.dart';
 export 'services/compression_service.dart';
+export 'services/format_service.dart';
 export 'services/conversation_service.dart';
 
 // Screens

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -20,6 +21,9 @@ import '../services/pseudo_storage_service.dart';
 import '../l10n/app_localizations.dart';
 import 'key_exchange_screen.dart';
 import 'media_send_screen.dart';
+import 'conversation_info_screen.dart';
+
+import '../services/format_service.dart';
 
 /// Wrapper pour afficher un message (local déchiffré ou Firestore chiffré)
 class _DisplayMessage {
@@ -126,6 +130,8 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   
   // Track messages being processed to avoid duplicates
   final Set<String> _processingMessages = {};
+  
+  StreamSubscription<String>? _pseudoSubscription;
 
   @override
   void initState() {
@@ -136,6 +142,13 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     _loadSharedKey();
     _loadDisplayNames();
     _checkIfPseudoSent();
+    
+    // Listen for pseudo updates
+    _pseudoSubscription = _convPseudoService.pseudoUpdates.listen((conversationId) {
+      if (conversationId == widget.conversation.id) {
+        _loadDisplayNames();
+      }
+    });
     
     // Mark all messages as read when opening conversation
     _unreadService.markAllAsRead(widget.conversation.id);
@@ -192,6 +205,40 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     }
   }
 
+  Future<void> _updateKeyDebugInfo() async {
+    if (_sharedKey == null) return;
+    
+    try {
+      final availableBits = _sharedKey!.countAvailableBits(_currentUserId);
+      final segment = _sharedKey!.getSegmentForPeer(_currentUserId);
+      
+      // Trouver le premier et dernier index disponible
+      int firstAvailable = -1;
+      int lastAvailable = -1;
+      
+      for (int i = segment.startBit; i < segment.endBit; i++) {
+        if (!_sharedKey!.isBitUsed(i)) {
+          if (firstAvailable == -1) firstAvailable = i;
+          lastAvailable = i;
+        }
+      }
+      
+      await _conversationService.updateKeyDebugInfo(
+        conversationId: widget.conversation.id,
+        userId: _currentUserId,
+        info: {
+          'availableBits': availableBits,
+          'firstAvailableIndex': firstAvailable,
+          'lastAvailableIndex': lastAvailable,
+          'updatedAt': DateTime.now().toIso8601String(),
+        },
+      );
+      debugPrint('[ConversationDetail] Key debug info updated in Firestore');
+    } catch (e) {
+      debugPrint('[ConversationDetail] Error updating key debug info: $e');
+    }
+  }
+
   /// Callback quand des bits de clé sont utilisés (après déchiffrement)
   void _onKeyUsed() {
     // Sauvegarder la clé avec le bitmap mis à jour
@@ -199,6 +246,8 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       debugPrint('[ConversationDetail] _onKeyUsed called - saving key bitmap');
       _keyStorageService.saveKey(widget.conversation.id, _sharedKey!).then((_) {
         debugPrint('[ConversationDetail] Key bitmap saved after message decryption');
+        // Mettre à jour les infos de debug dans Firestore
+        _updateKeyDebugInfo();
       }).catchError((e) {
         debugPrint('[ConversationDetail] ERROR saving key bitmap: $e');
       });
@@ -384,6 +433,11 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       });
       debugPrint('[ConversationDetail] Shared key loaded: ${key != null ? "${key.lengthInBits} bits" : "NOT FOUND"}');
       
+      // Update debug info immediately after loading key
+      if (key != null) {
+        _updateKeyDebugInfo();
+      }
+      
       // Si pas de clé, naviguer directement vers l'écran d'échange
       if (key == null && !widget.conversation.hasKey) {
         debugPrint('[ConversationDetail] No shared key found, navigating to key exchange');
@@ -398,6 +452,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
   @override
   void dispose() {
+    _pseudoSubscription?.cancel();
     // Sauvegarder la clé avant de quitter pour persister les bits utilisés
     if (_sharedKey != null) {
       _keyStorageService.saveKey(widget.conversation.id, _sharedKey!);
@@ -566,6 +621,9 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
       // Recharger la clé pour avoir les bits à jour
       await _loadSharedKey();
+      
+      // Update debug info after sending message
+      await _updateKeyDebugInfo();
 
       debugPrint('[ConversationDetail] Message encrypted: ${message.totalBitsUsed} bits used');
 
@@ -846,6 +904,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
   String _getParticipantPseudos() {
     final pseudos = widget.conversation.peerIds
+        .where((id) => id != _currentUserId) // Filter out current user
         .map((id) => _displayNames[id] ?? id.substring(0, 8))
         .toList();
     
@@ -858,6 +917,20 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Calcul de la clé restante basé sur SharedKey si disponible (plus précis)
+    final remainingKeyFormatted = _sharedKey != null
+        ? FormatService.formatBytes(_sharedKey!.countAvailableBits(_currentUserId) ~/ 8)
+        : widget.conversation.remainingKeyFormatted;
+        
+    // Pourcentage basé sur SharedKey si disponible
+    final keyRemainingPercent = _sharedKey != null
+        ? (1 - (_sharedKey!.countAvailableBits(_currentUserId) / _sharedKey!.lengthInBits)) * 100
+        : widget.conversation.keyRemainingPercent; // Inversé car keyUsagePercent est usage
+        
+    final displayKeyPercent = _sharedKey != null
+         ? (_sharedKey!.countAvailableBits(_currentUserId) / _sharedKey!.lengthInBits) * 100
+         : widget.conversation.keyRemainingPercent;
+
     return Scaffold(
       appBar: AppBar(
         title: GestureDetector(
@@ -888,16 +961,16 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
                     widget.conversation.hasKey ? Icons.lock : Icons.lock_open,
                     size: 12,
                     color: widget.conversation.hasKey
-                        ? _getKeyColor(widget.conversation.keyRemainingPercent)
+                        ? _getKeyColor(displayKeyPercent)
                         : Colors.orange,
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    widget.conversation.remainingKeyFormatted,
+                    remainingKeyFormatted,
                     style: TextStyle(
                       fontSize: 12,
                       color: widget.conversation.hasKey
-                          ? _getKeyColor(widget.conversation.keyRemainingPercent)
+                          ? _getKeyColor(displayKeyPercent)
                           : Colors.orange,
                     ),
                   ),
@@ -1142,41 +1215,21 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   }
 
   void _showConversationInfo(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => _ConversationInfoSheet(
-        conversation: widget.conversation,
-        onDelete: _deleteConversation,
-        onExtendKey: _startKeyExchange,
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ConversationInfoScreen(
+          conversation: widget.conversation,
+          sharedKey: _sharedKey,
+          onDelete: () {
+            Navigator.pop(context); // Close detail screen
+          },
+          onExtendKey: _startKeyExchange,
+        ),
       ),
     );
   }
 
-  Future<void> _deleteConversation() async {
-    try {
-      await _conversationService.deleteConversation(widget.conversation.id);
-
-      // Supprimer la clé locale si elle existe
-      await _keyStorageService.deleteKey(widget.conversation.id);
-
-      if (mounted) {
-        // Fermer le bottom sheet d'info d'abord
-        Navigator.pop(context);
-        // Puis fermer l'écran de conversation et retourner à l'écran d'accueil
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Conversation supprimée')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e')),
-        );
-      }
-    }
-  }
 }
 
 class _MessageBubble extends StatefulWidget {
@@ -1632,282 +1685,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
   }
 }
 
-class _ConversationInfoSheet extends StatelessWidget {
-  final Conversation conversation;
-  final VoidCallback? onDelete;
-  final VoidCallback? onExtendKey;
 
-  const _ConversationInfoSheet({
-    required this.conversation,
-    this.onDelete,
-    this.onExtendKey,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              conversation.displayName,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 24),
-
-            // Participants
-            Text(
-              'Participants',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: conversation.peerIds.map((peerId) {
-                // Utiliser un affichage raccourci de l'ID
-                final shortId = peerId.length > 8
-                    ? peerId.substring(0, 8)
-                    : peerId;
-                return Chip(
-                  avatar: CircleAvatar(
-                    child: Text(
-                      peerId.length >= 2
-                          ? peerId.substring(0, 2).toUpperCase()
-                          : '?',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ),
-                  label: Text(shortId),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 24),
-
-            // Informations générales
-            _InfoRow(
-              icon: Icons.people,
-              label: 'Nombre de participants',
-              value: '${conversation.peerIds.length}',
-            ),
-            _InfoRow(
-              icon: Icons.message,
-              label: 'Messages',
-              value: '${conversation.messageCount}',
-            ),
-            _InfoRow(
-              icon: Icons.calendar_today,
-              label: 'Créée le',
-              value: _formatDate(conversation.createdAt),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Informations sur la clé
-            Text(
-              'Chiffrement',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: 8),
-
-            if (conversation.hasKey) ...[
-              _InfoRow(
-                icon: Icons.key,
-                label: 'Clé totale',
-                value: _formatBytes(conversation.totalKeyBits ~/ 8),
-              ),
-              _InfoRow(
-                icon: Icons.data_usage,
-                label: 'Clé restante',
-                value: conversation.remainingKeyFormatted,
-              ),
-              _InfoRow(
-                icon: Icons.percent,
-                label: 'Utilisation',
-                value: '${conversation.keyUsagePercent.toStringAsFixed(1)}%',
-              ),
-              const SizedBox(height: 16),
-              // Barre de progression de la clé
-              LinearProgressIndicator(
-                value: conversation.keyUsagePercent / 100,
-                backgroundColor: Colors.grey[200],
-                color: _getKeyColor(conversation.keyRemainingPercent),
-              ),
-            ] else ...[
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.orange[50],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange[200]!),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.lock_open, color: Colors.orange[800]),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Pas de clé de chiffrement',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.orange[800],
-                            ),
-                          ),
-                          Text(
-                            'Les messages ne sont pas chiffrés de bout en bout.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.orange[700],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 32),
-            const Divider(),
-            const SizedBox(height: 16),
-
-            // Actions
-            Text(
-              'Actions',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: 16),
-
-            // Bouton pour étendre/créer la clé
-            if (conversation.hasKey && conversation.isKeyLow || !conversation.hasKey)
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    onExtendKey?.call();
-                  },
-                  icon: Icon(conversation.hasKey ? Icons.add : Icons.key),
-                  label: Text(
-                    conversation.hasKey
-                        ? 'Étendre la clé (${conversation.keyRemainingPercent.toStringAsFixed(0)}% restant)'
-                        : 'Créer une clé de chiffrement',
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ),
-
-            if (conversation.hasKey && conversation.isKeyLow)
-              const SizedBox(height: 8),
-
-            // Bouton de suppression
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _showDeleteConfirmation(context);
-                },
-                icon: const Icon(Icons.delete_forever),
-                label: const Text('Supprimer la conversation'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.red,
-                  side: const BorderSide(color: Colors.red),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showDeleteConfirmation(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Supprimer la conversation ?'),
-        content: const Text(
-          'Cette action est irréversible. La conversation et tous ses messages seront supprimés pour tous les participants.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annuler'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              onDelete?.call();
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Supprimer'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatBytes(int bytes) {
-    if (bytes >= 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    } else if (bytes >= 1024) {
-      return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    }
-    return '$bytes B';
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
-  }
-
-  Color _getKeyColor(double percent) {
-    if (percent > 50) return Colors.green;
-    if (percent > 20) return Colors.orange;
-    return Colors.red;
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-
-  const _InfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: Colors.grey[600]),
-          const SizedBox(width: 12),
-          Expanded(child: Text(label)),
-          Text(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 /// New message bubble that displays _DisplayMessage (local or Firestore)
 class _MessageBubbleNew extends StatefulWidget {

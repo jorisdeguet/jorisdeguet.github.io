@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -6,6 +7,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Service pour stocker les pseudos par conversation
 class ConversationPseudoService {
   static const String _prefix = 'conv_pseudos_';
+
+  final _pseudoUpdateController = StreamController<String>.broadcast();
+
+  /// Stream des mises à jour de pseudos (renvoie l'ID de la conversation modifiée)
+  Stream<String> get pseudoUpdates => _pseudoUpdateController.stream;
 
   /// Sauvegarde un pseudo pour un utilisateur dans une conversation
   Future<void> setPseudo(String conversationId, String userId, String pseudo) async {
@@ -17,10 +23,17 @@ class ConversationPseudoService {
       
       // Charger les pseudos existants
       final existing = await getPseudos(conversationId);
+      
+      // Vérifier si changement
+      if (existing[userId] == pseudo) return;
+      
       existing[userId] = pseudo;
       
       // Sauvegarder
       await prefs.setString(key, jsonEncode(existing));
+      
+      // Notifier
+      _pseudoUpdateController.add(conversationId);
       
       debugPrint('[ConvPseudo] Pseudo saved successfully');
     } catch (e) {

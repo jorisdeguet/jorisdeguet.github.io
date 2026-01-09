@@ -27,22 +27,54 @@ class KeyExchangeService {
   /// [totalBits] - Taille totale de la clé à partager
   /// [peerIds] - Liste des IDs des pairs qui recevront la clé
   /// [sessionId] - ID de session optionnel (si non fourni, un ID est généré)
+  /// [preGeneratedSegments] - Segments déjà générés à inclure
   KeyExchangeSession createSourceSession({
     required int totalBits,
     required List<String> peerIds,
     required String sourceId,
     String? sessionId,
+    List<KeySegmentQrData>? preGeneratedSegments,
   }) {
     // Inclure le source dans la liste des peers
     final allPeers = [sourceId, ...peerIds]..sort();
     
-    return KeyExchangeSession(
+    final session = KeyExchangeSession(
       sessionId: sessionId ?? _generateSessionId(),
       role: KeyExchangeRole.source,
       totalBits: totalBits,
       peerIds: allPeers,
       localPeerId: sourceId,
     );
+
+    // Injecter les segments pré-générés si disponibles
+    if (preGeneratedSegments != null) {
+      for (final segment in preGeneratedSegments) {
+        // Attention: il faut s'assurer que l'ID de session correspond
+        // Si les segments viennent d'une pré-génération avec un ID différent,
+        // on doit recréer le QR data avec le bon ID de session final
+        if (segment.sessionId != session.sessionId) {
+          // On garde les données de clé mais on met à jour l'ID de session
+          final updatedSegment = KeySegmentQrData(
+            sessionId: session.sessionId,
+            segmentIndex: segment.segmentIndex,
+            startBit: segment.startBit,
+            endBit: segment.endBit,
+            keyData: segment.keyData,
+          );
+          // On injecte directement dans la session sans régénérer
+          _injectSegmentIntoSession(session, updatedSegment);
+        } else {
+          _injectSegmentIntoSession(session, segment);
+        }
+      }
+    }
+
+    return session;
+  }
+
+  /// Injecte un segment manuellement dans la session (usage interne pour pré-génération)
+  void _injectSegmentIntoSession(KeyExchangeSession session, KeySegmentQrData segment) {
+    session.addSegmentData(segment.startBit, segment.keyData);
   }
 
   /// Crée une session d'échange de clé (côté lecteur).

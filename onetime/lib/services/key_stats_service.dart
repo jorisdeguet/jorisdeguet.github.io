@@ -1,4 +1,5 @@
 import '../models/shared_key.dart';
+import 'format_service.dart';
 
 /// Service pour calculer les statistiques de clé disponible
 class KeyStatsService {
@@ -16,15 +17,9 @@ class KeyStatsService {
 
   /// Formatte les KB disponibles pour affichage
   static String formatAvailableKey(SharedKey? sharedKey, String localPeerId) {
-    final kb = getAvailableKB(sharedKey, localPeerId);
-    if (kb >= 1024) {
-      return '${(kb / 1024).toStringAsFixed(1)} MB';
-    } else if (kb >= 1) {
-      return '${kb.toStringAsFixed(1)} KB';
-    } else {
-      final bytes = kb * 1024;
-      return '${bytes.toStringAsFixed(0)} B';
-    }
+    final bits = getAvailableBits(sharedKey, localPeerId);
+    final bytes = bits ~/ 8;
+    return FormatService.formatBytes(bytes);
   }
 
   /// Calcule le pourcentage de clé restante

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
@@ -278,11 +279,25 @@ class _ConversationTileState extends State<_ConversationTile> {
   String _displayName = '';
   String _lastMessageText = '';
   int _unreadCount = 0;
+  StreamSubscription<String>? _pseudoSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    
+    // Listen for pseudo updates
+    _pseudoSubscription = _convPseudoService.pseudoUpdates.listen((conversationId) {
+      if (conversationId == widget.conversation.id) {
+        _loadDisplayName();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _pseudoSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -368,20 +383,7 @@ class _ConversationTileState extends State<_ConversationTile> {
     final displayName = _displayName.isEmpty ? widget.conversation.displayName : _displayName;
     
     return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: widget.conversation.hasKey
-            ? Theme.of(context).primaryColor.withAlpha(30)
-            : Colors.orange.withAlpha(30),
-        child: widget.conversation.hasKey
-            ? Text(
-                displayName.substring(0, 1).toUpperCase(),
-                style: TextStyle(
-                  color: Theme.of(context).primaryColor,
-                  fontWeight: FontWeight.bold,
-                ),
-              )
-            : const Icon(Icons.lock_open, color: Colors.orange),
-      ),
+      leading: null, // Avatar removed
       title: Row(
         children: [
           Expanded(

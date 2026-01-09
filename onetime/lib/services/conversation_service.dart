@@ -166,6 +166,19 @@ class ConversationService {
     }
   }
 
+  /// Met à jour les infos de debug de la clé pour un utilisateur
+  Future<void> updateKeyDebugInfo({
+    required String conversationId,
+    required String userId,
+    required Map<String, dynamic> info,
+  }) async {
+    debugPrint('[ConversationService] updateKeyDebugInfo: $conversationId, user=$userId');
+    // Utiliser dot notation pour mettre à jour un champ spécifique de la map
+    await _conversationsRef.doc(conversationId).update({
+      'keyDebugInfo.$userId': info,
+    });
+  }
+
   /// Supprime une conversation (et tous ses messages)
   Future<void> deleteConversation(String conversationId) async {
     debugPrint('[ConversationService] deleteConversation: $conversationId');

@@ -1,3 +1,5 @@
+import '../services/format_service.dart';
+
 /// État d'une conversation
 enum ConversationState {
   /// En attente que les participants rejoignent
@@ -40,6 +42,10 @@ class Conversation {
   /// Bits de clé utilisés
   int usedKeyBits;
   
+  /// Infos de debug sur la clé locale des pairs
+  /// Map<UserId, Map<String, dynamic>>
+  final Map<String, dynamic> keyDebugInfo;
+  
   /// Nombre de messages dans la conversation
   int messageCount;
 
@@ -54,6 +60,7 @@ class Conversation {
     this.lastMessageSenderId,
     this.totalKeyBits = 0,
     this.usedKeyBits = 0,
+    this.keyDebugInfo = const {},
     this.messageCount = 0,
   }) : createdAt = createdAt ?? DateTime.now(),
        lastMessageAt = lastMessageAt ?? DateTime.now();
@@ -104,12 +111,7 @@ class Conversation {
   String get remainingKeyFormatted {
     if (!hasKey) return 'Pas de clé';
     final bytes = remainingKeyBytes;
-    if (bytes >= 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    } else if (bytes >= 1024) {
-      return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    }
-    return '$bytes B';
+    return FormatService.formatBytes(bytes);
   }
 
   /// Pourcentage de clé utilisée
@@ -165,6 +167,7 @@ class Conversation {
       'lastMessageSenderId': lastMessageSenderId,
       'totalKeyBits': totalKeyBits,
       'usedKeyBits': usedKeyBits,
+      'keyDebugInfo': keyDebugInfo,
       'messageCount': messageCount,
     };
   }
@@ -185,6 +188,7 @@ class Conversation {
       lastMessageSenderId: data['lastMessageSenderId'] as String?,
       totalKeyBits: data['totalKeyBits'] as int? ?? 0,
       usedKeyBits: data['usedKeyBits'] as int? ?? 0,
+      keyDebugInfo: data['keyDebugInfo'] as Map<String, dynamic>? ?? {},
       messageCount: data['messageCount'] as int? ?? 0,
     );
   }
@@ -202,6 +206,7 @@ class Conversation {
     String? lastMessageSenderId,
     DateTime? lastMessageAt,
     int? usedKeyBits,
+    Map<String, dynamic>? keyDebugInfo,
     int? messageCount,
   }) {
     return Conversation(
@@ -214,6 +219,7 @@ class Conversation {
       lastMessageSenderId: lastMessageSenderId ?? this.lastMessageSenderId,
       totalKeyBits: totalKeyBits,
       usedKeyBits: usedKeyBits ?? this.usedKeyBits,
+      keyDebugInfo: keyDebugInfo ?? this.keyDebugInfo,
       messageCount: messageCount ?? this.messageCount,
     );
   }
