@@ -165,6 +165,42 @@ class KeyExchangeSyncService {
     await _sessionsRef.doc(sessionId).delete();
   }
 
+  /// Nettoie les sessions expirées (plus d'une heure) pour un utilisateur donné
+  Future<void> cleanupOldSessions(String userId) async {
+    try {
+      final oneHourAgo = DateTime.now().subtract(const Duration(hours: 1));
+      
+      // Trouver les sessions créées ou mises à jour il y a plus d'une heure
+      // On filtre aussi par participant car les règles de sécurité ne permettent
+      // de lire/supprimer que ses propres sessions.
+      final snapshot = await _sessionsRef
+          .where('participants', arrayContains: userId)
+          .where('createdAt', isLessThan: oneHourAgo.toIso8601String())
+          .get();
+      
+      final batch = _firestore.batch();
+      int count = 0;
+      
+      for (final doc in snapshot.docs) {
+        batch.delete(doc.reference);
+        count++;
+        // Firestore batch limit is 500
+        if (count >= 400) {
+          await batch.commit();
+          count = 0;
+        }
+      }
+      
+      if (count > 0) {
+        await batch.commit();
+      }
+      
+      debugPrint('[KeyExchangeSyncService] Cleaned up $count old sessions');
+    } catch (e) {
+      debugPrint('[KeyExchangeSyncService] Error cleaning up sessions: $e');
+    }
+  }
+
   /// Trouve les sessions actives pour un participant
   Stream<List<KeyExchangeSessionModel>> watchActiveSessionsForParticipant(
     String participantId,

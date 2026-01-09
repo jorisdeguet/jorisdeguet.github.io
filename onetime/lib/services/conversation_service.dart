@@ -28,7 +28,6 @@ class ConversationService {
   Future<Conversation> createConversation({
     required List<String> peerIds,
     int totalKeyBits = 0,
-    String? name,
     ConversationState state = ConversationState.joining,
   }) async {
     debugPrint('[ConversationService] createConversation: peerIds=$peerIds, state=$state');
@@ -41,7 +40,6 @@ class ConversationService {
     final conversation = Conversation(
       id: conversationId,
       peerIds: allPeers,
-      name: name,
       state: state,
       totalKeyBits: totalKeyBits,
     );
@@ -85,7 +83,7 @@ class ConversationService {
   Future<List<Conversation>> getUserConversations() async {
     final query = await _conversationsRef
         .where('peerIds', arrayContains: localUserId)
-        .orderBy('lastMessageAt', descending: true)
+        .orderBy('createdAt', descending: true)
         .get();
 
     return query.docs
@@ -97,7 +95,7 @@ class ConversationService {
   Stream<List<Conversation>> watchUserConversations() {
     return _conversationsRef
         .where('peerIds', arrayContains: localUserId)
-        .orderBy('lastMessageAt', descending: true)
+        .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => Conversation.fromFirestore(doc.data()))
@@ -115,18 +113,12 @@ class ConversationService {
   /// Met à jour une conversation après envoi de message
   Future<void> updateConversationWithMessage({
     required String conversationId,
-    required String messagePreview,
-    required String senderId,
     required int bitsUsed,
   }) async {
     debugPrint('[ConversationService] updateConversationWithMessage: conversationId=$conversationId');
     try {
       await _conversationsRef.doc(conversationId).update({
-        'lastMessageAt': DateTime.now().toIso8601String(),
-        'lastMessagePreview': messagePreview,
-        'lastMessageSenderId': senderId,
         'usedKeyBits': FieldValue.increment(bitsUsed),
-        'messageCount': FieldValue.increment(1),
       });
       debugPrint('[ConversationService] updateConversationWithMessage: SUCCESS');
     } catch (e, stackTrace) {
@@ -138,7 +130,8 @@ class ConversationService {
 
   /// Renomme une conversation
   Future<void> renameConversation(String conversationId, String newName) async {
-    await _conversationsRef.doc(conversationId).update({'name': newName});
+    // Cette fonctionnalité n'est plus supportée dans le modèle
+    // await _conversationsRef.doc(conversationId).update({'name': newName});
   }
 
   /// Met à jour les bits de clé d'une conversation existante
@@ -237,10 +230,6 @@ class ConversationService {
       debugPrint('[ConversationService] Updating conversation...');
       await updateConversationWithMessage(
         conversationId: conversationId,
-        messagePreview: messagePreview.length > 50
-            ? '${messagePreview.substring(0, 47)}...'
-            : messagePreview,
-        senderId: message.senderId,
         bitsUsed: message.totalBitsUsed,
       );
       debugPrint('[ConversationService] Conversation updated successfully');

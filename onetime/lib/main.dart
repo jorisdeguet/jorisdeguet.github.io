@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -5,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'services/auth_service.dart';
 import 'services/key_pre_generation_service.dart';
+import 'services/pseudo_storage_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'l10n/app_localizations.dart';
@@ -102,17 +105,30 @@ class _AuthWrapperState extends State<AuthWrapper> {
   bool _isLoading = true;
   bool _isSignedIn = false;
 
+  StreamSubscription<User?>? _authSubscription;
+
   @override
   void initState() {
     super.initState();
     _checkAuth();
+    // Écouter les changements d'état d'authentification (ex: suppression de compte)
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((_) => _checkAuth());
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkAuth() async {
     final isSignedIn = await _authService.initialize();
+    final myPseudo = await PseudoStorageService().getMyPseudo();
+    
     if (mounted) {
       setState(() {
-        _isSignedIn = isSignedIn;
+        // On considère connecté seulement si Auth Firebase OK ET Pseudo défini
+        _isSignedIn = isSignedIn && myPseudo != null && myPseudo.isNotEmpty;
         _isLoading = false;
       });
     }

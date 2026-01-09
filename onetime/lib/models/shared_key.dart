@@ -20,8 +20,9 @@ class SharedKey {
   /// Date de création de la clé
   final DateTime createdAt;
   
-  /// Nom optionnel pour identifier la conversation
-  final String? conversationName;
+  /// Offset de départ de la clé (en bits)
+  /// Indique combien de bits ont été tronqués au début de la clé.
+  final int startOffset;
 
   SharedKey({
     required this.id,
@@ -29,15 +30,15 @@ class SharedKey {
     required this.peerIds,
     Uint8List? usedBitmap,
     DateTime? createdAt,
-    this.conversationName,
+    this.startOffset = 0,
   }) : _usedBitmap = usedBitmap ?? Uint8List((keyData.length * 8 + 7) ~/ 8),
        createdAt = createdAt ?? DateTime.now() {
     // S'assurer que les peers sont triés
     peerIds.sort();
   }
 
-  /// Longueur de la clé en bits
-  int get lengthInBits => keyData.length * 8;
+  /// Longueur totale logique de la clé en bits (incluant l'offset)
+  int get lengthInBits => startOffset + (keyData.length * 8);
   
   /// Longueur de la clé en octets
   int get lengthInBytes => keyData.length;
@@ -47,19 +48,25 @@ class SharedKey {
 
   /// Vérifie si un bit est déjà utilisé
   bool isBitUsed(int bitIndex) {
-    if (bitIndex < 0 || bitIndex >= lengthInBits) {
+    if (bitIndex < startOffset || bitIndex >= lengthInBits) {
+      if (bitIndex < startOffset) return true; // Considéré comme utilisé si tronqué
       throw RangeError('Bit index $bitIndex out of range [0, $lengthInBits[');
     }
-    final byteIndex = bitIndex ~/ 8;
-    final bitOffset = bitIndex % 8;
+    
+    final relativeIndex = bitIndex - startOffset;
+    final byteIndex = relativeIndex ~/ 8;
+    final bitOffset = relativeIndex % 8;
     return (_usedBitmap[byteIndex] & (1 << bitOffset)) != 0;
   }
 
   /// Marque un segment de bits comme utilisé
   void markBitsAsUsed(int startBit, int endBit) {
     for (int i = startBit; i < endBit; i++) {
-      final byteIndex = i ~/ 8;
-      final bitOffset = i % 8;
+      if (i < startOffset) continue; // Ignorer si tronqué
+      
+      final relativeIndex = i - startOffset;
+      final byteIndex = relativeIndex ~/ 8;
+      final bitOffset = relativeIndex % 8;
       _usedBitmap[byteIndex] |= (1 << bitOffset);
     }
   }
@@ -67,19 +74,23 @@ class SharedKey {
   /// Trouve le prochain segment disponible de la taille demandée dans le segment du peer
   /// En mode linéaire, on cherche dans toute la clé, mais on ne peut pas utiliser
   /// les bits déjà marqués comme utilisés par d'autres (ou par nous-même).
-  ///
-  /// Pour simplifier, on garde la méthode existante mais on cherche dans toute la clé.
-  /// Note: Cette implémentation simpliste suppose que le verrouillage global est géré
-  /// au niveau supérieur (Firestore lock) pour éviter les collisions.
   ({int startBit, int endBit})? findAvailableSegment(String peerId, int bitsNeeded) {
-    // Allocation linéaire : on cherche depuis le début de la clé
-    // On ignore le partitionnement par peerId
+    // Allocation linéaire : on cherche depuis le début de la clé (après l'offset)
     
     int consecutiveAvailable = 0;
     int segmentStart = 0;
     
-    for (int i = 0; i < lengthInBits; i++) {
-      if (!isBitUsed(i)) {
+    // On commence à chercher après l'offset
+    for (int i = startOffset; i < lengthInBits; i++) {
+      // isBitUsed gère l'offset en interne, mais ici on itère sur les indices absolus
+      // Pour optimiser, on pourrait accéder directement au bitmap
+      
+      final relativeIndex = i - startOffset;
+      final byteIndex = relativeIndex ~/ 8;
+      final bitOffset = relativeIndex % 8;
+      final isUsed = (_usedBitmap[byteIndex] & (1 << bitOffset)) != 0;
+
+      if (!isUsed) {
         if (consecutiveAvailable == 0) {
           segmentStart = i;
         }
@@ -103,8 +114,14 @@ class SharedKey {
     
     for (int i = 0; i < bitsNeeded; i++) {
       final sourceBitIndex = startBit + i;
-      final sourceByteIndex = sourceBitIndex ~/ 8;
-      final sourceBitOffset = sourceBitIndex % 8;
+      
+      if (sourceBitIndex < startOffset) {
+        throw StateError('Cannot extract bits from truncated part of key');
+      }
+      
+      final relativeIndex = sourceBitIndex - startOffset;
+      final sourceByteIndex = relativeIndex ~/ 8;
+      final sourceBitOffset = relativeIndex % 8;
       
       final targetByteIndex = i ~/ 8;
       final targetBitOffset = i % 8;
@@ -120,8 +137,14 @@ class SharedKey {
   /// Compte les bits disponibles dans toute la clé (allocation linéaire)
   int countAvailableBits(String peerId) {
     int count = 0;
-    for (int i = 0; i < lengthInBits; i++) {
-      if (!isBitUsed(i)) count++;
+    // On compte seulement dans la partie non tronquée
+    for (int i = startOffset; i < lengthInBits; i++) {
+      final relativeIndex = i - startOffset;
+      final byteIndex = relativeIndex ~/ 8;
+      final bitOffset = relativeIndex % 8;
+      if ((_usedBitmap[byteIndex] & (1 << bitOffset)) == 0) {
+        count++;
+      }
     }
     return count;
   }
@@ -147,16 +170,56 @@ class SharedKey {
       peerIds: List.from(peerIds),
       usedBitmap: newUsedBitmap,
       createdAt: createdAt,
-      conversationName: conversationName,
+      startOffset: startOffset,
+    );
+  }
+
+  /// Tronque le début de la clé jusqu'à l'index donné (exclus)
+  /// [newStartOffset] doit être > startOffset et < lengthInBits
+  SharedKey truncate(int newStartOffset) {
+    if (newStartOffset <= startOffset) return this;
+    if (newStartOffset >= lengthInBits) {
+      // Tout supprimer
+      return SharedKey(
+        id: id,
+        keyData: Uint8List(0),
+        peerIds: List.from(peerIds),
+        createdAt: createdAt,
+        startOffset: newStartOffset,
+      );
+    }
+
+    final bitsToRemove = newStartOffset - startOffset;
+    final bytesToRemove = bitsToRemove ~/ 8; // On tronque par octet complet
+    final actualNewOffset = startOffset + (bytesToRemove * 8);
+    
+    // On ne garde que les octets complets restants
+    final newKeyData = keyData.sublist(bytesToRemove);
+    final newUsedBitmap = _usedBitmap.sublist(bytesToRemove);
+    
+    return SharedKey(
+      id: id,
+      keyData: newKeyData,
+      peerIds: List.from(peerIds),
+      usedBitmap: newUsedBitmap,
+      createdAt: createdAt,
+      startOffset: actualNewOffset,
     );
   }
 
   /// Compacte la clé en supprimant les bits utilisés et réindexant
+  /// NOTE: Avec l'offset, compact() change de sémantique ou devient obsolète.
+  /// Pour l'instant on le garde tel quel mais il recrée une nouvelle clé sans offset.
   SharedKey compact() {
     // Trouver tous les bits non utilisés
     final availableBits = <int>[];
-    for (int i = 0; i < lengthInBits; i++) {
-      if (!isBitUsed(i)) {
+    for (int i = startOffset; i < lengthInBits; i++) {
+      // Accès optimisé via indices relatifs
+      final relativeIndex = i - startOffset;
+      final byteIndex = relativeIndex ~/ 8;
+      final bitOffset = relativeIndex % 8;
+      
+      if ((_usedBitmap[byteIndex] & (1 << bitOffset)) == 0) {
         availableBits.add(i);
       }
     }
@@ -167,8 +230,9 @@ class SharedKey {
     
     for (int i = 0; i < availableBits.length; i++) {
       final sourceBitIndex = availableBits[i];
-      final sourceByteIndex = sourceBitIndex ~/ 8;
-      final sourceBitOffset = sourceBitIndex % 8;
+      final relativeIndex = sourceBitIndex - startOffset;
+      final sourceByteIndex = relativeIndex ~/ 8;
+      final sourceBitOffset = relativeIndex % 8;
       
       final targetByteIndex = i ~/ 8;
       final targetBitOffset = i % 8;
@@ -183,7 +247,8 @@ class SharedKey {
       keyData: newKeyData,
       peerIds: List.from(peerIds),
       createdAt: createdAt,
-      conversationName: conversationName,
+      // Une clé compactée repart de 0 (nouvelle clé logique)
+      startOffset: 0,
     );
   }
 
@@ -195,7 +260,7 @@ class SharedKey {
       'peerIds': peerIds,
       'usedBitmap': base64Encode(_usedBitmap),
       'createdAt': createdAt.toIso8601String(),
-      'conversationName': conversationName,
+      'startOffset': startOffset,
     };
   }
 
@@ -207,7 +272,7 @@ class SharedKey {
       peerIds: List<String>.from(json['peerIds'] as List),
       usedBitmap: base64Decode(json['usedBitmap'] as String),
       createdAt: DateTime.parse(json['createdAt'] as String),
-      conversationName: json['conversationName'] as String?,
+      startOffset: json['startOffset'] as int? ?? 0,
     );
   }
 

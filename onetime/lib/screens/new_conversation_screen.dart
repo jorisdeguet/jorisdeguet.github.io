@@ -54,7 +54,6 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
       final conversation = await conversationService.createConversation(
         peerIds: [], // Vide pour l'instant, les autres rejoindront
         totalKeyBits: 0, // Pas de clé pour l'instant
-        name: null,
       );
 
       setState(() {
@@ -122,7 +121,6 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
           MaterialPageRoute(
             builder: (_) => KeyExchangeScreen(
               peerIds: peerIds,
-              conversationName: null,
               existingConversationId: _conversationId,
             ),
           ),

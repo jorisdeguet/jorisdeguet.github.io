@@ -334,7 +334,7 @@ class _JoinConversationScreenState extends State<JoinConversationScreen> {
 
       final data = doc.data()!;
       final peerIds = List<String>.from(data['peerIds'] as List? ?? []);
-      final name = data['name'] as String?;
+      // final name = data['name'] as String?; // name removed
 
       if (mounted) {
         Navigator.pushReplacement(
@@ -342,7 +342,6 @@ class _JoinConversationScreenState extends State<JoinConversationScreen> {
           MaterialPageRoute(
             builder: (_) => KeyExchangeScreen(
               peerIds: peerIds,
-              conversationName: name,
               existingConversationId: _scannedConversationId,
             ),
           ),

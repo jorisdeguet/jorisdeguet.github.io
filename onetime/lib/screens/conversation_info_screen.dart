@@ -12,6 +12,7 @@ class ConversationInfoScreen extends StatefulWidget {
   final SharedKey? sharedKey;
   final VoidCallback? onDelete;
   final VoidCallback? onExtendKey;
+  final VoidCallback? onTruncateKey;
 
   const ConversationInfoScreen({
     super.key,
@@ -19,6 +20,7 @@ class ConversationInfoScreen extends StatefulWidget {
     this.sharedKey,
     this.onDelete,
     this.onExtendKey,
+    this.onTruncateKey,
   });
 
   @override
@@ -285,6 +287,20 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
                   style: OutlinedButton.styleFrom(padding: const EdgeInsets.all(16)),
                 ),
               ),
+
+            if (widget.conversation.hasKey)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showTruncateConfirmation(context),
+                    icon: const Icon(Icons.cut),
+                    label: const Text('Nettoyer les clés utilisées'),
+                    style: OutlinedButton.styleFrom(padding: const EdgeInsets.all(16)),
+                  ),
+                ),
+              ),
               
             const SizedBox(height: 16),
             
@@ -303,6 +319,31 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showTruncateConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Nettoyer les clés ?'),
+        content: const Text(
+          'Cette action va supprimer définitivement les parties de la clé qui ont déjà été utilisées. Cela empêche de relire les anciens messages s\'ils sont perdus localement.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              widget.onTruncateKey?.call();
+            },
+            child: const Text('Nettoyer'),
+          ),
+        ],
       ),
     );
   }

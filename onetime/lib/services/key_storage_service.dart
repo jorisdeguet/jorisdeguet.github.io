@@ -30,7 +30,7 @@ class KeyStorageService {
         'id': key.id,
         'peerIds': key.peerIds,
         'createdAt': key.createdAt.toIso8601String(),
-        'conversationName': key.conversationName,
+        'startOffset': key.startOffset,
       };
       await prefs.setString('${_keyPrefix}meta_$conversationId', jsonEncode(metadata));
 
@@ -111,8 +111,8 @@ class KeyStorageService {
         keyData: Uint8List.fromList(keyData),
         peerIds: List<String>.from(metadata['peerIds'] as List),
         createdAt: DateTime.parse(metadata['createdAt'] as String),
-        conversationName: metadata['conversationName'] as String?,
         usedBitmap: usedBitmap,
+        startOffset: metadata['startOffset'] as int? ?? 0,
       );
 
       debugPrint('[KeyStorageService] getKey: FOUND, ${key.lengthInBits} bits');

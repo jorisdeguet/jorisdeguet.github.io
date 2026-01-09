@@ -351,7 +351,6 @@ void main() {
         id: 'test',
         keyData: Uint8List.fromList([1, 2, 3, 4, 5]),
         peerIds: ['peer1', 'peer2'],
-        conversationName: 'Test Conversation',
       );
 
       original.markBitsAsUsed(0, 10);
@@ -362,7 +361,6 @@ void main() {
       expect(restored.id, equals(original.id));
       expect(restored.keyData, equals(original.keyData));
       expect(restored.peerIds, equals(original.peerIds));
-      expect(restored.conversationName, equals(original.conversationName));
       
       for (int i = 0; i < 10; i++) {
         expect(restored.isBitUsed(i), isTrue);

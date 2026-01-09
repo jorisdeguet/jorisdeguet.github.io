@@ -124,6 +124,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   bool _isLoading = false;
   SharedKey? _sharedKey;
   bool _hasSentPseudo = false;
+  bool _showScrollToBottom = false;
 
   // Cache des pseudos pour affichage
   Map<String, String> _displayNames = {};
@@ -152,6 +153,30 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     
     // Mark all messages as read when opening conversation
     _unreadService.markAllAsRead(widget.conversation.id);
+
+    // Scroll listeners
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    if (_scrollController.hasClients) {
+      final isAtBottom = _scrollController.position.pixels >= 
+                         _scrollController.position.maxScrollExtent - 100;
+      if (isAtBottom && _showScrollToBottom) {
+        setState(() => _showScrollToBottom = false);
+      }
+    }
+  }
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+      setState(() => _showScrollToBottom = false);
+    }
   }
 
   /// Check if user has already sent their pseudo in this conversation
@@ -224,6 +249,9 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
         }
       }
       
+      // Générer un hash simple pour la détection d'incohérences (first|last|available)
+      final consistencyHash = '$firstAvailable|$lastAvailable|$availableBits';
+
       await _conversationService.updateKeyDebugInfo(
         conversationId: widget.conversation.id,
         userId: _currentUserId,
@@ -231,6 +259,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
           'availableBits': availableBits,
           'firstAvailableIndex': firstAvailable,
           'lastAvailableIndex': lastAvailable,
+          'consistencyHash': consistencyHash,
           'updatedAt': DateTime.now().toIso8601String(),
         },
       );
@@ -649,6 +678,14 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       );
 
       debugPrint('[ConversationDetail] Message sent successfully!');
+
+      // Scroll to bottom after sending
+      if (mounted) {
+        // Petit délai pour laisser le temps à l'UI de se mettre à jour
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) _scrollToBottom();
+        });
+      }
     } catch (e, stackTrace) {
       debugPrint('[ConversationDetail] ERROR sending message: $e');
       debugPrint('[ConversationDetail] Stack trace: $stackTrace');
@@ -901,7 +938,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       MaterialPageRoute(
         builder: (_) => KeyExchangeScreen(
           peerIds: widget.conversation.peerIds,
-          conversationName: widget.conversation.name,
           existingConversationId: widget.conversation.id,
         ),
       ),
@@ -986,6 +1022,19 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
           ),
         ),
         actions: [
+          if (_hasKeyConsistencyIssue())
+            IconButton(
+              icon: const Icon(Icons.broken_image, color: Colors.red),
+              tooltip: 'Incohérence de clé détectée',
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Attention: Les clés des participants semblent désynchronisées.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              },
+            ),
           if (!widget.conversation.hasKey)
             IconButton(
               icon: const Icon(Icons.key),
@@ -1004,62 +1053,64 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          // Bannière pour conversation sans clé
-          if (!widget.conversation.hasKey)
-            Container(
-              padding: const EdgeInsets.all(12),
-              color: Colors.orange[100],
-              child: Row(
-                children: [
-                  Icon(Icons.warning, color: Colors.orange[800], size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Messages non chiffrés. Créez une clé pour sécuriser vos échanges.',
-                      style: TextStyle(color: Colors.orange[800], fontSize: 12),
-                    ),
+          Column(
+            children: [
+              // Bannière pour conversation sans clé
+              if (!widget.conversation.hasKey)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  color: Colors.orange[100],
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning, color: Colors.orange[800], size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Messages non chiffrés. Créez une clé pour sécuriser vos échanges.',
+                          style: TextStyle(color: Colors.orange[800], fontSize: 12),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _startKeyExchange,
+                        child: Text(
+                          'Créer',
+                          style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
                   ),
-                  TextButton(
-                    onPressed: _startKeyExchange,
-                    child: Text(
-                      'Créer',
-                      style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                ),
 
-          // Barre d'avertissement si peu de clé restante
-          if (widget.conversation.hasKey && widget.conversation.keyRemainingPercent < 20)
-            Container(
-              padding: const EdgeInsets.all(8),
-              color: Colors.red[100],
-              child: Row(
-                children: [
-                  Icon(Icons.warning, color: Colors.red[800], size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Clé bientôt épuisée. Pensez à générer une nouvelle clé.',
-                      style: TextStyle(color: Colors.red[800], fontSize: 12),
-                    ),
+              // Barre d'avertissement si peu de clé restante
+              if (widget.conversation.hasKey && widget.conversation.keyRemainingPercent < 20)
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  color: Colors.red[100],
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning, color: Colors.red[800], size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Clé bientôt épuisée. Pensez à générer une nouvelle clé.',
+                          style: TextStyle(color: Colors.red[800], fontSize: 12),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _startKeyExchange,
+                        child: Text(
+                          'Ajouter',
+                          style: TextStyle(color: Colors.red[800], fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
                   ),
-                  TextButton(
-                    onPressed: _startKeyExchange,
-                    child: Text(
-                      'Ajouter',
-                      style: TextStyle(color: Colors.red[800], fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                ),
 
-          // Liste des messages
-          Expanded(
+              // Liste des messages
+              Expanded(
             child: StreamBuilder<List<_DisplayMessage>>(
               stream: _getCombinedMessagesStream(),
               builder: (context, snapshot) {
@@ -1082,6 +1133,24 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
                     ),
                   );
                 }
+
+                // Auto-scroll on initial load or new message if already at bottom
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (_scrollController.hasClients) {
+                    final maxScroll = _scrollController.position.maxScrollExtent;
+                    final currentScroll = _scrollController.position.pixels;
+                    final isAtBottom = maxScroll - currentScroll < 100;
+                    
+                    if (isAtBottom) {
+                      _scrollController.jumpTo(maxScroll);
+                    } else {
+                      // New message arrived while scrolled up
+                      // Verify if it is really a new message by checking length or last id
+                      // For now, simple logic: if not at bottom, show button
+                      setState(() => _showScrollToBottom = true);
+                    }
+                  }
+                });
 
                 return ListView.builder(
                   controller: _scrollController,
@@ -1209,15 +1278,106 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
                 ),
               ),
             ),
+          ],
+        ),
+          
+          // Bouton Scroll To Bottom
+          if (_showScrollToBottom)
+            Positioned(
+              bottom: 80,
+              right: 16,
+              child: FloatingActionButton.small(
+                onPressed: _scrollToBottom,
+                backgroundColor: Theme.of(context).primaryColor,
+                child: const Icon(Icons.arrow_downward, color: Colors.white),
+              ),
+            ),
         ],
       ),
     );
+  }
+
+  bool _hasKeyConsistencyIssue() {
+    if (_sharedKey == null) return false;
+    if (widget.conversation.keyDebugInfo.isEmpty) return false;
+
+    // Récupérer mon hash local
+    // Note: On recalcule pas ici, on utilise ce qui est dans Firestore si dispo, sinon on suppose OK
+    // Pour simplifier, on compare les valeurs dans keyDebugInfo pour tous les pairs
+    
+    String? referenceHash;
+    bool hasMismatch = false;
+
+    widget.conversation.keyDebugInfo.forEach((userId, info) {
+      if (info is Map<String, dynamic> && info.containsKey('consistencyHash')) {
+        final hash = info['consistencyHash'] as String;
+        if (referenceHash == null) {
+          referenceHash = hash;
+        } else if (referenceHash != hash) {
+          hasMismatch = true;
+        }
+      }
+    });
+
+    return hasMismatch;
   }
 
   Color _getKeyColor(double percent) {
     if (percent > 50) return Colors.green;
     if (percent > 20) return Colors.orange;
     return Colors.red;
+  }
+
+  Future<void> _truncateKey() async {
+    if (_sharedKey == null) return;
+    
+    // Calculer l'offset sûr (fin des octets entièrement utilisés au début)
+    final usedBitmap = _sharedKey!.usedBitmap;
+    int bytesToRemove = 0;
+    
+    // Compter les octets consécutifs à 0xFF au début
+    for (int i = 0; i < usedBitmap.length; i++) {
+      if (usedBitmap[i] == 0xFF) {
+        bytesToRemove++;
+      } else {
+        break;
+      }
+    }
+    
+    if (bytesToRemove == 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Aucune partie de la clé à nettoyer.')),
+        );
+      }
+      return;
+    }
+    
+    final currentOffset = _sharedKey!.startOffset;
+    final newOffset = currentOffset + (bytesToRemove * 8);
+    
+    try {
+      final truncatedKey = _sharedKey!.truncate(newOffset);
+      await _keyStorageService.saveKey(widget.conversation.id, truncatedKey);
+      
+      setState(() {
+        _sharedKey = truncatedKey;
+      });
+      
+      await _updateKeyDebugInfo();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${bytesToRemove} octets de clé nettoyés.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors du nettoyage: $e')),
+        );
+      }
+    }
   }
 
   void _showConversationInfo(BuildContext context) {
@@ -1231,6 +1391,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
             Navigator.pop(context); // Close detail screen
           },
           onExtendKey: _startKeyExchange,
+          onTruncateKey: _truncateKey,
         ),
       ),
     );

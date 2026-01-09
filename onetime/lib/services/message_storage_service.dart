@@ -145,6 +145,26 @@ class MessageStorageService {
     }
   }
 
+  /// Récupère la date du dernier message d'une conversation
+  Future<DateTime?> getLastMessageTimestamp(String conversationId) async {
+    try {
+      final messageIds = await _getMessageIdsForConversation(conversationId);
+      if (messageIds.isEmpty) return null;
+      
+      // On suppose que le dernier ID ajouté est le plus récent
+      final lastId = messageIds.last;
+      final message = await getDecryptedMessage(
+        conversationId: conversationId, 
+        messageId: lastId,
+      );
+      
+      return message?.createdAt;
+    } catch (e) {
+      debugPrint('[MessageStorage] Error getting last message timestamp: $e');
+      return null;
+    }
+  }
+
   /// Supprime un message déchiffré
   Future<void> deleteDecryptedMessage({
     required String conversationId,

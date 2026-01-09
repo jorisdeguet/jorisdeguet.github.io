@@ -27,15 +27,6 @@ class Conversation {
   /// Date de création
   final DateTime createdAt;
   
-  /// Date du dernier message
-  DateTime lastMessageAt;
-  
-  /// Aperçu du dernier message (texte déchiffré)
-  String? lastMessagePreview;
-  
-  /// ID de l'expéditeur du dernier message
-  String? lastMessageSenderId;
-  
   /// Taille de la clé partagée en bits (0 = pas de clé)
   int totalKeyBits;
 
@@ -46,24 +37,16 @@ class Conversation {
   /// Map<UserId, Map<String, dynamic>>
   final Map<String, dynamic> keyDebugInfo;
   
-  /// Nombre de messages dans la conversation
-  int messageCount;
-
   Conversation({
     required this.id,
     required this.peerIds,
     this.name,
     this.state = ConversationState.joining,
     DateTime? createdAt,
-    DateTime? lastMessageAt,
-    this.lastMessagePreview,
-    this.lastMessageSenderId,
     this.totalKeyBits = 0,
     this.usedKeyBits = 0,
     this.keyDebugInfo = const {},
-    this.messageCount = 0,
-  }) : createdAt = createdAt ?? DateTime.now(),
-       lastMessageAt = lastMessageAt ?? DateTime.now();
+  }) : createdAt = createdAt ?? DateTime.now();
 
   /// La conversation a-t-elle une clé de chiffrement ?
   bool get hasKey => totalKeyBits > 0;
@@ -86,10 +69,8 @@ class Conversation {
   /// La clé est-elle épuisée ?
   bool get isKeyExhausted => hasKey && remainingKeyBits <= 0;
 
-  /// Nom à afficher (nom personnalisé ou liste des pairs)
+  /// Nom à afficher (liste des pairs)
   String get displayName {
-    if (name != null && name!.isNotEmpty) return name!;
-    
     // Utiliser les IDs utilisateur (raccourcis)
     final names = peerIds
         .map((id) => id.length > 8 ? id.substring(0, 8) : id)
@@ -120,38 +101,9 @@ class Conversation {
   /// Pourcentage de clé restante
   double get keyRemainingPercent => hasKey ? 100 - keyUsagePercent : 0;
 
-  /// Aperçu du dernier message avec expéditeur
-  String get lastMessageDisplay {
-    if (lastMessagePreview == null) return 'Aucun message';
-    
-    // Utiliser un ID court pour l'expéditeur
-    final senderName = lastMessageSenderId != null
-        ? (lastMessageSenderId!.length > 4
-            ? '...${lastMessageSenderId!.substring(lastMessageSenderId!.length - 4)}'
-            : lastMessageSenderId!)
-        : '';
-    
-    final preview = lastMessagePreview!.length > 50
-        ? '${lastMessagePreview!.substring(0, 47)}...'
-        : lastMessagePreview!;
-    
-    if (senderName.isNotEmpty) {
-      return '$senderName: $preview';
-    }
-    return preview;
-  }
-
-  /// Met à jour avec un nouveau message
-  void updateWithMessage({
-    required String preview,
-    required String senderId,
-    required int bitsUsed,
-  }) {
-    lastMessagePreview = preview;
-    lastMessageSenderId = senderId;
-    lastMessageAt = DateTime.now();
+  /// Met à jour avec l'utilisation de la clé
+  void updateKeyUsage(int bitsUsed) {
     usedKeyBits += bitsUsed;
-    messageCount++;
   }
 
   /// Sérialise pour Firebase
@@ -159,16 +111,11 @@ class Conversation {
     return {
       'id': id,
       'peerIds': peerIds,
-      'name': name,
       'state': state.name,
       'createdAt': createdAt.toIso8601String(),
-      'lastMessageAt': lastMessageAt.toIso8601String(),
-      'lastMessagePreview': lastMessagePreview,
-      'lastMessageSenderId': lastMessageSenderId,
       'totalKeyBits': totalKeyBits,
       'usedKeyBits': usedKeyBits,
       'keyDebugInfo': keyDebugInfo,
-      'messageCount': messageCount,
     };
   }
 
@@ -177,19 +124,14 @@ class Conversation {
     return Conversation(
       id: data['id'] as String,
       peerIds: List<String>.from(data['peerIds'] as List),
-      name: data['name'] as String?,
       state: ConversationState.values.firstWhere(
         (s) => s.name == data['state'],
         orElse: () => ConversationState.joining,
       ),
       createdAt: DateTime.parse(data['createdAt'] as String),
-      lastMessageAt: DateTime.parse(data['lastMessageAt'] as String),
-      lastMessagePreview: data['lastMessagePreview'] as String?,
-      lastMessageSenderId: data['lastMessageSenderId'] as String?,
       totalKeyBits: data['totalKeyBits'] as int? ?? 0,
       usedKeyBits: data['usedKeyBits'] as int? ?? 0,
       keyDebugInfo: data['keyDebugInfo'] as Map<String, dynamic>? ?? {},
-      messageCount: data['messageCount'] as int? ?? 0,
     );
   }
 
@@ -201,26 +143,16 @@ class Conversation {
       Conversation.fromFirestore(json);
 
   Conversation copyWith({
-    String? name,
-    String? lastMessagePreview,
-    String? lastMessageSenderId,
-    DateTime? lastMessageAt,
     int? usedKeyBits,
     Map<String, dynamic>? keyDebugInfo,
-    int? messageCount,
   }) {
     return Conversation(
       id: id,
       peerIds: peerIds,
-      name: name ?? this.name,
       createdAt: createdAt,
-      lastMessageAt: lastMessageAt ?? this.lastMessageAt,
-      lastMessagePreview: lastMessagePreview ?? this.lastMessagePreview,
-      lastMessageSenderId: lastMessageSenderId ?? this.lastMessageSenderId,
       totalKeyBits: totalKeyBits,
       usedKeyBits: usedKeyBits ?? this.usedKeyBits,
       keyDebugInfo: keyDebugInfo ?? this.keyDebugInfo,
-      messageCount: messageCount ?? this.messageCount,
     );
   }
 }

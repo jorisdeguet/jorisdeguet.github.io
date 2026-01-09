@@ -172,12 +172,12 @@ class KeyExchangeService {
   /// Finalise l'échange et crée la clé partagée.
    /// [force] permet de forcer la finalisation même si tous les peers n'ont pas confirmé localement
   /// (utile quand la vérification est faite via Firestore)
-  SharedKey finalizeExchange(KeyExchangeSession session, {String? conversationName, bool force = false}) {
+  SharedKey finalizeExchange(KeyExchangeSession session, {bool force = false}) {
     if (!force && !session.isComplete && session.role == KeyExchangeRole.source) {
       throw StateError('Exchange is not complete, not all peers confirmed');
     }
     
-    return session.buildSharedKey(conversationName: conversationName);
+    return session.buildSharedKey();
   }
 
   /// Permet d'agrandir une clé existante avec de nouveaux segments.
@@ -288,7 +288,7 @@ class KeyExchangeSession {
   }
 
   /// Construit la clé partagée finale
-  SharedKey buildSharedKey({String? conversationName}) {
+  SharedKey buildSharedKey() {
     // Assembler tous les segments dans l'ordre
     final sortedIndexes = _segmentData.keys.toList()..sort();
     
@@ -311,7 +311,6 @@ class KeyExchangeSession {
       id: sessionId,
       keyData: keyData,
       peerIds: List.from(peerIds),
-      conversationName: conversationName,
     );
   }
 

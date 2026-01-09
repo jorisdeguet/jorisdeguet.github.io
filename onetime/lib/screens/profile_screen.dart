@@ -140,6 +140,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // Delete global data
         await _convPseudoService.deleteAllPseudos();
         await _unreadService.deleteAllUnreadCounts();
+
+        // Supprimer le compte Firebase (reset complet de l'identité)
+        try {
+          await _authService.deleteAccount();
+        } catch (e) {
+          debugPrint('Error deleting account: $e');
+          // On continue même si erreur pour finir le nettoyage local
+        }
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

@@ -24,13 +24,11 @@ import 'conversation_detail_screen.dart';
 /// Écran d'échange de clé via QR codes.
 class KeyExchangeScreen extends StatefulWidget {
   final List<String> peerIds;
-  final String? conversationName;
   final String? existingConversationId;
 
   const KeyExchangeScreen({
     super.key,
     required this.peerIds,
-    this.conversationName,
     this.existingConversationId,
   });
 
@@ -455,7 +453,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         
         final newKeyData = _keyExchangeService.finalizeExchange(
           _session!,
-          conversationName: widget.conversationName,
           force: true,
         );
         
@@ -469,7 +466,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         // NOUVELLE CLÉ
         finalKey = _keyExchangeService.finalizeExchange(
           _session!,
-          conversationName: widget.conversationName,
           force: true,
         );
         
@@ -805,7 +801,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           // Forcer la finalisation pour obtenir les nouveaux segments
           final newKeyData = _keyExchangeService.finalizeExchange(
             _session!,
-            conversationName: widget.conversationName,
             force: true,
           );
           
@@ -823,7 +818,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           
           finalKey = _keyExchangeService.finalizeExchange(
             _session!,
-            conversationName: widget.conversationName,
             force: true,
           );
           
@@ -840,14 +834,12 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         // NOUVELLE CONVERSATION: Créer tout de zéro
         finalKey = _keyExchangeService.finalizeExchange(
           _session!,
-          conversationName: widget.conversationName,
           force: true,
         );
         
         final conversation = await conversationService.createConversation(
           peerIds: finalKey.peerIds,
           totalKeyBits: finalKey.lengthInBits,
-          name: widget.conversationName,
         );
         conversationId = conversation.id;
         debugPrint('[KeyExchange] New conversation created: $conversationId');

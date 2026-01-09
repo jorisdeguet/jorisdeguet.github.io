@@ -9,6 +9,7 @@ import '../services/unread_message_service.dart';
 import '../services/pseudo_storage_service.dart';
 import '../models/conversation.dart';
 import '../models/encrypted_message.dart';
+import '../services/key_exchange_sync_service.dart';
 import 'profile_screen.dart';
 import 'new_conversation_screen.dart';
 import 'conversation_detail_screen.dart';
@@ -34,6 +35,15 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadMyPseudo();
+    _cleanupOldSessions();
+  }
+
+  Future<void> _cleanupOldSessions() async {
+    final userId = _authService.currentUserId;
+    if (userId != null) {
+      // Nettoyage des sessions d'échange de clés expirées
+      await KeyExchangeSyncService().cleanupOldSessions(userId);
+    }
   }
 
   Future<void> _loadMyPseudo() async {
@@ -146,7 +156,19 @@ class _ConversationsListScreenState extends State<ConversationsListScreen> {
 
   void _initService() {
     _conversationService = ConversationService(localUserId: widget.userId);
-    _conversationsStream = _conversationService.watchUserConversations();
+    _conversationsStream = _conversationService.watchUserConversations().asyncMap((conversations) async {
+      final messageStorage = MessageStorageService();
+      
+      final withTimes = await Future.wait(conversations.map((c) async {
+        final lastTime = await messageStorage.getLastMessageTimestamp(c.id);
+        return MapEntry(c, lastTime ?? c.createdAt);
+      }));
+      
+      // Sort descending
+      withTimes.sort((a, b) => b.value.compareTo(a.value));
+      
+      return withTimes.map((e) => e.key).toList();
+    });
   }
 
   /// Méthode publique pour rafraîchir les conversations
@@ -278,6 +300,7 @@ class _ConversationTileState extends State<_ConversationTile> {
   final UnreadMessageService _unreadService = UnreadMessageService();
   String _displayName = '';
   String _lastMessageText = '';
+  DateTime? _lastMessageTime;
   int _unreadCount = 0;
   StreamSubscription<String>? _pseudoSubscription;
 
@@ -292,6 +315,16 @@ class _ConversationTileState extends State<_ConversationTile> {
         _loadDisplayName();
       }
     });
+  }
+
+  @override
+  void didUpdateWidget(_ConversationTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.conversation.id != widget.conversation.id || 
+        oldWidget.conversation.usedKeyBits != widget.conversation.usedKeyBits ||
+        oldWidget.conversation.state != widget.conversation.state) {
+      _loadData();
+    }
   }
 
   @override
@@ -343,6 +376,7 @@ class _ConversationTileState extends State<_ConversationTile> {
           if (mounted) {
             setState(() {
               _lastMessageText = '';
+              _lastMessageTime = null;
             });
           }
           return;
@@ -361,6 +395,7 @@ class _ConversationTileState extends State<_ConversationTile> {
       if (mounted) {
         setState(() {
           _lastMessageText = text;
+          _lastMessageTime = lastMsg.createdAt;
         });
       }
     }
@@ -454,7 +489,7 @@ class _ConversationTileState extends State<_ConversationTile> {
           ],
           const SizedBox(width: 4),
           Text(
-            _formatTime(widget.conversation.lastMessageAt),
+            _formatTime(_lastMessageTime ?? widget.conversation.createdAt),
             style: TextStyle(
               fontSize: 12,
               color: Colors.grey[500],
