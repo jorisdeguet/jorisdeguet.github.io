@@ -25,8 +25,8 @@ class KeyStatsService {
   /// Calcule le pourcentage de clé restante
   static double getAvailablePercent(SharedKey? sharedKey, String localPeerId) {
     if (sharedKey == null) return 0;
-    final segment = sharedKey.getSegmentForPeer(localPeerId);
-    final totalBits = segment.endBit - segment.startBit;
+    // Allocation linéaire : on utilise la taille totale de la clé
+    final totalBits = sharedKey.lengthInBits;
     if (totalBits == 0) return 0;
     final availableBits = getAvailableBits(sharedKey, localPeerId);
     return (availableBits / totalBits) * 100;

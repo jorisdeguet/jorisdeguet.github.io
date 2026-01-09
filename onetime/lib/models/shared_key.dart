@@ -3,8 +3,7 @@ import 'dart:convert';
 
 /// Représente une clé partagée entre plusieurs pairs pour le chiffrement One-Time Pad.
 /// 
-/// La clé est divisée en segments attribués à chaque pair selon leur ID.
-/// Pour N pairs, le pair i utilise le segment [i*keyLength/N, (i+1)*keyLength/N[
+/// L'allocation est linéaire : tous les pairs partagent l'espace entier de la clé.
 class SharedKey {
   /// Identifiant unique de la clé partagée
   final String id;
@@ -46,23 +45,6 @@ class SharedKey {
   /// Nombre de pairs partageant cette clé
   int get peerCount => peerIds.length;
 
-  /// Retourne l'index du segment attribué à un pair donné.
-  /// Pour N pairs, le pair à l'index i utilise [i*length/N, (i+1)*length/N[
-  ({int startBit, int endBit}) getSegmentForPeer(String peerId) {
-    final peerIndex = peerIds.indexOf(peerId);
-    if (peerIndex == -1) {
-      throw ArgumentError('Peer $peerId not found in this shared key');
-    }
-    
-    final segmentSize = lengthInBits ~/ peerCount;
-    final startBit = peerIndex * segmentSize;
-    final endBit = (peerIndex == peerCount - 1) 
-        ? lengthInBits 
-        : (peerIndex + 1) * segmentSize;
-    
-    return (startBit: startBit, endBit: endBit);
-  }
-
   /// Vérifie si un bit est déjà utilisé
   bool isBitUsed(int bitIndex) {
     if (bitIndex < 0 || bitIndex >= lengthInBits) {
@@ -83,13 +65,20 @@ class SharedKey {
   }
 
   /// Trouve le prochain segment disponible de la taille demandée dans le segment du peer
+  /// En mode linéaire, on cherche dans toute la clé, mais on ne peut pas utiliser
+  /// les bits déjà marqués comme utilisés par d'autres (ou par nous-même).
+  ///
+  /// Pour simplifier, on garde la méthode existante mais on cherche dans toute la clé.
+  /// Note: Cette implémentation simpliste suppose que le verrouillage global est géré
+  /// au niveau supérieur (Firestore lock) pour éviter les collisions.
   ({int startBit, int endBit})? findAvailableSegment(String peerId, int bitsNeeded) {
-    final peerSegment = getSegmentForPeer(peerId);
+    // Allocation linéaire : on cherche depuis le début de la clé
+    // On ignore le partitionnement par peerId
     
     int consecutiveAvailable = 0;
-    int segmentStart = peerSegment.startBit;
+    int segmentStart = 0;
     
-    for (int i = peerSegment.startBit; i < peerSegment.endBit; i++) {
+    for (int i = 0; i < lengthInBits; i++) {
       if (!isBitUsed(i)) {
         if (consecutiveAvailable == 0) {
           segmentStart = i;
@@ -128,18 +117,20 @@ class SharedKey {
     return result;
   }
 
-  /// Compte les bits disponibles dans le segment d'un peer
+  /// Compte les bits disponibles dans toute la clé (allocation linéaire)
   int countAvailableBits(String peerId) {
-    final segment = getSegmentForPeer(peerId);
     int count = 0;
-    for (int i = segment.startBit; i < segment.endBit; i++) {
+    for (int i = 0; i < lengthInBits; i++) {
       if (!isBitUsed(i)) count++;
     }
     return count;
   }
 
   /// Ajoute des bits à la fin de la clé (pour l'agrandissement)
+  /// Allocation linéaire : on ajoute simplement à la fin
   SharedKey extend(Uint8List additionalKeyData) {
+    if (additionalKeyData.isEmpty) return this;
+
     final newKeyData = Uint8List(keyData.length + additionalKeyData.length);
     newKeyData.setRange(0, keyData.length, keyData);
     newKeyData.setRange(keyData.length, newKeyData.length, additionalKeyData);
@@ -148,6 +139,7 @@ class SharedKey {
     final newBitmapSize = (newKeyData.length * 8 + 7) ~/ 8;
     final newUsedBitmap = Uint8List(newBitmapSize);
     newUsedBitmap.setRange(0, _usedBitmap.length, _usedBitmap);
+    // Les nouveaux bits sont à 0 par défaut (disponibles)
     
     return SharedKey(
       id: id,

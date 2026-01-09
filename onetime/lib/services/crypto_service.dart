@@ -212,20 +212,21 @@ class CryptoService {
     final usedSegments = <KeySegment>[];
     int bitsCollected = 0;
     
-    final peerSegment = sharedKey.getSegmentForPeer(localPeerId);
-    int searchStart = peerSegment.startBit;
+    // Allocation linéaire: on cherche dans toute la clé
+    int searchStart = 0;
+    final totalKeyBits = sharedKey.lengthInBits;
     
-    while (bitsCollected < totalBitsNeeded && searchStart < peerSegment.endBit) {
+    while (bitsCollected < totalBitsNeeded && searchStart < totalKeyBits) {
       // Chercher le prochain bit disponible
-      while (searchStart < peerSegment.endBit && sharedKey.isBitUsed(searchStart)) {
+      while (searchStart < totalKeyBits && sharedKey.isBitUsed(searchStart)) {
         searchStart++;
       }
       
-      if (searchStart >= peerSegment.endBit) break;
+      if (searchStart >= totalKeyBits) break;
       
       // Trouver la fin du segment disponible
       int segmentEnd = searchStart;
-      while (segmentEnd < peerSegment.endBit && 
+      while (segmentEnd < totalKeyBits && 
              !sharedKey.isBitUsed(segmentEnd) &&
              (segmentEnd - searchStart) < (totalBitsNeeded - bitsCollected)) {
         segmentEnd++;

@@ -33,16 +33,16 @@ void main() {
         expect(result.usedSegment.keyId, equals('test_key'));
       });
 
-      test('encryption uses correct key segment', () {
+      test('encryption uses available bits', () {
         final result = service.encrypt(
           plaintext: 'Test',
           sharedKey: sharedKey,
         );
 
-        // peer_a devrait utiliser la première moitié de la clé
-        final segment = sharedKey.getSegmentForPeer('peer_a');
-        expect(result.usedSegment.startBit, greaterThanOrEqualTo(segment.startBit));
-        expect(result.usedSegment.endBit, lessThanOrEqualTo(segment.endBit));
+        // peer_a utilise les bits disponibles (linéaire)
+        // Vérifie juste que les bits sont dans la plage valide de la clé
+        expect(result.usedSegment.startBit, greaterThanOrEqualTo(0));
+        expect(result.usedSegment.endBit, lessThanOrEqualTo(sharedKey.lengthInBits));
       });
 
       test('marks key bits as used after encryption', () {
@@ -250,34 +250,12 @@ void main() {
       });
     });
 
+    // Segment Strategy group removed as segmentation is no longer used
+    /*
     group('Segment Strategy', () {
-      test('peer_a uses first half of key', () {
-        final segment = sharedKey.getSegmentForPeer('peer_a');
-        expect(segment.startBit, equals(0));
-        expect(segment.endBit, equals(sharedKey.lengthInBits ~/ 2));
-      });
-
-      test('peer_b uses second half of key', () {
-        final segment = sharedKey.getSegmentForPeer('peer_b');
-        expect(segment.startBit, equals(sharedKey.lengthInBits ~/ 2));
-        expect(segment.endBit, equals(sharedKey.lengthInBits));
-      });
-
-      test('5 peers divide key into fifths', () {
-        final fivePeerKey = SharedKey(
-          id: 'five_peer',
-          keyData: Uint8List(1000), // 8000 bits
-          peerIds: ['p1', 'p2', 'p3', 'p4', 'p5'],
-        );
-
-        final segmentSize = 8000 ~/ 5;
-
-        for (int i = 0; i < 5; i++) {
-          final segment = fivePeerKey.getSegmentForPeer('p${i + 1}');
-          expect(segment.startBit, equals(i * segmentSize));
-        }
-      });
+      ...
     });
+    */
   });
 
   group('SharedKey', () {
@@ -332,11 +310,11 @@ void main() {
         peerIds: ['a', 'b'],
       );
 
-      // peer 'a' a la première moitié = 400 bits
-      expect(key.countAvailableBits('a'), equals(400));
+      // Allocation linéaire : tout est disponible pour tout le monde
+      expect(key.countAvailableBits('a'), equals(800));
 
       key.markBitsAsUsed(0, 100);
-      expect(key.countAvailableBits('a'), equals(300));
+      expect(key.countAvailableBits('a'), equals(700));
     });
 
     test('extend adds data correctly', () {

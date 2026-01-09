@@ -137,8 +137,7 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
                       // Check if peer exists in key first to avoid ArgumentError
                       if (widget.sharedKey!.peerIds.contains(peerId)) {
                         final availableBits = widget.sharedKey!.countAvailableBits(peerId);
-                        final segment = widget.sharedKey!.getSegmentForPeer(peerId);
-                        debugInfo = '\n[Local] Clé: $availableBits bits dispos (${segment.startBit}-${segment.endBit})';
+                        debugInfo = '\n[Local] Clé: $availableBits bits dispos (sur ${widget.sharedKey!.lengthInBits})';
                       } else {
                         debugInfo = '\n[Local] Pas de clé pour ce participant';
                       }

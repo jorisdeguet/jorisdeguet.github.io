@@ -210,13 +210,14 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     
     try {
       final availableBits = _sharedKey!.countAvailableBits(_currentUserId);
-      final segment = _sharedKey!.getSegmentForPeer(_currentUserId);
+      // Allocation linéaire : on scanne toute la clé
+      final totalBits = _sharedKey!.lengthInBits;
       
       // Trouver le premier et dernier index disponible
       int firstAvailable = -1;
       int lastAvailable = -1;
       
-      for (int i = segment.startBit; i < segment.endBit; i++) {
+      for (int i = 0; i < totalBits; i++) {
         if (!_sharedKey!.isBitUsed(i)) {
           if (firstAvailable == -1) firstAvailable = i;
           lastAvailable = i;
@@ -241,6 +242,11 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
   /// Callback quand des bits de clé sont utilisés (après déchiffrement)
   void _onKeyUsed() {
+    // Force UI rebuild to update key usage in app bar
+    if (mounted) {
+      setState(() {});
+    }
+
     // Sauvegarder la clé avec le bitmap mis à jour
     if (_sharedKey != null) {
       debugPrint('[ConversationDetail] _onKeyUsed called - saving key bitmap');
@@ -924,8 +930,8 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
         
     // Pourcentage basé sur SharedKey si disponible
     final keyRemainingPercent = _sharedKey != null
-        ? (1 - (_sharedKey!.countAvailableBits(_currentUserId) / _sharedKey!.lengthInBits)) * 100
-        : widget.conversation.keyRemainingPercent; // Inversé car keyUsagePercent est usage
+        ? (_sharedKey!.countAvailableBits(_currentUserId) / _sharedKey!.lengthInBits) * 100
+        : widget.conversation.keyRemainingPercent;
         
     final displayKeyPercent = _sharedKey != null
          ? (_sharedKey!.countAvailableBits(_currentUserId) / _sharedKey!.lengthInBits) * 100
