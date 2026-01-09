@@ -7,6 +7,15 @@
 - Augmenter taille QR à 2048-2953 bytes (version 40)
 
 # Done
+## 2026-01-09: App ID Change
+- ✅ Renamed package to `org.deguet.jo.onetime` (Android & iOS)
+
+## 2026-01-08: Polissage UI et Securité
+- ✅ Key Truncation: suppression des bits utilisés pour forward secrecy
+- ✅ Règles Firestore strictes (participants uniquement)
+- ✅ Fix scroll infini et bouton redondant dans le chat
+- ✅ UX Scan QR: feedback haptique et anti-rebond
+
 ## 2026-01-07: Suppression du numéro de téléphone
 - ✅ Remplacement du numéro de téléphone par un UUID généré aléatoirement
 - ✅ Écran de login simplifié: demande uniquement le pseudo

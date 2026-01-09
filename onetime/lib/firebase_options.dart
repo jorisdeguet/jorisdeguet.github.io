@@ -51,7 +51,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyDyJd8qO-TW35RvokH9c1jXmHiD8esf2ZU',
-    appId: '1:449858051942:android:d606cb0ee54bb4834532a7',
+    appId: '1:449858051942:android:078675b8ca64aa274532a7',
     messagingSenderId: '449858051942',
     projectId: 'onetime-bf68b',
     storageBucket: 'onetime-bf68b.firebasestorage.app',
@@ -59,11 +59,12 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyAE3hgFOR9Qnm0VXrJaNszcWayu3qBtUQM',
-    appId: '1:449858051942:ios:25fd5a5d0665ee424532a7',
+    appId: '1:449858051942:ios:9c91855aad5eafa64532a7',
     messagingSenderId: '449858051942',
     projectId: 'onetime-bf68b',
     storageBucket: 'onetime-bf68b.firebasestorage.app',
-    iosBundleId: 'com.example.onetime',
+    androidClientId: '449858051942-ktk478dqheb25n431upst4qtkobaonll.apps.googleusercontent.com',
+    iosBundleId: 'org.deguet.jo.onetime',
   );
 
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -56,6 +57,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   int _currentStep = 0;
   KeySegmentQrData? _currentQrData;
   bool _isScanning = false;
+  bool _processingScan = false;
   bool _isFinalizing = false;
   String? _errorMessage;
   
@@ -704,6 +706,9 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
   Future<void> _onQrScanned(String qrData) async {
     if (_currentUserId.isEmpty) return;
+    if (_processingScan) return;
+
+    _processingScan = true;
 
     try {
       final segment = _keyExchangeService.parseQrCode(qrData);
@@ -736,13 +741,18 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       if (_session!.hasScannedSegment(segment.segmentIndex)) {
         debugPrint('[KeyExchange] Segment ${segment.segmentIndex} already scanned, skipping');
         // Ne pas afficher d'erreur, juste continuer à scanner
-        setState(() {
-          _isScanning = true;
-        });
+        if (mounted) {
+          setState(() {
+            _isScanning = true;
+          });
+        }
         return;
       }
 
       debugPrint('[KeyExchange] Scanned segment ${segment.segmentIndex}');
+
+      // Feedback haptique
+      HapticFeedback.lightImpact();
 
       // Enregistrer le segment localement
       _keyExchangeService.recordReadSegment(_session!, segment);
@@ -757,21 +767,30 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       debugPrint('[KeyExchange] Segment ${segment.segmentIndex} marked as scanned in Firestore');
 
       // Pas besoin d'arrêter le scan - continuer immédiatement
-      setState(() {
-        _errorMessage = null;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = null;
+        });
+      }
     } catch (e) {
       debugPrint('[KeyExchange] Error scanning QR: $e');
-      setState(() => _errorMessage = 'Erreur scan: ${e.toString().substring(0, 50)}...');
-      // Reprendre le scan après l'erreur
-      Future.delayed(const Duration(milliseconds: 1500), () {
-        if (mounted) {
-          setState(() {
-            _isScanning = true;
-            _errorMessage = null;
-          });
-        }
-      });
+      if (mounted) {
+        final msg = e.toString();
+        setState(() => _errorMessage = 'Erreur scan: ${msg.length > 50 ? msg.substring(0, 50) : msg}...');
+        // Reprendre le scan après l'erreur
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (mounted) {
+            setState(() {
+              _isScanning = true;
+              _errorMessage = null;
+            });
+          }
+        });
+      }
+    } finally {
+      // Debounce simple pour éviter les doubles scans rapides
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (mounted) _processingScan = false;
     }
   }
 
