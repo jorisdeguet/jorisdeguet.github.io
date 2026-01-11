@@ -12,10 +12,14 @@ import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'l10n/app_localizations.dart';
 
+// Ajout : options générées par FlutterFire CLI
+import 'firebase_options.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
-  
+  // Utiliser les options générées pour initialiser Firebase (évite le besoin du plist dans le projet iOS)
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
   // Initialiser le service de pré-génération de clés
   KeyPreGenerationService().initialize();
   
