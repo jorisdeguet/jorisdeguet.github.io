@@ -21,6 +21,7 @@ import '../services/crypto_service.dart';
 import '../services/qr_segment_cache_service.dart';
 import '../services/key_pre_generation_service.dart';
 import 'conversation_detail_screen.dart';
+import 'key_exchange_summary_screen.dart';
 
 /// Écran d'échange de clé via QR codes.
 class KeyExchangeScreen extends StatefulWidget {
@@ -528,10 +529,17 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       debugPrint('[KeyExchange] Reader: Key exchange completed (session cleanup by source)');
 
       if (mounted) {
+        // Navigate to summary screen
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => ConversationDetailScreen(conversation: conversation),
+            builder: (_) => KeyExchangeSummaryScreen(
+              session: _firestoreSession!,
+              previousKey: existingKey,
+              newKey: finalKey,
+              conversation: conversation,
+              currentUserId: _currentUserId,
+            ),
           ),
         );
       }
@@ -627,6 +635,9 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       // Générer et afficher le segment si différent de l'actuel
       if (_currentQrData == null || _currentQrData!.segmentIndex != nextSegmentIndex) {
         _displaySegmentAtIndex(nextSegmentIndex);
+        
+        // AUTO-SCAN: Source marks itself as having scanned this segment
+        _autoScanSourceSegment(nextSegmentIndex);
       }
     });
   }
@@ -637,6 +648,32 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       _torrentRotationTimer!.cancel();
       _torrentRotationTimer = null;
       debugPrint('[Torrent] Rotation stopped');
+    }
+  }
+
+  /// Auto-scan: Source marks itself as having scanned a segment
+  Future<void> _autoScanSourceSegment(int segmentIndex) async {
+    if (_session == null || _firestoreSession == null) return;
+    if (_currentUserId.isEmpty) return;
+
+    try {
+      // Check if source has already scanned this segment
+      if (_firestoreSession!.hasParticipantScannedSegment(_currentUserId, segmentIndex)) {
+        return; // Already scanned
+      }
+
+      debugPrint('[AutoScan] Source marking segment $segmentIndex as scanned');
+      
+      // Mark in Firestore that source has scanned this segment
+      await _syncService.markSegmentScanned(
+        sessionId: _firestoreSession!.id,
+        participantId: _currentUserId,
+        segmentIndex: segmentIndex,
+      );
+
+      debugPrint('[AutoScan] ✓ Segment $segmentIndex marked as scanned by source');
+    } catch (e) {
+      debugPrint('[AutoScan] Error marking segment as scanned: $e');
     }
   }
 
@@ -876,13 +913,14 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       // Utiliser la conversation existante ou en créer une nouvelle
       String conversationId;
       SharedKey finalKey;
+      SharedKey? existingKey; // Track existing key for summary
       
       if (widget.existingConversationId != null) {
         // Conversation existante : vérifier si c'est une extension ou une création initiale
         conversationId = widget.existingConversationId!;
         
         debugPrint('[KeyExchange] Checking for existing key...');
-        final existingKey = await _keyStorageService.getKey(conversationId);
+        existingKey = await _keyStorageService.getKey(conversationId);
         
         if (existingKey != null) {
           // KEY EXTENSION: La conversation a déjà une clé
@@ -922,6 +960,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         debugPrint('[KeyExchange] Conversation updated: $conversationId');
       } else {
         // NOUVELLE CONVERSATION: Créer tout de zéro
+        existingKey = null;
         finalKey = _keyExchangeService.finalizeExchange(
           _session!,
           force: true,
@@ -989,10 +1028,17 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       _stopTorrentRotation();
 
       if (mounted) {
+        // Navigate to summary screen instead of directly to conversation
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => ConversationDetailScreen(conversation: conversation),
+            builder: (_) => KeyExchangeSummaryScreen(
+              session: _firestoreSession!,
+              previousKey: existingKey,
+              newKey: finalKey,
+              conversation: conversation,
+              currentUserId: _currentUserId,
+            ),
           ),
         );
       }
