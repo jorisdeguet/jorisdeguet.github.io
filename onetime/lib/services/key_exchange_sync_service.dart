@@ -67,15 +67,25 @@ class KeyExchangeSyncService {
     required String participantId,
     required int segmentIndex,
   }) async {
+    debugPrint('[KeyExchangeSyncService] ══════════════════════════════════');
+    debugPrint('[KeyExchangeSyncService] markSegmentScanned called:');
+    debugPrint('[KeyExchangeSyncService]   sessionId: $sessionId');
+    debugPrint('[KeyExchangeSyncService]   participantId: ${participantId.substring(0, 8)}...');
+    debugPrint('[KeyExchangeSyncService]   segmentIndex: $segmentIndex');
+    
     final docRef = _sessionsRef.doc(sessionId);
 
     await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(docRef);
       if (!snapshot.exists) {
+        debugPrint('[KeyExchangeSyncService] ❌ ERROR: Session not found');
         throw Exception('Session not found');
       }
 
       final session = KeyExchangeSessionModel.fromFirestore(snapshot.data()!);
+      debugPrint('[KeyExchangeSyncService] Current session state:');
+      debugPrint('[KeyExchangeSyncService]   participants: ${session.participants}');
+      debugPrint('[KeyExchangeSyncService]   scannedBy[$segmentIndex] BEFORE: ${session.scannedBy[segmentIndex] ?? []}');
 
       // Ajouter le participant à la liste des scannés pour ce segment
       final scannedBy = Map<int, List<String>>.from(session.scannedBy);
@@ -87,11 +97,15 @@ class KeyExchangeSyncService {
       if (participantAdded) {
         participants.add(participantId);
         participants.sort();
+        debugPrint('[KeyExchangeSyncService] ℹ️  Adding participant to session: ${participantId.substring(0, 8)}...');
       }
 
       if (!segmentScanned.contains(participantId)) {
         segmentScanned.add(participantId);
         scannedBy[segmentIndex] = segmentScanned;
+        
+        debugPrint('[KeyExchangeSyncService] ✓ Added participant to segment scanners');
+        debugPrint('[KeyExchangeSyncService]   scannedBy[$segmentIndex] AFTER: $segmentScanned');
 
         final updates = <String, dynamic>{
           'scannedBy': scannedBy.map((k, v) => MapEntry(k.toString(), v)),
@@ -104,8 +118,13 @@ class KeyExchangeSyncService {
         }
 
         transaction.update(docRef, updates);
+        debugPrint('[KeyExchangeSyncService] ✅ Transaction update queued');
+      } else {
+        debugPrint('[KeyExchangeSyncService] ℹ️  Participant already scanned this segment - no update needed');
       }
     });
+    
+    debugPrint('[KeyExchangeSyncService] ══════════════════════════════════');
   }
 
   /// Passe au segment suivant (appelé par la source)
@@ -148,6 +167,16 @@ class KeyExchangeSyncService {
     debugPrint('[KeyExchangeSyncService] setConversationId: sessionId=$sessionId, conversationId=$conversationId');
     await _sessionsRef.doc(sessionId).update({
       'conversationId': conversationId,
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  /// Met à jour le nombre total de segments (utilisé lors d'une terminaison anticipée)
+  Future<void> updateTotalSegments(String sessionId, int totalSegments, int totalKeyBits) async {
+    debugPrint('[KeyExchangeSyncService] updateTotalSegments: sessionId=$sessionId, totalSegments=$totalSegments, totalKeyBits=$totalKeyBits');
+    await _sessionsRef.doc(sessionId).update({
+      'totalSegments': totalSegments,
+      'totalKeyBits': totalKeyBits,
       'updatedAt': DateTime.now().toIso8601String(),
     });
   }

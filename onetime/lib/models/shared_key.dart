@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'dart:convert';
+import 'dart:math';
 
 /// Représente une clé partagée entre plusieurs pairs pour le chiffrement One-Time Pad.
 /// 
@@ -11,7 +12,7 @@ class SharedKey {
   /// Les données binaires de la clé
   final Uint8List keyData;
   
-  /// Liste des IDs des pairs partageant cette clé (triés par ordre croissant)
+  /// Liste des IDs des pairs partageant cette clé (triés par ordre croissante)
   final List<String> peerIds;
   
   /// Bitmap des bits déjà utilisés (1 = utilisé, 0 = disponible)
@@ -35,6 +36,18 @@ class SharedKey {
        createdAt = createdAt ?? DateTime.now() {
     // S'assurer que les peers sont triés
     peerIds.sort();
+
+    // Ensure the used bitmap has the expected size matching keyData.
+    final expectedBitmapSize = (keyData.length * 8 + 7) ~/ 8;
+    if (_usedBitmap.length != expectedBitmapSize) {
+      final resized = Uint8List(expectedBitmapSize);
+      // copy existing bytes up to the min length
+      final copyLen = min(_usedBitmap.length, expectedBitmapSize);
+      if (copyLen > 0) {
+        resized.setRange(0, copyLen, _usedBitmap.sublist(0, copyLen));
+      }
+      _usedBitmap = resized;
+    }
   }
 
   /// Longueur totale logique de la clé en bits (incluant l'offset)
@@ -46,6 +59,16 @@ class SharedKey {
   /// Nombre de pairs partageant cette clé
   int get peerCount => peerIds.length;
 
+  // Helper to check bitmap index access and throw descriptive error if invalid
+  void _checkBitmapIndex(int byteIndex, int bitIndex) {
+    if (byteIndex < 0 || byteIndex >= _usedBitmap.length) {
+      throw StateError('Bitmap access out of range: byteIndex=$byteIndex, bitIndex=$bitIndex, bitmapLength=${_usedBitmap.length}, keyBytes=${keyData.length}, startOffset=$startOffset');
+    }
+    if (byteIndex >= keyData.length) {
+      throw StateError('Key data access out of range: byteIndex=$byteIndex, keyBytes=${keyData.length}, startOffset=$startOffset');
+    }
+  }
+
   /// Vérifie si un bit est déjà utilisé
   bool isBitUsed(int bitIndex) {
     if (bitIndex < startOffset || bitIndex >= lengthInBits) {
@@ -56,6 +79,7 @@ class SharedKey {
     final relativeIndex = bitIndex - startOffset;
     final byteIndex = relativeIndex ~/ 8;
     final bitOffset = relativeIndex % 8;
+    _checkBitmapIndex(byteIndex, bitIndex);
     return (_usedBitmap[byteIndex] & (1 << bitOffset)) != 0;
   }
 
@@ -67,6 +91,7 @@ class SharedKey {
       final relativeIndex = i - startOffset;
       final byteIndex = relativeIndex ~/ 8;
       final bitOffset = relativeIndex % 8;
+      _checkBitmapIndex(byteIndex, i);
       _usedBitmap[byteIndex] |= (1 << bitOffset);
     }
   }
@@ -88,6 +113,11 @@ class SharedKey {
       final relativeIndex = i - startOffset;
       final byteIndex = relativeIndex ~/ 8;
       final bitOffset = relativeIndex % 8;
+      // If bitmap is unexpectedly short, treat as used to avoid returning invalid segments
+      if (byteIndex >= _usedBitmap.length) {
+        consecutiveAvailable = 0;
+        continue;
+      }
       final isUsed = (_usedBitmap[byteIndex] & (1 << bitOffset)) != 0;
 
       if (!isUsed) {
@@ -126,6 +156,7 @@ class SharedKey {
       final targetByteIndex = i ~/ 8;
       final targetBitOffset = i % 8;
       
+      _checkBitmapIndex(sourceByteIndex, sourceBitIndex);
       if ((keyData[sourceByteIndex] & (1 << sourceBitOffset)) != 0) {
         result[targetByteIndex] |= (1 << targetBitOffset);
       }
@@ -142,6 +173,7 @@ class SharedKey {
       final relativeIndex = i - startOffset;
       final byteIndex = relativeIndex ~/ 8;
       final bitOffset = relativeIndex % 8;
+      if (byteIndex >= _usedBitmap.length) continue; // defensive
       if ((_usedBitmap[byteIndex] & (1 << bitOffset)) == 0) {
         count++;
       }
@@ -219,6 +251,7 @@ class SharedKey {
       final byteIndex = relativeIndex ~/ 8;
       final bitOffset = relativeIndex % 8;
       
+      if (byteIndex >= _usedBitmap.length) continue;
       if ((_usedBitmap[byteIndex] & (1 << bitOffset)) == 0) {
         availableBits.add(i);
       }

@@ -242,7 +242,14 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       );
 
       final step3 = DateTime.now();
-      debugPrint('[KeyExchange] +${step3.difference(startTime).inMilliseconds}ms - Firestore session created, creating local session');
+      debugPrint('[KeyExchange] +${step3.difference(startTime).inMilliseconds}ms - Firestore session created:');
+      debugPrint('[KeyExchange]   Session ID: ${_firestoreSession!.id}');
+      debugPrint('[KeyExchange]   Source: ${_firestoreSession!.sourceId}');
+      debugPrint('[KeyExchange]   Participants: ${_firestoreSession!.participants}');
+      debugPrint('[KeyExchange]   Other Participants: ${_firestoreSession!.otherParticipants}');
+      debugPrint('[KeyExchange]   Total Segments: ${_firestoreSession!.totalSegments}');
+      debugPrint('[KeyExchange]   Total Bits: ${_firestoreSession!.totalKeyBits}');
+      debugPrint('[KeyExchange] Creating local session...');
       
       // Créer la session locale avec le MÊME ID que Firestore
       // Et injecter les segments pré-générés si disponibles
@@ -328,7 +335,24 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   }
 
   void _onSessionUpdate(KeyExchangeSessionModel? session) {
-    if (session == null) return;
+    if (session == null) {
+      debugPrint('[SESSION UPDATE] ❌ Session is null');
+      return;
+    }
+
+    debugPrint('───────────────────────────────────────────────────');
+    debugPrint('[SESSION UPDATE] Role: $_role');
+    debugPrint('[SESSION UPDATE] Session ID: ${session.id}');
+    debugPrint('[SESSION UPDATE] Status: ${session.status}');
+    debugPrint('[SESSION UPDATE] Source: ${session.sourceId}');
+    debugPrint('[SESSION UPDATE] Participants: ${session.participants}');
+    debugPrint('[SESSION UPDATE] Other Participants: ${session.otherParticipants}');
+    debugPrint('[SESSION UPDATE] Current Segment Index: ${session.currentSegmentIndex}');
+    debugPrint('[SESSION UPDATE] Total Segments: ${session.totalSegments}');
+    debugPrint('[SESSION UPDATE] ScannedBy map:');
+    session.scannedBy.forEach((segmentIdx, scanners) {
+      debugPrint('[SESSION UPDATE]   Segment $segmentIdx: $scanners (${scanners.length} participants)');
+    });
 
     // Mettre à jour le suivi des participants qui ont scanné dans ce tour
     if (_role == KeyExchangeRole.source && _firestoreSession != null) {
@@ -343,7 +367,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           if (!oldParticipantIds.contains(participantId)) {
             // Ce participant a scanné un segment dans ce tour
             _participantScannedInRound[participantId] = true;
-            debugPrint('[Torrent] Participant $participantId scanned segment $segmentIndex');
+            debugPrint('[SESSION UPDATE] ✓ Participant ${participantId.substring(0, 8)}... scanned segment $segmentIndex');
           }
         }
       });
@@ -355,6 +379,8 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
     // Pour le READER: si la session est terminée, finaliser et retourner à la conversation
     if (_role == KeyExchangeRole.reader && session.status == KeyExchangeStatus.completed) {
+      debugPrint('[SESSION UPDATE] ✅ Reader detected completion - finalizing');
+      debugPrint('───────────────────────────────────────────────────');
       _finalizeExchangeForReader();
       return;
     }
@@ -362,11 +388,14 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     // Pour la SOURCE: vérifier si tous les segments sont scannés par tous
     if (_role == KeyExchangeRole.source && _session != null) {
       final totalSegments = _session!.totalSegments;
+      debugPrint('[SESSION UPDATE] Checking completion: checking $totalSegments segments');
 
       // Vérifier si tous les segments (0 à totalSegments-1) sont scannés par tous
       bool allComplete = true;
       for (int i = 0; i < totalSegments; i++) {
-        if (!session.allParticipantsScannedSegment(i)) {
+        final isComplete = session.allParticipantsScannedSegment(i);
+        debugPrint('[SESSION UPDATE]   Segment $i complete: $isComplete');
+        if (!isComplete) {
           allComplete = false;
           break;
         }
@@ -374,7 +403,8 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
       // Si tous les segments sont complets, terminer automatiquement
       if (allComplete && session.status != KeyExchangeStatus.completed) {
-        debugPrint('All segments scanned by all participants - auto terminating');
+        debugPrint('[SESSION UPDATE] ✅ All segments complete - auto terminating');
+        debugPrint('───────────────────────────────────────────────────');
         _terminateKeyExchange();
         return;
       }
@@ -387,8 +417,11 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           final displayedSegmentIdx = _currentQrData!.segmentIndex;
           final allScanned = session.allParticipantsScannedSegment(displayedSegmentIdx);
 
+          debugPrint('[SESSION UPDATE] Manual mode - displayed segment $displayedSegmentIdx, allScanned: $allScanned');
+
           // Si tous ont scanné et qu'il reste des segments, passer au suivant automatiquement
           if (allScanned && _session!.currentSegmentIndex < totalSegments) {
+            debugPrint('[SESSION UPDATE] Moving to next segment...');
             Future.delayed(const Duration(milliseconds: 500), () {
               if (mounted) {
                 _syncService.moveToNextSegment(session.id);
@@ -399,6 +432,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         }
       }
     }
+    debugPrint('───────────────────────────────────────────────────');
   }
 
   /// Finalise l'échange côté reader et navigue vers la conversation
@@ -713,15 +747,29 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     try {
       final segment = _keyExchangeService.parseQrCode(qrData);
       
+      debugPrint('═══════════════════════════════════════════════════');
+      debugPrint('[QR SCAN] Reader: ${_currentUserId.substring(0, 8)}...');
+      debugPrint('[QR SCAN] Segment Index: ${segment.segmentIndex}');
+      debugPrint('[QR SCAN] Session ID: ${segment.sessionId}');
+      
       // Première fois qu'on scanne - créer/récupérer la session
       if (_session == null) {
+        debugPrint('[QR SCAN] First scan - creating reader session');
+        
         // Récupérer la session Firestore D'ABORD pour avoir les bonnes infos
         _firestoreSession = await _syncService.getSession(segment.sessionId);
 
         if (_firestoreSession == null) {
+          debugPrint('[QR SCAN] ERROR: Session not found in Firestore');
           setState(() => _errorMessage = 'Session non trouvée');
           return;
         }
+
+        debugPrint('[QR SCAN] Firestore session loaded:');
+        debugPrint('[QR SCAN]   - Source: ${_firestoreSession!.sourceId}');
+        debugPrint('[QR SCAN]   - Participants: ${_firestoreSession!.participants}');
+        debugPrint('[QR SCAN]   - Total segments: ${_firestoreSession!.totalSegments}');
+        debugPrint('[QR SCAN]   - Total bits: ${_firestoreSession!.totalKeyBits}');
 
         // Créer la session locale reader avec les infos de Firestore
         _session = _keyExchangeService.createReaderSession(
@@ -731,15 +779,20 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           totalBits: _firestoreSession!.totalKeyBits,
         );
 
+        debugPrint('[QR SCAN] Local reader session created');
+
         // Écouter les changements
         _sessionSubscription = _syncService
             .watchSession(segment.sessionId)
             .listen(_onSessionUpdate);
+            
+        debugPrint('[QR SCAN] Started watching session updates');
       }
 
       // Vérifier qu'on n'a pas déjà scanné ce segment
       if (_session!.hasScannedSegment(segment.segmentIndex)) {
-        debugPrint('[KeyExchange] Segment ${segment.segmentIndex} already scanned, skipping');
+        debugPrint('[QR SCAN] ⚠️ Segment ${segment.segmentIndex} already scanned, skipping');
+        debugPrint('[QR SCAN] Already scanned segments: ${_firestoreSession?.scannedBy[segment.segmentIndex]}');
         // Ne pas afficher d'erreur, juste continuer à scanner
         if (mounted) {
           setState(() {
@@ -749,22 +802,26 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         return;
       }
 
-      debugPrint('[KeyExchange] Scanned segment ${segment.segmentIndex}');
+      debugPrint('[QR SCAN] ✓ New segment ${segment.segmentIndex} - processing');
 
       // Feedback haptique
       HapticFeedback.lightImpact();
 
       // Enregistrer le segment localement
       _keyExchangeService.recordReadSegment(_session!, segment);
+      debugPrint('[QR SCAN] Segment recorded locally');
       
       // Notifier Firestore que ce participant a scanné ce segment
+      debugPrint('[QR SCAN] Marking segment as scanned in Firestore...');
       await _syncService.markSegmentScanned(
         sessionId: segment.sessionId,
         participantId: _currentUserId,
         segmentIndex: segment.segmentIndex,
       );
 
-      debugPrint('[KeyExchange] Segment ${segment.segmentIndex} marked as scanned in Firestore');
+      debugPrint('[QR SCAN] ✅ Segment ${segment.segmentIndex} marked as scanned in Firestore');
+      debugPrint('[QR SCAN] Reader progress: ${_session!.readSegmentsCount}/${_session!.totalSegments} segments');
+      debugPrint('═══════════════════════════════════════════════════');
 
       // Pas besoin d'arrêter le scan - continuer immédiatement
       if (mounted) {
@@ -773,7 +830,8 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         });
       }
     } catch (e) {
-      debugPrint('[KeyExchange] Error scanning QR: $e');
+      debugPrint('[QR SCAN] ❌ ERROR: $e');
+      debugPrint('═══════════════════════════════════════════════════');
       if (mounted) {
         final msg = e.toString();
         setState(() => _errorMessage = 'Erreur scan: ${msg.length > 50 ? msg.substring(0, 50) : msg}...');
@@ -1216,21 +1274,31 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     _stopTorrentRotation();
     
     if (_session == null || _firestoreSession == null) {
-      debugPrint('ERROR: _session or _firestoreSession is null');
+      debugPrint('[TERMINATE] ❌ ERROR: _session or _firestoreSession is null');
       return;
     }
 
-    debugPrint('=== TERMINATE KEY EXCHANGE ===');
-    debugPrint('sourceId: ${_firestoreSession!.sourceId}');
-    debugPrint('participants: ${_firestoreSession!.participants}');
-    debugPrint('otherParticipants: ${_firestoreSession!.otherParticipants}');
-    debugPrint('scannedBy: ${_firestoreSession!.scannedBy}');
-    debugPrint('currentSegmentIndex (session): ${_session!.currentSegmentIndex}');
-    debugPrint('totalSegments: ${_session!.totalSegments}');
+    debugPrint('');
+    debugPrint('═══════════════════════════════════════════════════');
+    debugPrint('═══        TERMINATE KEY EXCHANGE              ═══');
+    debugPrint('═══════════════════════════════════════════════════');
+    debugPrint('[TERMINATE] Source ID: ${_firestoreSession!.sourceId}');
+    debugPrint('[TERMINATE] All Participants: ${_firestoreSession!.participants}');
+    debugPrint('[TERMINATE] Other Participants (excluding source): ${_firestoreSession!.otherParticipants}');
+    debugPrint('[TERMINATE] Current Segment Index (local): ${_session!.currentSegmentIndex}');
+    debugPrint('[TERMINATE] Total Segments (planned): ${_session!.totalSegments}');
+    debugPrint('[TERMINATE] ScannedBy status from Firestore:');
+    
+    _firestoreSession!.scannedBy.forEach((idx, scanners) {
+      final allScanned = _firestoreSession!.allParticipantsScannedSegment(idx);
+      debugPrint('[TERMINATE]   Segment $idx: $scanners → ${allScanned ? "✅ COMPLETE" : "⚠️  INCOMPLETE"}');
+    });
 
     // Le segment actuellement affiché
     final displayedSegmentIdx = _currentQrData?.segmentIndex ?? 0;
-    debugPrint('displayedSegmentIdx: $displayedSegmentIdx');
+    debugPrint('[TERMINATE] Currently displayed segment: $displayedSegmentIdx');
+    debugPrint('');
+    debugPrint('[TERMINATE] Analyzing consecutive complete segments from 0...');
 
     // Trouver le dernier segment scanné par tous (segments consécutifs depuis 0)
     int lastCompleteSegment = -1;
@@ -1238,41 +1306,80 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       final scannedList = _firestoreSession!.scannedBy[i] ?? [];
       final otherParticipants = _firestoreSession!.otherParticipants;
 
-      debugPrint('Segment $i: scannedBy=$scannedList, otherParticipants=$otherParticipants');
+      debugPrint('[TERMINATE]   ─── Segment $i ───');
+      debugPrint('[TERMINATE]   Expected participants: $otherParticipants (${otherParticipants.length} total)');
+      debugPrint('[TERMINATE]   Actually scanned by: $scannedList (${scannedList.length} total)');
 
       final allScanned = _firestoreSession!.allParticipantsScannedSegment(i);
-      debugPrint('Segment $i allParticipantsScannedSegment: $allScanned');
+      debugPrint('[TERMINATE]   allParticipantsScannedSegment($i) = $allScanned');
+
+      // Check who is missing
+      final missing = otherParticipants.where((p) => !scannedList.contains(p)).toList();
+      if (missing.isNotEmpty) {
+        debugPrint('[TERMINATE]   ⚠️  Missing: $missing');
+      }
 
       if (allScanned) {
         lastCompleteSegment = i;
+        debugPrint('[TERMINATE]   ✅ Segment $i is COMPLETE');
       } else {
-        debugPrint('Segment $i NOT complete - breaking loop');
+        debugPrint('[TERMINATE]   ❌ Segment $i is INCOMPLETE - breaking consecutive chain');
         break; // Les segments doivent être consécutifs
       }
     }
 
-    debugPrint('lastCompleteSegment: $lastCompleteSegment');
-    debugPrint('=== END DEBUG ===');
+    debugPrint('');
+    debugPrint('[TERMINATE] Result: Last consecutive complete segment = $lastCompleteSegment');
 
     if (lastCompleteSegment < 0) {
-      // Afficher plus de détails sur l'erreur
+      // No segments were fully shared - show error
       final otherParticipants = _firestoreSession!.otherParticipants;
       final scannedBy = _firestoreSession!.scannedBy;
       final errorMsg = 'Aucun segment complet.\nParticipants attendus: $otherParticipants\nScannedBy: $scannedBy';
-      debugPrint('ERROR: $errorMsg');
+      debugPrint('[TERMINATE] ❌ ERROR: $errorMsg');
+      debugPrint('═══════════════════════════════════════════════════');
       setState(() => _errorMessage = errorMsg);
       return;
     }
 
-    try {
-      // Ne PAS marquer comme terminée ici - on le fera dans _finalizeExchange
-      // après avoir créé la conversation et défini le conversationId
-      // await _syncService.completeSession(_firestoreSession!.id);
+    // Trim the session to only include segments that were successfully shared with all peers
+    final segmentsToInclude = lastCompleteSegment + 1; // +1 because index is 0-based
+    debugPrint('[TERMINATE] ✓ Will include $segmentsToInclude segments (0 to $lastCompleteSegment) in the key');
+    
+    // Update the session's total bits to only include complete segments
+    final bitsPerSegment = KeyExchangeService.segmentSizeBits;
+    final adjustedTotalBits = segmentsToInclude * bitsPerSegment;
+    
+    debugPrint('[TERMINATE] Bits adjustment:');
+    debugPrint('[TERMINATE]   - Original totalBits: ${_session!.totalBits}');
+    debugPrint('[TERMINATE]   - Adjusted totalBits: $adjustedTotalBits');
+    debugPrint('[TERMINATE]   - Original totalSegments: ${_session!.totalSegments}');
+    debugPrint('[TERMINATE]   - Adjusted totalSegments: $segmentsToInclude');
 
-      // Finaliser l'échange (créera la conversation et marquera comme terminée)
+    // Update the Firestore session so readers know how many segments to use
+    debugPrint('[TERMINATE] Updating Firestore session with adjusted counts...');
+    try {
+      await _syncService.updateTotalSegments(
+        _firestoreSession!.id,
+        segmentsToInclude,
+        adjustedTotalBits,
+      );
+      debugPrint('[TERMINATE] ✅ Firestore session updated successfully');
+    } catch (e) {
+      debugPrint('[TERMINATE] ⚠️  ERROR updating Firestore session: $e');
+      // Continue anyway - readers will use force flag
+    }
+
+    debugPrint('[TERMINATE] Proceeding to finalize exchange...');
+    debugPrint('═══════════════════════════════════════════════════');
+
+    try {
+      // Finalize exchange with the complete segments
+      // The _finalizeExchange method will build a key from available segments
       await _finalizeExchange();
     } catch (e) {
-      debugPrint('ERROR in _terminateKeyExchange: $e');
+      debugPrint('[TERMINATE] ❌ ERROR in finalization: $e');
+      debugPrint('═══════════════════════════════════════════════════');
       setState(() => _errorMessage = 'Erreur: $e');
     }
   }

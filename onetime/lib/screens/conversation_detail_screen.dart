@@ -497,6 +497,47 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     super.dispose();
   }
 
+  /// Handles when the conversation is deleted from Firestore
+  Future<void> _handleConversationDeleted(BuildContext context) async {
+    if (!mounted) return;
+
+    // Check if user initiated the deletion (if they're not in the conversation anymore)
+    final conversationExists = await _conversationService.getConversation(widget.conversation.id);
+    if (conversationExists != null) return; // Conversation still exists, false alarm
+
+    // Show dialog asking if user wants to delete locally stored messages
+    final shouldDeleteLocal = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Conversation supprimée'),
+        content: const Text(
+          'Cette conversation a été supprimée par un autre participant.\n\n'
+          'Voulez-vous également supprimer les messages déchiffrés stockés localement ?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Conserver les messages'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldDeleteLocal == true) {
+      await _messageStorage.deleteConversationMessages(widget.conversation.id);
+    }
+
+    if (mounted) {
+      Navigator.of(context).pop(); // Return to home screen
+    }
+  }
+
   String get _currentUserId => _authService.currentUserId ?? '';
 
   Future<void> _sendMyPseudo() async {
@@ -959,19 +1000,62 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return StreamBuilder<Conversation?>(
+      stream: _conversationService.watchConversation(widget.conversation.id),
+      initialData: widget.conversation,
+      builder: (context, snapshot) {
+        if (snapshot.data == null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _handleConversationDeleted(context);
+          });
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final conversation = snapshot.data!;
+        return _buildConversationScreen(context, conversation);
+      },
+    );
+  }
+
+  Widget _buildConversationScreen(BuildContext context, Conversation conversation) {
     // Calcul de la clé restante basé sur SharedKey si disponible (plus précis)
-    final remainingKeyFormatted = _sharedKey != null
-        ? FormatService.formatBytes(_sharedKey!.countAvailableBits(_currentUserId) ~/ 8)
-        : widget.conversation.remainingKeyFormatted;
-        
-    // Pourcentage basé sur SharedKey si disponible
-    final keyRemainingPercent = _sharedKey != null
-        ? (_sharedKey!.countAvailableBits(_currentUserId) / _sharedKey!.lengthInBits) * 100
-        : widget.conversation.keyRemainingPercent;
-        
-    final displayKeyPercent = _sharedKey != null
-         ? (_sharedKey!.countAvailableBits(_currentUserId) / _sharedKey!.lengthInBits) * 100
-         : widget.conversation.keyRemainingPercent;
+    String remainingKeyFormatted = conversation.remainingKeyFormatted;
+    double keyRemainingPercent = conversation.keyRemainingPercent;
+    double displayKeyPercent = conversation.keyRemainingPercent;
+
+    if (_sharedKey != null) {
+      try {
+        // Compute once to avoid multiple failing accesses
+        final availableBits = _sharedKey!.countAvailableBits(_currentUserId);
+        final totalBits = _sharedKey!.lengthInBits;
+
+        if (totalBits > 0) {
+          remainingKeyFormatted = FormatService.formatBytes(availableBits ~/ 8);
+          keyRemainingPercent = (availableBits / totalBits) * 100;
+          displayKeyPercent = keyRemainingPercent;
+        } else {
+          // Defensive fallback
+          remainingKeyFormatted = conversation.remainingKeyFormatted;
+          keyRemainingPercent = conversation.keyRemainingPercent;
+          displayKeyPercent = conversation.keyRemainingPercent;
+        }
+      } catch (e, st) {
+        // Log the full error and stack to console for debugging
+        debugPrint('[ConversationDetail] SharedKey error: $e');
+        debugPrint('[ConversationDetail] StackTrace: $st');
+        // Also print to stdout (visible in Android Studio / device logs)
+        print('=== SHARED KEY ERROR ===');
+        print(e);
+        print(st);
+
+        // Fallback to conversation-provided numbers
+        remainingKeyFormatted = conversation.remainingKeyFormatted;
+        keyRemainingPercent = conversation.keyRemainingPercent;
+        displayKeyPercent = conversation.keyRemainingPercent;
+      }
+    }
 
     return Scaffold(
       appBar: AppBar(
