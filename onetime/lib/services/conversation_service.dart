@@ -282,6 +282,7 @@ class ConversationService {
 
   /// Marque un message comme transféré par l'utilisateur local
   /// Supprime le contenu (ciphertext) si tous les participants l'ont transféré
+  /// IMPORTANT: N'appelez cette méthode qu'APRÈS avoir sauvegardé le message localement
   Future<void> markMessageAsTransferred({
     required String conversationId,
     required String messageId,
@@ -305,6 +306,7 @@ class ConversationService {
 
       if (allTransferred) {
         // Supprimer le contenu chiffré (garder les métadonnées pour le statut de lecture)
+        // SÉCURITÉ: Le ciphertext n'est supprimé que si TOUS les participants l'ont téléchargé
         transaction.update(docRef, {
           'transferredBy': transferredBy,
           'ciphertext': '', // Vider le ciphertext

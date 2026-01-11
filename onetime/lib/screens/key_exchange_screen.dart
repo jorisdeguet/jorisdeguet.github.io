@@ -513,6 +513,10 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       await _keyStorageService.saveKey(conversation.id, finalKey);
       debugPrint('[KeyExchange] Reader: Shared key saved successfully');
 
+      // Update Firestore keyDebugInfo immediately with the new key size
+      debugPrint('[KeyExchange] Reader: Updating Firestore keyDebugInfo');
+      await _updateKeyDebugInfoForConversation(conversation.id, finalKey);
+
       // DEBUG: Afficher les premiers et derniers 1024 bits de la clé
       _logKeyDebugInfo(finalKey);
 
@@ -821,14 +825,23 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
       debugPrint('[QR SCAN] ✅ Segment ${segment.segmentIndex} marked as scanned in Firestore');
       debugPrint('[QR SCAN] Reader progress: ${_session!.readSegmentsCount}/${_session!.totalSegments} segments');
-      debugPrint('═══════════════════════════════════════════════════');
-
-      // Pas besoin d'arrêter le scan - continuer immédiatement
-      if (mounted) {
+      
+      // Check if this user has finished scanning all segments
+      if (_session!.readSegmentsCount >= _session!.totalSegments) {
+        debugPrint('[QR SCAN] ✅ All segments scanned! Stopping camera...');
+        if (mounted) {
+          setState(() {
+            _isScanning = false;
+            _errorMessage = null;
+          });
+        }
+      } else if (mounted) {
         setState(() {
           _errorMessage = null;
         });
       }
+      
+      debugPrint('═══════════════════════════════════════════════════');
     } catch (e) {
       debugPrint('[QR SCAN] ❌ ERROR: $e');
       debugPrint('═══════════════════════════════════════════════════');
@@ -941,6 +954,10 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       debugPrint('[KeyExchange] Saving shared key locally for conversation $conversationId');
       await _keyStorageService.saveKey(conversationId, finalKey);
       debugPrint('[KeyExchange] Shared key saved successfully');
+
+      // Update Firestore keyDebugInfo immediately with the new key size
+      debugPrint('[KeyExchange] Source: Updating Firestore keyDebugInfo');
+      await _updateKeyDebugInfoForConversation(conversationId, finalKey);
 
       // DEBUG: Afficher les premiers et derniers 1024 bits de la clé
       _logKeyDebugInfo(finalKey);
@@ -1391,10 +1408,14 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     // Utiliser totalSegments de Firestore si disponible, sinon de la session locale
     final totalSegments = firestoreSession?.totalSegments ?? session?.totalSegments ?? 0;
     final isCompleted = firestoreSession?.status == KeyExchangeStatus.completed;
+    
+    // Check if current user has finished scanning all segments
+    final currentUserFinished = firestoreSession?.hasParticipantFinishedScanning(_currentUserId) ?? false;
+    final shouldShowScanner = !currentUserFinished && !isCompleted && _isScanning;
 
     return Column(
       children: [
-        // Barre de progression
+        // Barre de progression pour l'utilisateur actuel
         LinearProgressIndicator(
           value: totalSegments > 0 ? segmentsRead / totalSegments : 0,
         ),
@@ -1412,27 +1433,29 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isCompleted ? Colors.green[50] : Colors.blue[50],
+              color: isCompleted ? Colors.green[50] : (currentUserFinished ? Colors.amber[50] : Colors.blue[50]),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: isCompleted ? Colors.green : Colors.blue,
+                color: isCompleted ? Colors.green : (currentUserFinished ? Colors.amber : Colors.blue),
               ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  isCompleted ? Icons.check_circle : Icons.sync,
-                  color: isCompleted ? Colors.green : Colors.blue,
+                  isCompleted ? Icons.check_circle : (currentUserFinished ? Icons.check_circle_outline : Icons.sync),
+                  color: isCompleted ? Colors.green : (currentUserFinished ? Colors.amber : Colors.blue),
                   size: 20,
                 ),
                 const SizedBox(width: 8),
                 Text(
                   isCompleted
                       ? 'Échange terminé! Redirection...'
-                      : 'Scanning en cours...',
+                      : (currentUserFinished 
+                          ? 'Vous avez terminé! En attente des autres...'
+                          : 'Scanning en cours...'),
                   style: TextStyle(
-                    color: isCompleted ? Colors.green[800] : Colors.blue[800],
+                    color: isCompleted ? Colors.green[800] : (currentUserFinished ? Colors.amber[800] : Colors.blue[800]),
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -1440,8 +1463,25 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
             ),
           ),
 
+        // Progress bars for all peers (when current user has finished)
+        if (currentUserFinished && !isCompleted && firestoreSession != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Progression des participants:',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                const SizedBox(height: 8),
+                ..._buildPeerProgressBars(firestoreSession),
+              ],
+            ),
+          ),
+
         Expanded(
-          child: _isScanning
+          child: shouldShowScanner
               ? Stack(
                   children: [
                     MobileScanner(
@@ -1489,14 +1529,18 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
                       Text(
                         isCompleted
                             ? 'Échange terminé!'
-                            : 'Segment $segmentsRead reçu!',
+                            : (currentUserFinished
+                                ? 'Scan terminé!'
+                                : 'Segment $segmentsRead reçu!'),
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         isCompleted
                             ? 'Redirection vers la conversation...'
-                            : 'Attendez que la source affiche le prochain QR code',
+                            : (currentUserFinished
+                                ? 'En attente des autres participants...'
+                                : 'Attendez que la source affiche le prochain QR code'),
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Colors.grey[600]),
                       ),
@@ -1520,5 +1564,102 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           ),
       ],
     );
+  }
+
+  List<Widget> _buildPeerProgressBars(KeyExchangeSessionModel session) {
+    // Get all other participants (excluding current user)
+    final otherPeers = session.otherParticipants.where((p) => p != _currentUserId).toList();
+    
+    // Sort by progress (most finished first)
+    otherPeers.sort((a, b) {
+      final progressA = session.getParticipantProgress(a);
+      final progressB = session.getParticipantProgress(b);
+      return progressB.compareTo(progressA);
+    });
+
+    return otherPeers.map((peerId) {
+      final progress = session.getParticipantProgress(peerId);
+      final isFinished = session.hasParticipantFinishedScanning(peerId);
+      final shortId = peerId.length > 8 ? peerId.substring(0, 8) : peerId;
+
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  isFinished ? Icons.check_circle : Icons.person,
+                  size: 16,
+                  color: isFinished ? Colors.green : Colors.grey,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  shortId,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isFinished ? Colors.green[700] : Colors.grey[700],
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '$progress/${session.totalSegments}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            LinearProgressIndicator(
+              value: session.totalSegments > 0 ? progress / session.totalSegments : 0,
+              backgroundColor: Colors.grey[300],
+              color: isFinished ? Colors.green : Colors.blue,
+            ),
+          ],
+        ),
+      );
+    }).toList();
+  }
+
+  /// Updates Firestore keyDebugInfo for a conversation
+  Future<void> _updateKeyDebugInfoForConversation(String conversationId, SharedKey key) async {
+    try {
+      final availableBits = key.countAvailableBits(_currentUserId);
+      final totalBits = key.lengthInBits;
+      
+      // Find first and last available index
+      int firstAvailable = -1;
+      int lastAvailable = -1;
+      
+      for (int i = 0; i < totalBits; i++) {
+        if (!key.isBitUsed(i)) {
+          if (firstAvailable == -1) firstAvailable = i;
+          lastAvailable = i;
+        }
+      }
+      
+      // Generate consistency hash
+      final consistencyHash = '$firstAvailable|$lastAvailable|$availableBits';
+
+      final conversationService = ConversationService(localUserId: _currentUserId);
+      await conversationService.updateKeyDebugInfo(
+        conversationId: conversationId,
+        userId: _currentUserId,
+        info: {
+          'availableBits': availableBits,
+          'firstAvailableIndex': firstAvailable,
+          'lastAvailableIndex': lastAvailable,
+          'consistencyHash': consistencyHash,
+          'updatedAt': DateTime.now().toIso8601String(),
+        },
+      );
+      
+      debugPrint('[KeyExchange] KeyDebugInfo updated for user $_currentUserId: $availableBits bits available');
+    } catch (e) {
+      debugPrint('[KeyExchange] Error updating keyDebugInfo: $e');
+    }
   }
 }

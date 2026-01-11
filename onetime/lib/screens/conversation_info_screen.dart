@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/conversation.dart';
 import '../models/shared_key.dart';
 import '../services/conversation_service.dart';
 import '../services/key_storage_service.dart';
 import '../services/conversation_pseudo_service.dart';
+import '../services/conversation_export_service.dart';
 import '../services/auth_service.dart';
 import '../services/format_service.dart';
 
@@ -29,9 +31,10 @@ class ConversationInfoScreen extends StatefulWidget {
 
 class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
   final ConversationPseudoService _convPseudoService = ConversationPseudoService();
-  final ConversationService _conversationService = ConversationService(localUserId: '');
   final KeyStorageService _keyStorageService = KeyStorageService();
   final AuthService _authService = AuthService();
+  final ConversationExportService _exportService = ConversationExportService();
+  late final ConversationService _conversationService;
   
   Map<String, String> _displayNames = {};
   bool _isLoading = false;
@@ -41,6 +44,7 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
   void initState() {
     super.initState();
     _currentUserId = _authService.currentUserId ?? '';
+    _conversationService = ConversationService(localUserId: _currentUserId);
     _loadDisplayNames();
   }
 
@@ -301,6 +305,21 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
                   ),
                 ),
               ),
+
+            const SizedBox(height: 16),
+
+            // Export conversation
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _exportConversation,
+                icon: const Icon(Icons.upload_file),
+                label: const Text('Exporter vers un autre appareil'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.all(16),
+                ),
+              ),
+            ),
               
             const SizedBox(height: 16),
             
@@ -378,14 +397,10 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
     setState(() => _isLoading = true);
     
     try {
-      // Use existing services
-      final conversationService = ConversationService(localUserId: '');
-      final keyStorageService = KeyStorageService();
-      
-      await conversationService.deleteConversation(widget.conversation.id);
+      await _conversationService.deleteConversation(widget.conversation.id);
 
       // Supprimer la clé locale si elle existe
-      await keyStorageService.deleteKey(widget.conversation.id);
+      await _keyStorageService.deleteKey(widget.conversation.id);
 
       if (mounted) {
         Navigator.pop(context); // Close info screen
@@ -400,6 +415,83 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erreur: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportConversation() async {
+    setState(() => _isLoading = true);
+
+    try {
+      // Export the conversation data
+      final exportData = await _exportService.exportConversation(widget.conversation.id);
+
+      if (exportData == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Impossible d\'exporter: aucune donnée trouvée'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Convert to JSON string
+      final jsonString = _exportService.encodeExportData(exportData);
+      
+      // Calculate data size for display
+      final dataSize = FormatService.formatBytes(exportData.dataSizeBytes);
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+
+        // Show dialog with export options
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Exporter la conversation'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Taille des données: $dataSize'),
+                const SizedBox(height: 8),
+                Text('${exportData.localMessages.length} message(s) local'),
+                const SizedBox(height: 16),
+                const Text(
+                  'Les données d\'export contiennent la clé de chiffrement et tous les messages locaux. Gardez-les en sécurité!',
+                  style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Annuler'),
+              ),
+              TextButton(
+                onPressed: () {
+                  // Copy to clipboard
+                  Clipboard.setData(ClipboardData(text: jsonString));
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Copié dans le presse-papiers')),
+                  );
+                },
+                child: const Text('Copier'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur d\'export: $e')),
         );
       }
     }
