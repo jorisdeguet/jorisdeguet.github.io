@@ -7,6 +7,16 @@
 - Augmenter taille QR à 2048-2953 bytes (version 40)
 
 # Done
+## 2026-01-11: Améliorations UX et Export/Import
+- ✅ Export/Import de conversations vers un autre appareil
+- ✅ Export d'une conversation unique (conversation info screen)
+- ✅ Export/Import de toutes les conversations (profile screen)
+- ✅ Indicateurs d'état des messages améliorés (cloud avec contenu, cloud sans contenu, local)
+- ✅ Fermeture automatique de la caméra quand un peer termine son scan
+- ✅ Affichage des barres de progression de tous les peers triées par avancement
+- ✅ Fix permission denied lors de la suppression de conversation
+- ✅ Vérification de la persistence des données d'image avant suppression cloud
+
 ## 2026-01-09: App ID Change
 - ✅ Renamed package to `org.deguet.jo.onetime` (Android & iOS)
 

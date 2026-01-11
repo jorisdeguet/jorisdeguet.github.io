@@ -75,6 +75,27 @@ class KeyExchangeSessionModel {
     return scanned.where((p) => p != sourceId).length;
   }
 
+  /// Vérifie si un participant a scanné tous les segments
+  bool hasParticipantFinishedScanning(String participantId) {
+    for (int i = 0; i < totalSegments; i++) {
+      if (!hasParticipantScannedSegment(participantId, i)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// Obtient le nombre de segments scannés par un participant
+  int getParticipantProgress(String participantId) {
+    int count = 0;
+    for (int i = 0; i < totalSegments; i++) {
+      if (hasParticipantScannedSegment(participantId, i)) {
+        count++;
+      }
+    }
+    return count;
+  }
+
   /// Vérifie si l'échange est terminé
   bool get isComplete =>
       status == KeyExchangeStatus.completed ||

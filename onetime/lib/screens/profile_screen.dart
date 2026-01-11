@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/auth_service.dart';
@@ -6,6 +7,7 @@ import '../services/key_storage_service.dart';
 import '../services/message_storage_service.dart';
 import '../services/conversation_pseudo_service.dart';
 import '../services/unread_message_service.dart';
+import '../services/conversation_export_service.dart';
 import '../services/format_service.dart';
 import '../l10n/app_localizations.dart';
 
@@ -25,6 +27,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final MessageStorageService _messageStorage = MessageStorageService();
   final ConversationPseudoService _convPseudoService = ConversationPseudoService();
   final UnreadMessageService _unreadService = UnreadMessageService();
+  final ConversationExportService _exportService = ConversationExportService();
   
   bool _isLoading = false;
   ThemeMode _themeMode = ThemeMode.system;
@@ -178,6 +181,170 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _exportAllConversations() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final exports = await _exportService.exportAllConversations();
+
+      if (exports.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Aucune conversation à exporter'),
+            ),
+          );
+        }
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // Convert to JSON
+      final jsonString = _exportService.encodeExportDataList(exports);
+      
+      // Calculate total size
+      final totalSize = exports.fold<int>(
+        0,
+        (sum, exp) => sum + exp.dataSizeBytes,
+      );
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+
+        // Show dialog with export options
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Exporter toutes les conversations'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${exports.length} conversation(s)'),
+                const SizedBox(height: 8),
+                Text('Taille totale: ${FormatService.formatBytes(totalSize)}'),
+                const SizedBox(height: 16),
+                const Text(
+                  'Les données contiennent toutes vos clés de chiffrement et messages. Gardez-les en sécurité!',
+                  style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Annuler'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: jsonString));
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Copié dans le presse-papiers')),
+                  );
+                },
+                child: const Text('Copier'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur d\'export: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _importConversations() async {
+    // Show dialog with text input
+    final controller = TextEditingController();
+    
+    final shouldImport = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Importer des conversations'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Collez les données d\'export (JSON) ci-dessous:',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              maxLines: 5,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: '{"conversationId": "...", ...}',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Importer'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldImport != true || !mounted) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final jsonString = controller.text.trim();
+      if (jsonString.isEmpty) {
+        throw Exception('Données vides');
+      }
+
+      // Try to decode as single export or list
+      List<ConversationExportData> exports;
+      if (jsonString.startsWith('[')) {
+        exports = _exportService.decodeExportDataList(jsonString);
+      } else {
+        final single = _exportService.decodeExportData(jsonString);
+        exports = single != null ? [single] : [];
+      }
+
+      if (exports.isEmpty) {
+        throw Exception('Format de données invalide');
+      }
+
+      // Import all conversations
+      final imported = await _exportService.importConversations(exports);
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+        await _calculateStorageUsage();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$imported/${exports.length} conversation(s) importée(s)'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur d\'import: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -285,6 +452,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ],
                           ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Import/Export section
+                      Text(
+                        'Sauvegarde',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _exportAllConversations,
+                          icon: const Icon(Icons.upload_file),
+                          label: const Text('Exporter toutes les conversations'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _importConversations,
+                          icon: const Icon(Icons.download),
+                          label: const Text('Importer des conversations'),
                         ),
                       ),
                       const SizedBox(height: 24),

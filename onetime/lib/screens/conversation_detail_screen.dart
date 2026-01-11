@@ -2187,22 +2187,47 @@ class _MessageBubbleNewState extends State<_MessageBubbleNew> {
   }
 
   Widget _buildTimeAndStatus(BuildContext context) {
-    // Get read status from Firestore message if available
+    // Get message state from Firestore message if available
     int totalParticipants = 0;
     int readCount = 0;
+    int transferredCount = 0;
+    bool hasCloudContent = false;
     
     if (widget.message.firestoreMessage != null) {
       final msg = widget.message.firestoreMessage!;
-      totalParticipants = (msg.readBy.length + msg.transferredBy.length);
+      final uniqueParticipants = {...msg.readBy, ...msg.transferredBy}.length;
+      totalParticipants = uniqueParticipants;
       readCount = msg.readBy.length;
+      transferredCount = msg.transferredBy.length;
+      // Check if ciphertext is not empty (has content in cloud)
+      hasCloudContent = msg.ciphertext.isNotEmpty;
     }
     
+    // Determine message state icon and status text
+    IconData? stateIcon;
     String readStatus = '';
+    
     if (widget.isMine && totalParticipants > 0) {
-      if (readCount == totalParticipants) {
-        readStatus = 'lu';
-      } else if (readCount > 0) {
+      if (widget.message.isLocal && widget.message.firestoreMessage == null) {
+        // Only on local device (not sent to cloud yet - shouldn't happen normally)
+        stateIcon = Icons.phone_android;
+        readStatus = 'local';
+      } else if (hasCloudContent && transferredCount < totalParticipants) {
+        // In cloud with content - some haven't downloaded yet
+        stateIcon = Icons.cloud_upload;
+        readStatus = 'cloud $transferredCount/$totalParticipants';
+      } else if (!hasCloudContent && readCount < totalParticipants) {
+        // In cloud without content - everyone downloaded, waiting for reads
+        stateIcon = Icons.cloud_done;
         readStatus = 'lu $readCount/$totalParticipants';
+      } else if (readCount == totalParticipants) {
+        // Everyone has read
+        stateIcon = Icons.done_all;
+        readStatus = 'lu';
+      } else if (transferredCount > 0) {
+        // Some have transferred
+        stateIcon = Icons.cloud_done;
+        readStatus = '$transferredCount/$totalParticipants';
       }
     }
     
@@ -2210,12 +2235,25 @@ class _MessageBubbleNewState extends State<_MessageBubbleNew> {
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          _formatTime(widget.message.createdAt),
-          style: TextStyle(
-            fontSize: 10,
-            color: Colors.grey[600],
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (stateIcon != null) ...[
+              Icon(
+                stateIcon,
+                size: 12,
+                color: Colors.grey[600],
+              ),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              _formatTime(widget.message.createdAt),
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
         ),
         if (readStatus.isNotEmpty) ...[
           const SizedBox(height: 2),
