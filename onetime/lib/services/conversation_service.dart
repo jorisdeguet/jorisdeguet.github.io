@@ -166,10 +166,18 @@ class ConversationService {
     required Map<String, dynamic> info,
   }) async {
     debugPrint('[ConversationService] updateKeyDebugInfo: $conversationId, user=$userId');
-    // Utiliser dot notation pour mettre à jour un champ spécifique de la map
-    await _conversationsRef.doc(conversationId).update({
-      'keyDebugInfo.$userId': info,
-    });
+    try {
+      // Use set with merge to create the field if document doesn't exist yet
+      // This is more resilient than update() which fails if doc doesn't exist
+      await _conversationsRef.doc(conversationId).set({
+        'keyDebugInfo': {
+          userId: info,
+        },
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('[ConversationService] Error updating keyDebugInfo: $e');
+      rethrow;
+    }
   }
 
   /// Supprime une conversation (et tous ses messages)
@@ -185,12 +193,22 @@ class ConversationService {
     await batch.commit();
     
     // Supprimer les sessions d'échange de clé associées
-    final sessions = await _firestore
-        .collection('key_exchange_sessions')
-        .where('conversationId', isEqualTo: conversationId)
-        .get();
-    for (final doc in sessions.docs) {
-      await doc.reference.delete();
+    try {
+      final sessions = await _firestore
+          .collection('key_exchange_sessions')
+          .where('conversationId', isEqualTo: conversationId)
+          .get();
+      for (final doc in sessions.docs) {
+        try {
+          await doc.reference.delete();
+        } catch (e) {
+          debugPrint('[ConversationService] Could not delete session ${doc.id}: $e');
+          // Continue with other sessions even if one fails
+        }
+      }
+    } catch (e) {
+      debugPrint('[ConversationService] Error querying/deleting sessions: $e');
+      // Continue with conversation deletion even if session cleanup fails
     }
 
     // Supprimer la conversation

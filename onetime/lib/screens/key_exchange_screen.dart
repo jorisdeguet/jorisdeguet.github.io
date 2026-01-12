@@ -1706,6 +1706,9 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       debugPrint('[KeyExchange] KeyDebugInfo updated for user $_currentUserId: $availableBits bits available');
     } catch (e) {
       debugPrint('[KeyExchange] Error updating keyDebugInfo: $e');
+      // Don't rethrow - this is non-critical debug info
+      // The key has already been saved locally, which is what matters
+      debugPrint('[KeyExchange] Continuing despite keyDebugInfo update failure (non-critical)');
     }
   }
 }
