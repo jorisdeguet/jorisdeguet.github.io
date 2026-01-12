@@ -90,7 +90,6 @@ class _DisplayMessage {
       mimeType: firestore.mimeType,
       firestoreMessage: firestore,
       isCompressed: firestore.isCompressed,
-      deleteAfterRead: firestore.deleteAfterRead,
       isLocal: false,
     );
   }
@@ -338,7 +337,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
               contentType: message.contentType,
               textContent: decrypted,
               isCompressed: message.isCompressed,
-              deleteAfterRead: message.deleteAfterRead,
             ),
           );
 
@@ -387,7 +385,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
               fileName: message.fileName,
               mimeType: message.mimeType,
               isCompressed: message.isCompressed,
-              deleteAfterRead: message.deleteAfterRead,
             ),
           );
 
@@ -588,7 +585,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
           contentType: message.contentType,
           textContent: pseudoMessage.toJson(),
           isCompressed: message.isCompressed,
-          deleteAfterRead: message.deleteAfterRead,
         ),
       );
 
@@ -684,7 +680,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
           contentType: message.contentType,
           textContent: text,
           isCompressed: message.isCompressed,
-          deleteAfterRead: message.deleteAfterRead,
         ),
       );
 
@@ -1895,14 +1890,6 @@ class _MessageBubbleState extends State<_MessageBubble> {
           const SizedBox(width: 4),
           Icon(
             Icons.compress,
-            size: 12,
-            color: widget.isMine ? Colors.white70 : Colors.grey[600],
-          ),
-        ],
-        if (widget.message.deleteAfterRead) ...[
-          const SizedBox(width: 4),
-          Icon(
-            Icons.timer,
             size: 12,
             color: widget.isMine ? Colors.white70 : Colors.grey[600],
           ),

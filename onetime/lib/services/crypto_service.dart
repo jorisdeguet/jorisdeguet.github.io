@@ -74,7 +74,6 @@ class CryptoService {
       senderId: localPeerId,
       keySegments: [(startBit: segment.startBit, endBit: segment.endBit)],
       ciphertext: ciphertext,
-      deleteAfterRead: deleteAfterRead,
       isCompressed: isCompressed,
       contentType: MessageContentType.text,
     );
@@ -134,7 +133,6 @@ class CryptoService {
       senderId: localPeerId,
       keySegments: [(startBit: segment.startBit, endBit: segment.endBit)],
       ciphertext: ciphertext,
-      deleteAfterRead: deleteAfterRead,
       isCompressed: false,
       contentType: contentType,
       fileName: fileName,
@@ -270,7 +268,6 @@ class CryptoService {
       senderId: localPeerId,
       keySegments: segments,
       ciphertext: ciphertext,
-      deleteAfterRead: deleteAfterRead,
       isCompressed: isCompressed,
     );
     

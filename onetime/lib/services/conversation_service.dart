@@ -273,13 +273,6 @@ class ConversationService {
             .toList());
   }
 
-  /// Marque un message comme lu par l'utilisateur local
-  Future<void> markMessageAsRead(String conversationId, String messageId) async {
-    await _messagesRef(conversationId).doc(messageId).update({
-      'readBy': FieldValue.arrayUnion([localUserId]),
-    });
-  }
-
   /// Marque un message comme transféré par l'utilisateur local
   /// Supprime le contenu (ciphertext) si tous les participants l'ont transféré
   /// IMPORTANT: N'appelez cette méthode qu'APRÈS avoir sauvegardé le message localement

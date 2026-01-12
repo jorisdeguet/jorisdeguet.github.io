@@ -48,9 +48,6 @@ class EncryptedMessage {
 
   /// Liste des participants qui ont transféré/reçu le message
   List<String> transferredBy;
-
-  /// Mode ultra-secure : suppression après lecture
-  final bool deleteAfterRead;
   
   /// Indique si le message était compressé avant chiffrement
   final bool isCompressed;
@@ -73,7 +70,6 @@ class EncryptedMessage {
     DateTime? createdAt,
     List<String>? readBy,
     List<String>? transferredBy,
-    this.deleteAfterRead = false,
     this.isCompressed = false,
     this.contentType = MessageContentType.text,
     this.fileName,
@@ -136,7 +132,6 @@ class EncryptedMessage {
       'createdAt': createdAt.toIso8601String(),
       'readBy': readBy,
       'transferredBy': transferredBy,
-      'deleteAfterRead': deleteAfterRead,
       'isCompressed': isCompressed,
       'contentType': contentType.name,
       'fileName': fileName,
@@ -163,7 +158,6 @@ class EncryptedMessage {
       createdAt: DateTime.parse(json['createdAt'] as String),
       readBy: List<String>.from(json['readBy'] as List? ?? [json['senderId']]),
       transferredBy: List<String>.from(json['transferredBy'] as List? ?? [json['senderId']]),
-      deleteAfterRead: json['deleteAfterRead'] as bool? ?? false,
       isCompressed: json['isCompressed'] as bool? ?? false,
       contentType: MessageContentType.values.firstWhere(
         (t) => t.name == json['contentType'],
@@ -188,7 +182,6 @@ class EncryptedMessage {
       createdAt: createdAt,
       readBy: readBy ?? List.from(this.readBy),
       transferredBy: transferredBy ?? List.from(this.transferredBy),
-      deleteAfterRead: deleteAfterRead,
       isCompressed: isCompressed,
       contentType: contentType,
       fileName: fileName,

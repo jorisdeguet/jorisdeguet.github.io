@@ -121,7 +121,6 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
           fileName: _currentResult!.fileName,
           mimeType: _currentResult!.mimeType,
           isCompressed: result.message.isCompressed,
-          deleteAfterRead: result.message.deleteAfterRead,
         ),
       );
 
