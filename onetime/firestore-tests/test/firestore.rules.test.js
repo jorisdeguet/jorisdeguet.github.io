@@ -30,26 +30,26 @@ describe('Firestore security rules', function() {
     }
   });
 
-  it('allows creating key_exchange_session when authenticated and participant', async () => {
+  it('allows creating kex when authenticated and participant', async () => {
     const alice = testEnv.authenticatedContext('alice-uid');
     const db = alice.firestore();
 
-    const sessionRef = db.collection('key_exchange_sessions').doc('sess1');
+    const sessionRef = db.collection('kex').doc('sess1');
     await assertSucceeds(sessionRef.set({ participants: ['alice-uid', 'bob-uid'] }));
   });
 
-  it('prevents creating key_exchange_session when not a participant', async () => {
+  it('prevents creating kex when not a participant', async () => {
     const charlie = testEnv.authenticatedContext('charlie-uid');
     const db = charlie.firestore();
 
-    const sessionRef = db.collection('key_exchange_sessions').doc('sess2');
+    const sessionRef = db.collection('kex').doc('sess2');
     await assertFails(sessionRef.set({ participants: ['alice-uid', 'bob-uid'] }));
   });
 
-  it('allows read/write for participant on key_exchange_session', async () => {
+  it('allows read/write for participant on kex', async () => {
     const alice = testEnv.authenticatedContext('alice-uid');
     const db = alice.firestore();
-    const sessionRef = db.collection('key_exchange_sessions').doc('sess3');
+    const sessionRef = db.collection('kex').doc('sess3');
     await sessionRef.set({ participants: ['alice-uid', 'bob-uid'] });
 
     await assertSucceeds(sessionRef.get());

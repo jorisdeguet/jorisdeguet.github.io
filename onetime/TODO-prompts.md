@@ -7,6 +7,13 @@
 - Augmenter taille QR à 2048-2953 bytes (version 40)
 
 # Done
+## 2026-01-12: Renommage collection Firestore
+- ✅ Renommé collection `key_exchange_sessions` en `kex` pour plus de concision
+- ✅ Mis à jour firestore.rules
+- ✅ Mis à jour conversation_service.dart
+- ✅ Mis à jour key_exchange_sync_service.dart
+- ✅ Mis à jour les tests firestore.rules.test.js
+
 ## 2026-01-12: Synchronisation en arrière-plan des messages
 - ✅ Création du service `BackgroundMessageSyncService` pour décorréler le transfert de la lecture
 - ✅ Auto-décryptage des messages entrants en arrière-plan

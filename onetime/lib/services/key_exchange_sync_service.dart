@@ -15,7 +15,7 @@ class KeyExchangeSyncService {
 
   /// Collection des sessions d'échange
   CollectionReference<Map<String, dynamic>> get _sessionsRef =>
-      _firestore.collection('key_exchange_sessions');
+      _firestore.collection('kex');
 
   /// Crée une nouvelle session d'échange de clé dans Firestore
   Future<KeyExchangeSessionModel> createSession({

@@ -195,7 +195,7 @@ class ConversationService {
     // Supprimer les sessions d'échange de clé associées
     try {
       final sessions = await _firestore
-          .collection('key_exchange_sessions')
+          .collection('kex')
           .where('conversationId', isEqualTo: conversationId)
           .get();
       for (final doc in sessions.docs) {
