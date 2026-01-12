@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
-import '../models/key_exchange_session.dart';
 import '../services/key_exchange_service.dart';
 
 /// Service pour pré-générer et cacher les segments QR
@@ -15,7 +14,7 @@ class QrSegmentCacheService {
 
   /// Pré-génère les segments pour une session
   Future<void> pregenerateSegments(
-    KeyExchangeSession session,
+    KexSessionSource session,
     KeyExchangeService service,
   ) async {
     final sessionId = session.sessionId;

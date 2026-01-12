@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../models/key_exchange_session.dart';
+import '../models/kex_session.dart';
 import '../models/shared_key.dart';
 import '../models/conversation.dart';
 import 'conversation_detail_screen.dart';
 
 /// Screen showing detailed summary of a key exchange
 class KeyExchangeSummaryScreen extends StatelessWidget {
-  final KeyExchangeSessionModel session;
+  final KexSessionModel session;
   final SharedKey? previousKey;
   final SharedKey newKey;
   final Conversation conversation;
@@ -122,15 +122,7 @@ class KeyExchangeSummaryScreen extends StatelessWidget {
     
     // Session info
     buffer.writeln('📋 Session: ${session.id.substring(0, 16)}...');
-    buffer.writeln('👥 Participants: ${session.participants.length}');
-    for (final p in session.participants) {
-      final shortId = p.length > 8 ? p.substring(0, 8) : p;
-      final isCurrent = p == currentUserId;
-      final role = p == session.sourceId ? 'SOURCE' : 'READER';
-      buffer.writeln('   ${isCurrent ? '➤' : ' '} $shortId ($role)${isCurrent ? ' ← Vous' : ''}');
-    }
-    buffer.writeln();
-    
+
     // Key sizes
     buffer.writeln('🔑 TAILLE DES CLÉS');
     buffer.writeln('───────────────────────────────────────────────────');
@@ -155,33 +147,11 @@ class KeyExchangeSummaryScreen extends StatelessWidget {
     int completeSegments = 0;
     final incompleteSegments = <int>[];
     
-    for (int i = 0; i < session.totalSegments; i++) {
-      final scannedBy = session.scannedBy[i] ?? [];
-      final allScanned = session.allParticipantsScannedSegment(i);
-      
-      if (allScanned) {
-        completeSegments++;
-      } else {
-        incompleteSegments.add(i);
-      }
-    }
+
     
     buffer.writeln('✓ Segments complets:    $completeSegments/${session.totalSegments}');
     
-    if (incompleteSegments.isNotEmpty) {
-      buffer.writeln('⚠ Segments incomplets:  ${incompleteSegments.length}');
-      buffer.writeln();
-      
-      for (final segIdx in incompleteSegments) {
-        final scannedBy = session.scannedBy[segIdx] ?? [];
-        final missing = session.participants
-            .where((p) => !scannedBy.contains(p))
-            .map((p) => p.length > 8 ? p.substring(0, 8) : p)
-            .toList();
-        
-        buffer.writeln('   Segment $segIdx: Manquant pour ${missing.join(', ')}');
-      }
-    }
+
     
     buffer.writeln();
     
@@ -209,23 +179,7 @@ class KeyExchangeSummaryScreen extends StatelessWidget {
     // Per-participant progress
     buffer.writeln('👤 PROGRESSION PAR PARTICIPANT');
     buffer.writeln('───────────────────────────────────────────────────');
-    
-    for (final p in session.participants) {
-      final shortId = p.length > 8 ? p.substring(0, 8) : p;
-      int scanned = 0;
-      
-      for (int i = 0; i < session.totalSegments; i++) {
-        if (session.hasParticipantScannedSegment(p, i)) {
-          scanned++;
-        }
-      }
-      
-      final percent = (scanned / session.totalSegments * 100).toStringAsFixed(1);
-      final progressBar = _createProgressBar(scanned, session.totalSegments, 20);
-      final isCurrent = p == currentUserId;
-      
-      buffer.writeln('${isCurrent ? '➤' : ' '} $shortId: $progressBar $scanned/${session.totalSegments} ($percent%)');
-    }
+
     
     buffer.writeln();
     buffer.writeln('═══════════════════════════════════════════════════');

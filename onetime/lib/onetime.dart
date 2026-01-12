@@ -16,7 +16,7 @@ export 'models/key_segment.dart';
 export 'models/encrypted_message.dart';
 export 'models/user_profile.dart';
 export 'models/conversation.dart';
-export 'models/key_exchange_session.dart';
+export 'models/kex_session.dart';
 
 // Services
 export 'services/random_key_generator_service.dart';

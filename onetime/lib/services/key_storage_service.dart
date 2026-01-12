@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/shared_key.dart';
+import 'app_logger.dart';
 
 /// Service pour stocker et récupérer les clés partagées localement.
 ///
@@ -13,41 +14,54 @@ import '../models/shared_key.dart';
 class KeyStorageService {
   static const String _keyPrefix = 'shared_key_';
   static const String _usedBitsPrefix = 'used_bits_';
+  final _log = AppLogger();
 
   /// Sauvegarde une clé partagée pour une conversation
   Future<void> saveKey(String conversationId, SharedKey key) async {
-    debugPrint('[KeyStorageService] saveKey: conversationId=$conversationId, keyLength=${key.lengthInBits} bits');
+    _log.i('KeyStorage', 'saveKey: conversationId=$conversationId, keyLength=${key.lengthInBits} bits');
 
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // Sauvegarder les données de la clé en base64
+      // Préparer les valeurs à écrire
       final keyData = base64Encode(key.keyData);
-      await prefs.setString('$_keyPrefix$conversationId', keyData);
-
-      // Sauvegarder les métadonnées
-      final metadata = {
+      final metadata = jsonEncode({
         'id': key.id,
         'peerIds': key.peerIds,
         'createdAt': key.createdAt.toIso8601String(),
         'startOffset': key.startOffset,
-      };
-      await prefs.setString('${_keyPrefix}meta_$conversationId', jsonEncode(metadata));
+      });
+      final usedBitmapBase64 = base64Encode(key.usedBitmap);
+
+      // Lire les valeurs actuelles et éviter d'écrire si tout est identique
+      final existingKeyData = prefs.getString('$_keyPrefix$conversationId');
+      final existingMeta = prefs.getString('${_keyPrefix}meta_$conversationId');
+      final existingUsed = prefs.getString('$_usedBitsPrefix$conversationId');
+
+      if (existingKeyData == keyData && existingMeta == metadata && existingUsed == usedBitmapBase64) {
+        _log.i('KeyStorage', 'saveKey: SKIPPED (no changes)');
+        return;
+      }
+
+      // Sauvegarder les données de la clé en base64
+      await prefs.setString('$_keyPrefix$conversationId', keyData);
+
+      // Sauvegarder les métadonnées
+      await prefs.setString('${_keyPrefix}meta_$conversationId', metadata);
 
       // Sauvegarder le bitmap des bits utilisés
-      final usedBitmapBase64 = base64Encode(key.usedBitmap);
       await prefs.setString('$_usedBitsPrefix$conversationId', usedBitmapBase64);
 
-      debugPrint('[KeyStorageService] saveKey: SUCCESS');
+      _log.i('KeyStorage', 'saveKey: SUCCESS');
     } catch (e) {
-      debugPrint('[KeyStorageService] saveKey ERROR: $e');
+      _log.e('KeyStorage', 'saveKey ERROR: $e');
       rethrow;
     }
   }
 
   /// Récupère une clé partagée pour une conversation
   Future<SharedKey?> getKey(String conversationId) async {
-    debugPrint('[KeyStorageService] getKey: conversationId=$conversationId');
+    _log.i('KeyStorage', 'getKey: conversationId=$conversationId');
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -55,14 +69,14 @@ class KeyStorageService {
       // Récupérer les données de la clé
       final keyDataStr = prefs.getString('$_keyPrefix$conversationId');
       if (keyDataStr == null) {
-        debugPrint('[KeyStorageService] getKey: NOT FOUND');
+        _log.i('KeyStorage', 'getKey: NOT FOUND');
         return null;
       }
 
       // Récupérer les métadonnées
       final metadataStr = prefs.getString('${_keyPrefix}meta_$conversationId');
       if (metadataStr == null) {
-        debugPrint('[KeyStorageService] getKey: metadata NOT FOUND');
+        _log.i('KeyStorage', 'getKey: metadata NOT FOUND');
         return null;
       }
 
@@ -115,23 +129,23 @@ class KeyStorageService {
         startOffset: metadata['startOffset'] as int? ?? 0,
       );
 
-      debugPrint('[KeyStorageService] getKey: FOUND, ${key.lengthInBits} bits');
+      _log.i('KeyStorage', 'getKey: FOUND, ${key.lengthInBits} bits');
       return key;
     } catch (e) {
-      debugPrint('[KeyStorageService] getKey ERROR: $e');
+      _log.e('KeyStorage', 'getKey ERROR: $e');
       return null;
     }
   }
 
   /// Met à jour les bits utilisés pour une clé
   Future<void> updateUsedBits(String conversationId, int startBit, int endBit) async {
-    debugPrint('[KeyStorageService] updateUsedBits: $conversationId, $startBit-$endBit');
+    _log.i('KeyStorage', 'updateUsedBits: $conversationId, $startBit-$endBit');
 
     try {
       // Charger la clé existante
       final key = await getKey(conversationId);
       if (key == null) {
-        debugPrint('[KeyStorageService] updateUsedBits: Key not found');
+        _log.w('KeyStorage', 'updateUsedBits: Key not found');
         return;
       }
 
@@ -141,24 +155,24 @@ class KeyStorageService {
       // Sauvegarder la clé mise à jour avec le nouveau bitmap
       await saveKey(conversationId, key);
       
-      debugPrint('[KeyStorageService] updateUsedBits: SUCCESS');
+      _log.i('KeyStorage', 'updateUsedBits: SUCCESS');
     } catch (e) {
-      debugPrint('[KeyStorageService] updateUsedBits ERROR: $e');
+      _log.e('KeyStorage', 'updateUsedBits ERROR: $e');
     }
   }
 
   /// Supprime une clé
   Future<void> deleteKey(String conversationId) async {
-    debugPrint('[KeyStorageService] deleteKey: $conversationId');
+    _log.i('KeyStorage', 'deleteKey: $conversationId');
 
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('$_keyPrefix$conversationId');
       await prefs.remove('${_keyPrefix}meta_$conversationId');
       await prefs.remove('$_usedBitsPrefix$conversationId');
-      debugPrint('[KeyStorageService] deleteKey: SUCCESS');
+      _log.i('KeyStorage', 'deleteKey: SUCCESS');
     } catch (e) {
-      debugPrint('[KeyStorageService] deleteKey ERROR: $e');
+      _log.e('KeyStorage', 'deleteKey ERROR: $e');
     }
   }
 
@@ -179,4 +193,3 @@ class KeyStorageService {
         .toList();
   }
 }
-

@@ -168,27 +168,6 @@ class EncryptedMessage {
     );
   }
 
-  /// Copie le message avec modifications
-  EncryptedMessage copyWith({
-    List<String>? readBy,
-    List<String>? transferredBy,
-  }) {
-    return EncryptedMessage(
-      id: id,
-      keyId: keyId,
-      senderId: senderId,
-      keySegments: keySegments,
-      ciphertext: ciphertext,
-      createdAt: createdAt,
-      readBy: readBy ?? List.from(this.readBy),
-      transferredBy: transferredBy ?? List.from(this.transferredBy),
-      isCompressed: isCompressed,
-      contentType: contentType,
-      fileName: fileName,
-      mimeType: mimeType,
-    );
-  }
-
   @override
   String toString() => 'EncryptedMessage($id from $senderId, ${ciphertext.length} bytes, ${contentType.name}${isCompressed ? ', compressed' : ''})';
 }

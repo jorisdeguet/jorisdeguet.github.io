@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../services/random_key_generator_service.dart';
 import '../services/key_exchange_service.dart';
-import '../models/key_exchange_session.dart';
+import '../models/kex_session.dart';
 
 /// Service responsable de la pré-génération des données de clé
 /// pour accélérer le démarrage de l'échange.
@@ -90,12 +90,12 @@ class KeyPreGenerationService {
     
     // Créer une session temporaire pour utiliser la logique de génération existante
     // On met des IDs bidons car ils seront remplacés lors de l'utilisation réelle
-    final tempSession = KeyExchangeSession(
+    final tempSession = KexSessionSource(
       sessionId: sessionId,
       role: KeyExchangeRole.source,
-      totalBits: totalBits,
       peerIds: ['placeholder'],
       localPeerId: 'source_placeholder',
+      totalBits: totalBits,
     );
 
     final segments = <KeySegmentQrData>[];

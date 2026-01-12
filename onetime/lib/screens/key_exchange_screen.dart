@@ -8,7 +8,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 
 import '../config/app_config.dart';
-import '../models/key_exchange_session.dart';
+import '../models/kex_session.dart';
 import '../models/shared_key.dart';
 import '../services/random_key_generator_service.dart';
 import '../services/key_exchange_service.dart';
@@ -20,7 +20,6 @@ import '../services/pseudo_storage_service.dart';
 import '../services/crypto_service.dart';
 import '../services/qr_segment_cache_service.dart';
 import '../services/key_pre_generation_service.dart';
-import 'conversation_detail_screen.dart';
 import 'key_exchange_summary_screen.dart';
 
 /// Écran d'échange de clé via QR codes.
@@ -48,11 +47,11 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   late final KeyExchangeService _keyExchangeService;
   
   // Session locale (pour les données de clé)
-  KeyExchangeSession? _session;
+  KexSessionReader? _session;
 
   // Session Firestore (pour la synchronisation)
-  KeyExchangeSessionModel? _firestoreSession;
-  StreamSubscription<KeyExchangeSessionModel?>? _sessionSubscription;
+  KexSessionModel? _firestoreSession;
+  StreamSubscription<KexSessionModel?>? _sessionSubscription;
 
   KeyExchangeRole _role = KeyExchangeRole.source;
   int _currentStep = 0;
@@ -178,33 +177,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     }
   }
 
-  /// Log des informations de debug pour la clé (premiers et derniers 1024 bits)
-  void _logKeyDebugInfo(SharedKey key) {
-    try {
-      debugPrint('=== KEY DEBUG INFO ===');
-      debugPrint('[KeyExchange] Total key length: ${key.lengthInBits} bits (${key.lengthInBytes} bytes)');
-      
-      // Extraire les premiers 1024 bits (128 bytes)
-      final first1024Bits = key.lengthInBits >= 1024 
-          ? key.keyData.sublist(0, 128) 
-          : key.keyData;
-      final first1024Base64 = base64Encode(first1024Bits);
-      debugPrint('[KeyExchange] First 1024 bits (base64): $first1024Base64');
-      
-      // Extraire les derniers 1024 bits (128 bytes)
-      if (key.lengthInBits >= 1024) {
-        final lastStart = key.lengthInBytes - 128;
-        final last1024Bits = key.keyData.sublist(lastStart);
-        final last1024Base64 = base64Encode(last1024Bits);
-        debugPrint('[KeyExchange] Last 1024 bits (base64): $last1024Base64');
-      }
-      
-      debugPrint('=== END KEY DEBUG INFO ===');
-    } catch (e) {
-      debugPrint('[KeyExchange] Error logging key debug info: $e');
-    }
-  }
-
   String get _currentUserId => _authService.currentUserId ?? '';
 
   Future<void> _startAsSource() async {
@@ -249,7 +221,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       debugPrint('[KeyExchange]   Participants: ${_firestoreSession!.participants}');
       debugPrint('[KeyExchange]   Other Participants: ${_firestoreSession!.otherParticipants}');
       debugPrint('[KeyExchange]   Total Segments: ${_firestoreSession!.totalSegments}');
-      debugPrint('[KeyExchange]   Total Bits: ${_firestoreSession!.totalKeyBits}');
       debugPrint('[KeyExchange] Creating local session...');
       
       // Créer la session locale avec le MÊME ID que Firestore
@@ -262,7 +233,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         preGeneratedSegments: preGenSession?.preGeneratedSegments,
       );
       
-      if (preGenSession != null) {
+      if (preGenSession != null && preGenSession.preGeneratedSegments.isNotEmpty) {
         debugPrint('[KeyExchange] Using ${preGenSession.preGeneratedSegments.length} pre-generated segments');
       }
 
@@ -304,7 +275,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
            _displaySegmentAtIndex(0);
         } else {
            debugPrint('[KeyExchange] Generating first segment immediately for display');
-           _generateNextSegment(); // Generates index 0
+           if (_session is KexSessionSource) _generateNextSegment(); // ensure source
         }
         
         // 2. Start torrent rotation - it will handle generating missing segments
@@ -335,7 +306,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     }
   }
 
-  void _onSessionUpdate(KeyExchangeSessionModel? session) {
+  void _onSessionUpdate(KexSessionModel? session) {
     if (session == null) {
       debugPrint('[SESSION UPDATE] ❌ Session is null');
       return;
@@ -348,31 +319,10 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     debugPrint('[SESSION UPDATE] Source: ${session.sourceId}');
     debugPrint('[SESSION UPDATE] Participants: ${session.participants}');
     debugPrint('[SESSION UPDATE] Other Participants: ${session.otherParticipants}');
-    debugPrint('[SESSION UPDATE] Current Segment Index: ${session.currentSegmentIndex}');
+    debugPrint('[SESSION UPDATE] Current Segment Index: ${_firestoreSession?.currentSegmentIndex ?? 0}');
     debugPrint('[SESSION UPDATE] Total Segments: ${session.totalSegments}');
     debugPrint('[SESSION UPDATE] ScannedBy map:');
-    session.scannedBy.forEach((segmentIdx, scanners) {
-      debugPrint('[SESSION UPDATE]   Segment $segmentIdx: $scanners (${scanners.length} participants)');
-    });
 
-    // Mettre à jour le suivi des participants qui ont scanné dans ce tour
-    if (_role == KeyExchangeRole.source && _firestoreSession != null) {
-      final oldSession = _firestoreSession!;
-      
-      // Comparer les scannedBy entre l'ancienne et la nouvelle session
-      session.scannedBy.forEach((segmentIndex, participantIds) {
-        final oldParticipantIds = oldSession.scannedBy[segmentIndex] ?? [];
-        
-        // Trouver les nouveaux participants qui ont scanné ce segment
-        for (final participantId in participantIds) {
-          if (!oldParticipantIds.contains(participantId)) {
-            // Ce participant a scanné un segment dans ce tour
-            _participantScannedInRound[participantId] = true;
-            debugPrint('[SESSION UPDATE] ✓ Participant ${participantId.substring(0, 8)}... scanned segment $segmentIndex');
-          }
-        }
-      });
-    }
 
     setState(() {
       _firestoreSession = session;
@@ -388,7 +338,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
     // Pour la SOURCE: vérifier si tous les segments sont scannés par tous
     if (_role == KeyExchangeRole.source && _session != null) {
-      final totalSegments = _session!.totalSegments;
+      final totalSegments = (_session is KexSessionSource) ? (_session as KexSessionSource).totalSegments : (_firestoreSession?.totalSegments ?? 0);
       debugPrint('[SESSION UPDATE] Checking completion: checking $totalSegments segments');
 
       // Vérifier si tous les segments (0 à totalSegments-1) sont scannés par tous
@@ -421,11 +371,10 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           debugPrint('[SESSION UPDATE] Manual mode - displayed segment $displayedSegmentIdx, allScanned: $allScanned');
 
           // Si tous ont scanné et qu'il reste des segments, passer au suivant automatiquement
-          if (allScanned && _session!.currentSegmentIndex < totalSegments) {
+          if (allScanned && ( _session is KexSessionSource ? (_session as KexSessionSource).currentSegmentIndex < totalSegments : false)) {
             debugPrint('[SESSION UPDATE] Moving to next segment...');
             Future.delayed(const Duration(milliseconds: 500), () {
               if (mounted) {
-                _syncService.moveToNextSegment(session.id);
                 _generateNextSegment();
               }
             });
@@ -518,9 +467,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       debugPrint('[KeyExchange] Reader: Updating Firestore keyDebugInfo');
       await _updateKeyDebugInfoForConversation(conversation.id, finalKey);
 
-      // DEBUG: Afficher les premiers et derniers 1024 bits de la clé
-      _logKeyDebugInfo(finalKey);
-
       // Envoyer le message pseudo chiffré
       await _sendPseudoMessage(conversation.id, finalKey);
 
@@ -563,7 +509,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     if (_session == null) return;
 
     try {
-      _currentQrData = _keyExchangeService.generateNextSegment(_session!);
+      _currentQrData = _keyExchangeService.generateNextSegment((_session as KexSessionSource));
       // Mettre la luminosité au maximum pour l'affichage du QR code
       _setMaxBrightness();
       setState(() {});
@@ -581,32 +527,10 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     
     // Use the cache service to generate segments, but we don't await it here
     // so it doesn't block if called from a sync context (though here it is async)
-    _cacheService.pregenerateSegments(_session!, _keyExchangeService).then((_) {
-       debugPrint('[KeyExchange] Background generation complete');
-    });
-  }
-
-  /// Génère tous les segments à l'avance (pour le mode torrent)
-  // DEPRECATED: Replaced by _generateRemainingSegmentsInBackground
-  void _generateAllSegments() async {
-    if (_session == null) return;
-
-    debugPrint('[Torrent] Generating all ${_session!.totalSegments} segments...');
-    
-    try {
-      // Pré-générer tous les segments en arrière-plan
-      await _cacheService.pregenerateSegments(_session!, _keyExchangeService);
-      
-      // Afficher le premier segment
-      _displaySegmentAtIndex(0);
-      
-      // Mettre la luminosité au maximum
-      _setMaxBrightness();
-      
-      debugPrint('[Torrent] All segments generated successfully');
-    } catch (e) {
-      setState(() => _errorMessage = 'Erreur génération segments: $e');
-      debugPrint('[Torrent] Error generating segments: $e');
+    if (_session is KexSessionSource) {
+      _cacheService.pregenerateSegments((_session as KexSessionSource), _keyExchangeService).then((_) {
+         debugPrint('[KeyExchange] Background generation complete');
+      });
     }
   }
 
@@ -749,15 +673,17 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     try {
       // Recréer le QR data pour ce segment
       final startBit = segmentIndex * KeyExchangeService.segmentSizeBits;
-      final endBit = min(startBit + KeyExchangeService.segmentSizeBits, _session!.totalBits);
-      
+      final endBit = min(startBit + KeyExchangeService.segmentSizeBits, _session is KexSessionSource ? (_session as KexSessionSource).totalBits : (_firestoreSession?.totalSegments ?? startBit + KeyExchangeService.segmentSizeBits));
+
       // Récupérer les données du segment depuis la session
       final segmentData = _session!.getSegmentData(segmentIndex);
       
       if (segmentData == null) {
         debugPrint('[Torrent] Segment $segmentIndex data not found, regenerating...');
         // Le segment n'a pas encore été généré, le générer maintenant
-        _keyExchangeService.generateNextSegment(_session!);
+        if (_session is KexSessionSource) {
+          _keyExchangeService.generateNextSegment((_session as KexSessionSource));
+        }
         return;
       }
 
@@ -810,14 +736,12 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         debugPrint('[QR SCAN]   - Source: ${_firestoreSession!.sourceId}');
         debugPrint('[QR SCAN]   - Participants: ${_firestoreSession!.participants}');
         debugPrint('[QR SCAN]   - Total segments: ${_firestoreSession!.totalSegments}');
-        debugPrint('[QR SCAN]   - Total bits: ${_firestoreSession!.totalKeyBits}');
 
         // Créer la session locale reader avec les infos de Firestore
         _session = _keyExchangeService.createReaderSession(
           sessionId: segment.sessionId,
           localPeerId: _currentUserId,
           peerIds: _firestoreSession!.participants,
-          totalBits: _firestoreSession!.totalKeyBits,
         );
 
         debugPrint('[QR SCAN] Local reader session created');
@@ -861,10 +785,10 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       );
 
       debugPrint('[QR SCAN] ✅ Segment ${segment.segmentIndex} marked as scanned in Firestore');
-      debugPrint('[QR SCAN] Reader progress: ${_session!.readSegmentsCount}/${_session!.totalSegments} segments');
-      
+      debugPrint('[QR SCAN] Reader progress: ${_session!.readSegmentsCount}/${(_session is KexSessionSource ? (_session as KexSessionSource).totalSegments : (_firestoreSession?.totalSegments ?? 0))} segments');
+
       // Check if this user has finished scanning all segments
-      if (_session!.readSegmentsCount >= _session!.totalSegments) {
+      if (_session!.readSegmentsCount >= (_session is KexSessionSource ? (_session as KexSessionSource).totalSegments : (_firestoreSession?.totalSegments ?? 0))) {
         debugPrint('[QR SCAN] ✅ All segments scanned! Stopping camera...');
         if (mounted) {
           setState(() {
@@ -928,7 +852,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           
           // Forcer la finalisation pour obtenir les nouveaux segments
           final newKeyData = _keyExchangeService.finalizeExchange(
-            _session!,
+            (_session as KexSessionSource),
             force: true,
           );
           
@@ -945,7 +869,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           debugPrint('[KeyExchange] This may cause decryption errors. Delete conversation and restart.');
           
           finalKey = _keyExchangeService.finalizeExchange(
-            _session!,
+            (_session as KexSessionSource),
             force: true,
           );
           
@@ -962,7 +886,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         // NOUVELLE CONVERSATION: Créer tout de zéro
         existingKey = null;
         finalKey = _keyExchangeService.finalizeExchange(
-          _session!,
+          (_session as KexSessionSource),
           force: true,
         );
         
@@ -997,9 +921,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       // Update Firestore keyDebugInfo immediately with the new key size
       debugPrint('[KeyExchange] Source: Updating Firestore keyDebugInfo');
       await _updateKeyDebugInfoForConversation(conversationId, finalKey);
-
-      // DEBUG: Afficher les premiers et derniers 1024 bits de la clé
-      _logKeyDebugInfo(finalKey);
 
       // Envoyer le message pseudo chiffré
       await _sendPseudoMessage(conversationId, finalKey);
@@ -1172,8 +1093,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
     // Nombre de participants ayant scanné ce segment
     final scannedList = firestoreSession?.scannedBy[displayedSegmentIdx] ?? [];
-    final scannedCount = scannedList.length;
-    final totalOthers = firestoreSession?.otherParticipants.length ?? 1;
     final allScanned = firestoreSession?.allParticipantsScannedSegment(displayedSegmentIdx) ?? false;
 
     return Column(
@@ -1397,7 +1316,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     if (lastCompleteSegment < 0) {
       // No segments were fully shared - show error
       final otherParticipants = _firestoreSession!.otherParticipants;
-      final scannedBy = _firestoreSession!.scannedBy;
+      final scannedBy = _firestoreSession?.scannedBy ?? {};
       final errorMsg = 'Aucun segment complet.\nParticipants attendus: $otherParticipants\nScannedBy: $scannedBy';
       debugPrint('[TERMINATE] ❌ ERROR: $errorMsg');
       debugPrint('═══════════════════════════════════════════════════');
@@ -1414,9 +1333,9 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     final adjustedTotalBits = segmentsToInclude * bitsPerSegment;
     
     debugPrint('[TERMINATE] Bits adjustment:');
-    debugPrint('[TERMINATE]   - Original totalBits: ${_session!.totalBits}');
+    debugPrint('[TERMINATE]   - Original totalBits: ${(_session is KexSessionSource) ? (_session as KexSessionSource).totalBits : 'unknown'}');
     debugPrint('[TERMINATE]   - Adjusted totalBits: $adjustedTotalBits');
-    debugPrint('[TERMINATE]   - Original totalSegments: ${_session!.totalSegments}');
+    debugPrint('[TERMINATE]   - Original totalSegments: ${(_session is KexSessionSource) ? (_session as KexSessionSource).totalSegments : 'unknown'}');
     debugPrint('[TERMINATE]   - Adjusted totalSegments: $segmentsToInclude');
 
     // Update the Firestore session so readers know how many segments to use
@@ -1452,7 +1371,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     final firestoreSession = _firestoreSession;
     final segmentsRead = session?.readSegmentsCount ?? 0;
     // Utiliser totalSegments de Firestore si disponible, sinon de la session locale
-    final totalSegments = firestoreSession?.totalSegments ?? session?.totalSegments ?? 0;
+    final totalSegments = firestoreSession?.totalSegments ?? (_session is KexSessionSource ? (_session as KexSessionSource).totalSegments : 0);
     final isCompleted = firestoreSession?.status == KeyExchangeStatus.completed;
     
     // Check if current user has finished scanning all segments
@@ -1612,7 +1531,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     );
   }
 
-  List<Widget> _buildPeerProgressBars(KeyExchangeSessionModel session) {
+  List<Widget> _buildPeerProgressBars(KexSessionModel session) {
     // Get all other participants (excluding current user)
     final otherPeers = session.otherParticipants.where((p) => p != _currentUserId).toList();
     
@@ -1704,6 +1623,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       );
       
       debugPrint('[KeyExchange] KeyDebugInfo updated for user $_currentUserId: $availableBits bits available');
+      debugPrint('[KeyExchange]   First available index: $firstAvailable last available index: $lastAvailable consistencyHash: $consistencyHash');
     } catch (e) {
       debugPrint('[KeyExchange] Error updating keyDebugInfo: $e');
     }

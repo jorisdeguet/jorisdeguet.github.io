@@ -8,7 +8,7 @@ service cloud.firestore {
     // }
     
     // Key Exchange Sessions Rules
-    match /key_exchange_sessions/{sessionId} {
+    match /kex/{sessionId} {
       // Allow create if authenticated and user is a participant
       allow create: if request.auth != null &&
                      request.auth.uid in request.resource.data.participants;
