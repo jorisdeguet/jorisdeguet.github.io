@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'services/auth_service.dart';
 import 'services/key_pre_generation_service.dart';
 import 'services/pseudo_storage_service.dart';
+import 'services/background_message_sync_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'l10n/app_localizations.dart';
@@ -106,6 +107,7 @@ class AuthWrapper extends StatefulWidget {
 
 class _AuthWrapperState extends State<AuthWrapper> {
   final AuthService _authService = AuthService();
+  final BackgroundMessageSyncService _bgSync = BackgroundMessageSyncService();
   bool _isLoading = true;
   bool _isSignedIn = false;
 
@@ -122,6 +124,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void dispose() {
     _authSubscription?.cancel();
+    _bgSync.stopSync(); // Arrêter la sync en arrière-plan
     super.dispose();
   }
 
@@ -135,6 +138,15 @@ class _AuthWrapperState extends State<AuthWrapper> {
         _isSignedIn = isSignedIn && myPseudo != null && myPseudo.isNotEmpty;
         _isLoading = false;
       });
+      
+      // Démarrer la synchronisation en arrière-plan si connecté
+      if (_isSignedIn) {
+        debugPrint('[App] User authenticated, starting background message sync');
+        await _bgSync.startSync();
+      } else {
+        debugPrint('[App] User not authenticated, stopping background sync');
+        await _bgSync.stopSync();
+      }
     }
   }
 

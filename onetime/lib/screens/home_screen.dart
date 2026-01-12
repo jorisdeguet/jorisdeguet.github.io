@@ -425,6 +425,9 @@ class _ConversationTileState extends State<_ConversationTile> {
             child: Text(
               displayName,
               overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontWeight: _unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
+              ),
             ),
           ),
           // Indicateur de clé
