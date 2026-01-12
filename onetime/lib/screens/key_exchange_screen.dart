@@ -356,6 +356,8 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       if (allComplete && session.status != KeyExchangeStatus.completed) {
         debugPrint('[SESSION UPDATE] ✅ All segments complete - auto terminating');
         debugPrint('───────────────────────────────────────────────────');
+        // s'assurer qu'on ne l'appelle qu'une fois, ne plus écouter les mises à jour
+        _sessionSubscription?.cancel();
         _terminateKeyExchange();
         return;
       }
@@ -1145,15 +1147,15 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
                 ),
                 const SizedBox(width: 12),
                 // Stop button
-                IconButton(
-                  onPressed: _terminateKeyExchange,
-                  icon: const Icon(Icons.stop_circle),
-                  iconSize: 40,
-                  color: session.currentSegmentIndex >= session.totalSegments
-                      ? Colors.green
-                      : Colors.orange,
-                  tooltip: 'Terminer',
-                ),
+                // IconButton(
+                //   onPressed: _terminateKeyExchange,
+                //   icon: const Icon(Icons.stop_circle),
+                //   iconSize: 40,
+                //   color: session.currentSegmentIndex >= session.totalSegments
+                //       ? Colors.green
+                //       : Colors.orange,
+                //   tooltip: 'Terminer',
+                // ),
               ],
             ),
           ),

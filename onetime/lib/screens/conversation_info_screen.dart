@@ -69,7 +69,7 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
         ? FormatService.formatBytes(widget.sharedKey!.lengthInBytes)
         : FormatService.formatBytes(widget.conversation.totalKeyBits ~/ 8);
 
-    final keyUsagePercent = widget.sharedKey != null && _currentUserId.isNotEmpty && widget.sharedKey!.peerIds.contains(_currentUserId)
+    final keyUsagePercent = widget.sharedKey != null && _currentUserId.isNotEmpty
         ? (1 - (widget.sharedKey!.countAvailableBits(_currentUserId) / widget.sharedKey!.lengthInBits)) * 100
         : widget.conversation.keyUsagePercent;
 
@@ -141,12 +141,8 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
                   if (widget.sharedKey != null && peerId.isNotEmpty) {
                     try {
                       // Check if peer exists in key first to avoid ArgumentError
-                      if (widget.sharedKey!.peerIds.contains(peerId)) {
-                        final availableBits = widget.sharedKey!.countAvailableBits(peerId);
-                        debugInfo = '\n[Local] Clé: $availableBits bits dispos (sur ${widget.sharedKey!.lengthInBits})';
-                      } else {
-                        debugInfo = '\n[Local] Pas de clé pour ce participant';
-                      }
+                      final availableBits = widget.sharedKey!.countAvailableBits(peerId);
+                      debugInfo = '\n[Local] Clé: $availableBits bits dispos (sur ${widget.sharedKey!.lengthInBits})';
                     } catch (e) {
                       debugInfo = '\n[Local] Erreur lecture clé';
                     }

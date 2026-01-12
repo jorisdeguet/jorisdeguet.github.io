@@ -17,40 +17,66 @@ class KeyStorageService {
   final _log = AppLogger();
 
   /// Sauvegarde une clé partagée pour une conversation
-  Future<void> saveKey(String conversationId, SharedKey key) async {
-    _log.i('KeyStorage', 'saveKey: conversationId=$conversationId, keyLength=${key.lengthInBits} bits');
+  Future<void> saveKey(String conversationId, SharedKey key, {String? lastKexId}) async {
+    _log.i('KeyStorage', 'saveKey: conversationId=$conversationId, keyLength=${key.lengthInBits} bits, lastKexId=$lastKexId');
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-
-      // Préparer les valeurs à écrire
+      // Prepare values to write (we will compute effective lastKexId after reading existing meta)
       final keyData = base64Encode(key.keyData);
-      final metadata = jsonEncode({
-        'id': key.id,
-        'peerIds': key.peerIds,
-        'createdAt': key.createdAt.toIso8601String(),
-        'startOffset': key.startOffset,
-      });
       final usedBitmapBase64 = base64Encode(key.usedBitmap);
 
-      // Lire les valeurs actuelles et éviter d'écrire si tout est identique
+      // Reopen prefs and re-check to avoid redundant write after pending save
+      final prefs = await SharedPreferences.getInstance();
       final existingKeyData = prefs.getString('$_keyPrefix$conversationId');
       final existingMeta = prefs.getString('${_keyPrefix}meta_$conversationId');
       final existingUsed = prefs.getString('$_usedBitsPrefix$conversationId');
 
-      if (existingKeyData == keyData && existingMeta == metadata && existingUsed == usedBitmapBase64) {
-        _log.i('KeyStorage', 'saveKey: SKIPPED (no changes)');
-        return;
+      if (existingKeyData == keyData && existingUsed == usedBitmapBase64) {
+        bool sameKex = false;
+        if (existingMeta != null) {
+          try {
+            final Map<String, dynamic> existingMetaJson = jsonDecode(existingMeta) as Map<String, dynamic>;
+            // sort peerIds to ensure consistent comparison
+
+            final existingLastKex = existingMetaJson['lastKexId'] as String?;
+            sameKex = (existingLastKex == lastKexId);
+          } catch (_) {
+            sameKex = false;
+          }
+        }
+
+        if (sameKex) {
+          _log.i('KeyStorage', 'saveKey: SKIPPED (no changes to key bytes/usedBitmap and same lastKexId)');
+          return;
+        }
       }
 
-      // Sauvegarder les données de la clé en base64
-      await prefs.setString('$_keyPrefix$conversationId', keyData);
+      // Determine effective lastKexId: prefer provided lastKexId, otherwise preserve existing value
+      String? effectiveLastKex;
+      if (lastKexId != null) {
+        effectiveLastKex = lastKexId;
+      } else if (existingMeta != null) {
+        try {
+          final Map<String, dynamic> existingMetaJson = jsonDecode(existingMeta) as Map<String, dynamic>;
+          effectiveLastKex = existingMetaJson['lastKexId'] as String?;
+        } catch (_) {
+          effectiveLastKex = null;
+        }
+      }
 
-      // Sauvegarder les métadonnées
-      await prefs.setString('${_keyPrefix}meta_$conversationId', metadata);
 
-      // Sauvegarder le bitmap des bits utilisés
-      await prefs.setString('$_usedBitsPrefix$conversationId', usedBitmapBase64);
+      final prefsInner = await SharedPreferences.getInstance();
+      await prefsInner.setString('$_keyPrefix$conversationId', keyData);
+      final metadataMap = {
+        'id': key.id,
+        'createdAt': key.createdAt.toIso8601String(),
+        'startOffset': key.startOffset,
+        'lastKexId': effectiveLastKex,
+      };
+      final metadata = jsonEncode(metadataMap);
+      await prefsInner.setString('${_keyPrefix}meta_$conversationId', metadata);
+      await prefsInner.setString('$_usedBitsPrefix$conversationId', usedBitmapBase64);
+
 
       _log.i('KeyStorage', 'saveKey: SUCCESS');
     } catch (e) {
