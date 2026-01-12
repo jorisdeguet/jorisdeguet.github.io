@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../services/random_key_generator_service.dart';
 import '../services/key_exchange_service.dart';
 import '../models/kex_session.dart';
+import 'app_logger.dart';
 
 /// Service responsable de la pré-génération des données de clé
 /// pour accélérer le démarrage de l'échange.
@@ -14,6 +15,7 @@ class KeyPreGenerationService {
 
   final RandomKeyGeneratorService _keyGenerator = RandomKeyGeneratorService();
   late final KeyExchangeService _keyExchangeService = KeyExchangeService(_keyGenerator);
+  final _log = AppLogger();
 
   // Pool de sessions pré-générées
   // Clé: taille de la clé en bits (ex: 8192 * 8)
@@ -33,7 +35,7 @@ class KeyPreGenerationService {
 
   /// Initialise le service et commence la pré-génération
   void initialize() {
-    debugPrint('[KeyPreGen] Initializing service...');
+    _log.i('KeyPreGen', 'Initializing service...');
     // Démarrer la génération en arrière-plan sans bloquer
     Future.delayed(const Duration(seconds: 2), _replenishPool);
   }
@@ -43,8 +45,8 @@ class KeyPreGenerationService {
   _PreGeneratedSession? consumeSession(int totalBits) {
     if (_preGeneratedPool.containsKey(totalBits)) {
       final session = _preGeneratedPool.remove(totalBits);
-      debugPrint('[KeyPreGen] Consumed session ${session?.sessionId} for $totalBits bits');
-      
+      _log.i('KeyPreGen', 'Consumed session ${session?.sessionId} for $totalBits bits');
+
       // Déclencher le remplissage du pool
       _triggerReplenish();
       
@@ -67,19 +69,19 @@ class KeyPreGenerationService {
     try {
       for (final size in _standardSizes) {
         if (!_preGeneratedPool.containsKey(size)) {
-          debugPrint('[KeyPreGen] Generating session for $size bits...');
-          
+          _log.i('KeyPreGen', 'Generating session for $size bits...');
+
           final session = await _generateSession(size);
           _preGeneratedPool[size] = session;
           
-          debugPrint('[KeyPreGen] Session ready for $size bits (${session.preGeneratedSegments.length} segments)');
-          
+          _log.i('KeyPreGen', 'Session ready for $size bits (${session.preGeneratedSegments.length} segments)');
+
           // Yield to main thread
           await Future.delayed(Duration.zero);
         }
       }
     } catch (e) {
-      debugPrint('[KeyPreGen] Error generating session: $e');
+      _log.e('KeyPreGen', 'Error generating session: $e');
     } finally {
       _isGenerating = false;
     }

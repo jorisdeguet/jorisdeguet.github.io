@@ -8,10 +8,12 @@ import 'package:image/image.dart' as img;
 import '../models/encrypted_message.dart';
 
 import 'format_service.dart';
+import 'app_logger.dart';
 
 /// Service pour la gestion des médias (images et fichiers).
 class MediaService {
   final ImagePicker _imagePicker = ImagePicker();
+  final _log = AppLogger();
 
   /// Sélectionne une image depuis la galerie ou la caméra
   Future<MediaPickResult?> pickImage({
@@ -38,7 +40,7 @@ class MediaService {
         contentType: MessageContentType.image,
       );
     } catch (e) {
-      debugPrint('[MediaService] Error picking image: $e');
+      _log.e('MediaService', 'Error picking image: $e');
       return null;
     }
   }
@@ -79,7 +81,7 @@ class MediaService {
         contentType: MessageContentType.file,
       );
     } catch (e) {
-      debugPrint('[MediaService] Error picking file: $e');
+      _log.e('MediaService', 'Error picking file: $e');
       return null;
     }
   }
@@ -202,4 +204,3 @@ class MediaPickResult {
   double get compressionPercent =>
       wasResized ? ((originalSize - finalSize) / originalSize) * 100 : 0;
 }
-

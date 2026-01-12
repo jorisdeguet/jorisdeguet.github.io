@@ -1,4 +1,5 @@
 import 'package:logger/logger.dart';
+import '../config/app_config.dart';
 
 /// Simple application logger wrapper around `logger` package.
 /// Supports enabling/disabling tags to control which messages are shown.
@@ -12,7 +13,14 @@ class AppLogger {
   AppLogger._internal()
       : _logger = Logger(
           printer: PrettyPrinter(methodCount: 0),
-        );
+        ) {
+    // Initialize enabled tags from AppConfig
+    if (AppConfig.enabledLogTags.isNotEmpty) {
+      for (final t in AppConfig.enabledLogTags) {
+        _enabledTags.add(t);
+      }
+    }
+  }
 
   /// Enable messages for a tag (e.g. 'KeyStorage', 'KeyExchange')
   void enableTag(String tag) => _enabledTags.add(tag);
@@ -39,4 +47,3 @@ class AppLogger {
     if (isTagEnabled(tag)) _logger.e('[$tag] $message');
   }
 }
-

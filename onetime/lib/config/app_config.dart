@@ -10,4 +10,8 @@ class AppConfig {
   
   /// Active/désactive les logs de debug étendus pour le chiffrement
   static const bool verboseCryptoLogs = true;
+
+  /// Liste des tags de logs à afficher. Si vide => afficher tous les tags.
+  /// Exemple: ['KeyStorage', 'KeyExchange']
+  static const List<String> enabledLogTags = ['KeyStorage', 'KeyExchange'];
 }
