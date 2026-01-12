@@ -256,14 +256,11 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
         conversationId: widget.conversation.id,
         userId: _currentUserId,
         info: {
-          'availableBits': availableBits,
-          'firstAvailableIndex': firstAvailable,
-          'lastAvailableIndex': lastAvailable,
           'consistencyHash': consistencyHash,
           'updatedAt': DateTime.now().toIso8601String(),
         },
       );
-      debugPrint('[ConversationDetail] Key debug info updated in Firestore');
+      debugPrint('[ConversationDetail] Key debug info updated: $consistencyHash');
     } catch (e) {
       debugPrint('[ConversationDetail] Error updating key debug info: $e');
     }

@@ -1687,7 +1687,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         }
       }
       
-      // Generate consistency hash
+      // Generate consistency hash (contains all info: first|last|available)
       final consistencyHash = '$firstAvailable|$lastAvailable|$availableBits';
 
       final conversationService = ConversationService(localUserId: _currentUserId);
@@ -1695,15 +1695,12 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         conversationId: conversationId,
         userId: _currentUserId,
         info: {
-          'availableBits': availableBits,
-          'firstAvailableIndex': firstAvailable,
-          'lastAvailableIndex': lastAvailable,
           'consistencyHash': consistencyHash,
           'updatedAt': DateTime.now().toIso8601String(),
         },
       );
       
-      debugPrint('[KeyExchange] KeyDebugInfo updated for user $_currentUserId: $availableBits bits available');
+      debugPrint('[KeyExchange] KeyDebugInfo updated for user $_currentUserId: hash=$consistencyHash');
     } catch (e) {
       debugPrint('[KeyExchange] Error updating keyDebugInfo: $e');
       // Don't rethrow - this is non-critical debug info

@@ -155,14 +155,23 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
                   // Add Remote Key Info from Firestore
                   if (widget.conversation.keyDebugInfo.containsKey(peerId)) {
                     final info = widget.conversation.keyDebugInfo[peerId] as Map<String, dynamic>;
-                    final remoteBits = info['availableBits'];
-                    final remoteStart = info['firstAvailableIndex'];
-                    final remoteEnd = info['lastAvailableIndex'];
+                    final consistencyHash = info['consistencyHash'] as String?;
                     final lastUpdate = info['updatedAt'] != null 
                         ? _formatTime(DateTime.parse(info['updatedAt'])) 
                         : '?';
-                        
-                    debugInfo += '\n[Remote $lastUpdate] Clé: $remoteBits bits dispos ($remoteStart-$remoteEnd)';
+                    
+                    if (consistencyHash != null) {
+                      // Parse hash: "firstAvailable|lastAvailable|availableBits"
+                      final parts = consistencyHash.split('|');
+                      if (parts.length == 3) {
+                        final remoteStart = parts[0];
+                        final remoteEnd = parts[1];
+                        final remoteBits = parts[2];
+                        debugInfo += '\n[Remote $lastUpdate] Clé: $remoteBits bits dispos ($remoteStart-$remoteEnd)';
+                      } else {
+                        debugInfo += '\n[Remote $lastUpdate] Hash: $consistencyHash';
+                      }
+                    }
                   }
                   
                   return ListTile(
