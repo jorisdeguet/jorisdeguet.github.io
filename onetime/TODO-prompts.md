@@ -7,6 +7,24 @@
 - Augmenter taille QR à 2048-2953 bytes (version 40)
 
 # Done
+## 2026-01-12: Renommage collection Firestore
+- ✅ Renommé collection `key_exchange_sessions` en `kex` pour plus de concision
+- ✅ Mis à jour firestore.rules
+- ✅ Mis à jour conversation_service.dart
+- ✅ Mis à jour key_exchange_sync_service.dart
+- ✅ Mis à jour les tests firestore.rules.test.js
+
+## 2026-01-12: Synchronisation en arrière-plan des messages
+- ✅ Création du service `BackgroundMessageSyncService` pour décorréler le transfert de la lecture
+- ✅ Auto-décryptage des messages entrants en arrière-plan
+- ✅ Marquage comme "transféré" (pas "lu") lors du décryptage automatique
+- ✅ Stockage local des messages non lus
+- ✅ Affichage des compteurs de messages non lus dans HomeScreen
+- ✅ Titre de conversation en gras quand messages non lus
+- ✅ Badge avec le nombre de messages non lus
+- ✅ Marquage comme "lu" uniquement à l'ouverture de la conversation
+- ✅ Intégration dans main.dart (démarrage à l'authentification, arrêt à la déconnexion)
+
 ## 2026-01-11: Améliorations UX et Export/Import
 - ✅ Export/Import de conversations vers un autre appareil
 - ✅ Export d'une conversation unique (conversation info screen)
