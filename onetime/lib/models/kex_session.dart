@@ -121,22 +121,24 @@ class KexSessionModel {
 
   /// Calcule les updates à envoyer à Firestore après modification des segments
   Map<String, dynamic> computeFirestoreUpdatesForSegments() {
-    final normalized = <String, List<int>>{};
-    segmentsByPeer.forEach((k, v) {
-      final copy = List<int>.from(v)..sort();
-      normalized[k] = copy;
-    });
+     final normalized = <String, List<int>>{};
+     segmentsByPeer.forEach((k, v) {
+       final copy = List<int>.from(v)..sort();
+       normalized[k] = copy;
+     });
 
-    return {
-      'segmentsByPeer': normalized.map((k, v) => MapEntry(k.toString(), v)),
-      'participants': normalized.keys.toList(),
-      'updatedAt': Timestamp.fromDate(DateTime.now()),
-      // inclure la tentative courante (start/end) pour que les listeners puissent éviter
-      // de sauvegarder deux fois la même clé si plusieurs updates arrivent.
-      'startIndex': startIndex,
-      'endIndex': endIndex,
-    };
-  }
+     return {
+       'segmentsByPeer': normalized.map((k, v) => MapEntry(k.toString(), v)),
+       'participants': normalized.keys.toList(),
+      // use ISO strings for timestamps to keep storage consistent and
+      // allow the factory to accept String or Timestamp when reading
+      'updatedAt': DateTime.now().toIso8601String(),
+       // inclure la tentative courante (start/end) pour que les listeners puissent éviter
+       // de sauvegarder deux fois la même clé si plusieurs updates arrivent.
+       'startIndex': startIndex,
+       'endIndex': endIndex,
+     };
+   }
 
   /// Getter pratique: index actuel produit par la source (nombre de segments source)
   int get currentSegmentIndex => totalSegments;
@@ -187,8 +189,9 @@ class KexSessionModel {
       'totalKeyBits': (segmentsNormalized[sourceId]?.length ?? 0) * KeyExchangeService.segmentSizeBits,
       'startIndex': startIndex,
       'endIndex': endIndex,
-      'createdAt': Timestamp.fromDate(createdAt),
-      'updatedAt': Timestamp.fromDate(DateTime.now()),
+      // store dates as ISO strings for readability and cross-platform parsing
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': DateTime.now().toIso8601String(),
     };
   }
 
@@ -238,6 +241,60 @@ class KexSessionModel {
 
   bool hasScannedLegacy(String participantId, int segmentIndex) {
     return segmentsByPeer[participantId]?.contains(segmentIndex) ?? false;
+  }
+
+  /// Convenience factory: construct a model representing a source session.
+  /// This is a thin wrapper around the main constructor and kept for clarity
+  /// when creating a session originating from the source device.
+  factory KexSessionModel.fromSource({
+    required String id,
+    String? conversationId,
+    required String sourceId,
+    required Map<String, List<int>> segmentsByPeer,
+    KeyExchangeStatus status = KeyExchangeStatus.inProgress,
+    int? startIndex,
+    int? endIndex,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return KexSessionModel(
+      id: id,
+      conversationId: conversationId,
+      sourceId: sourceId,
+      segmentsByPeer: segmentsByPeer,
+      status: status,
+      startIndex: startIndex,
+      endIndex: endIndex,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+    );
+  }
+
+  /// Convenience factory: construct a model representing a reader session.
+  /// This is a thin wrapper around the main constructor and clarifies intent
+  /// when building a model from a reader-side state.
+  factory KexSessionModel.fromReader({
+    required String id,
+    String? conversationId,
+    required String sourceId,
+    required Map<String, List<int>> segmentsByPeer,
+    KeyExchangeStatus status = KeyExchangeStatus.inProgress,
+    int? startIndex,
+    int? endIndex,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return KexSessionModel(
+      id: id,
+      conversationId: conversationId,
+      sourceId: sourceId,
+      segmentsByPeer: segmentsByPeer,
+      status: status,
+      startIndex: startIndex,
+      endIndex: endIndex,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+    );
   }
 }
 

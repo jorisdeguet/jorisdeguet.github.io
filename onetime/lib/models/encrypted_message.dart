@@ -171,36 +171,3 @@ class EncryptedMessage {
   @override
   String toString() => 'EncryptedMessage($id from $senderId, ${ciphertext.length} bytes, ${contentType.name}${isCompressed ? ', compressed' : ''})';
 }
-
-/// Représente un message en clair (avant chiffrement ou après déchiffrement)
-class PlainMessage {
-  /// Contenu du message en texte
-  final String content;
-  
-  /// ID de l'expéditeur
-  final String senderId;
-  
-  /// Timestamp
-  final DateTime timestamp;
-
-  PlainMessage({
-    required this.content,
-    required this.senderId,
-    DateTime? timestamp,
-  }) : timestamp = timestamp ?? DateTime.now();
-
-  /// Convertit le message en bytes UTF-8
-  Uint8List toBytes() => Uint8List.fromList(utf8.encode(content));
-  
-  /// Crée un message depuis des bytes UTF-8
-  factory PlainMessage.fromBytes(Uint8List bytes, String senderId, {DateTime? timestamp}) {
-    return PlainMessage(
-      content: utf8.decode(bytes),
-      senderId: senderId,
-      timestamp: timestamp,
-    );
-  }
-
-  /// Longueur du message en bits
-  int get lengthInBits => toBytes().length * 8;
-}
