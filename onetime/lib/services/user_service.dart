@@ -1,11 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
+import 'app_logger.dart';
 
 import '../models/user_profile.dart';
 
 /// Service pour gérer les utilisateurs de l'application dans Firestore.
 class UserService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final _log = AppLogger();
 
   /// Collection des utilisateurs
   CollectionReference<Map<String, dynamic>> get _usersRef =>
@@ -13,24 +14,24 @@ class UserService {
 
   /// Récupère un utilisateur par son ID
   Future<UserProfile?> getUserById(String id) async {
-    debugPrint('[UserService] getUserById: $id');
+    _log.i('User', 'getUserById: $id');
     try {
       final doc = await _usersRef.doc(id).get();
       if (!doc.exists) {
-        debugPrint('[UserService] getUserById: NOT FOUND');
+        _log.i('User', 'getUserById: NOT FOUND');
         return null;
       }
-      debugPrint('[UserService] getUserById: FOUND');
+      _log.i('User', 'getUserById: FOUND');
       return UserProfile.fromJson(doc.data()!);
     } catch (e) {
-      debugPrint('[UserService] getUserById ERROR: $e');
+      _log.e('User', 'getUserById ERROR: $e');
       rethrow;
     }
   }
 
   /// Récupère plusieurs utilisateurs par leurs IDs
   Future<Map<String, UserProfile>> getUsersByIds(List<String> ids) async {
-    debugPrint('[UserService] getUsersByIds: ${ids.length} IDs');
+    _log.i('User', 'getUsersByIds: ${ids.length} IDs');
     final result = <String, UserProfile>{};
     
     if (ids.isEmpty) return result;
@@ -47,12 +48,11 @@ class UserService {
         }
       }
       
-      debugPrint('[UserService] getUsersByIds: found ${result.length} users');
+      _log.i('User', 'getUsersByIds: found ${result.length} users');
       return result;
     } catch (e) {
-      debugPrint('[UserService] getUsersByIds ERROR: $e');
+      _log.e('User', 'getUsersByIds ERROR: $e');
       rethrow;
     }
   }
 }
-

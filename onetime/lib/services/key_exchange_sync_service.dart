@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
-import '../models/key_exchange_session.dart';
+import '../models/kex_session.dart';
+import 'app_logger.dart';
 
 /// Service pour synchroniser les sessions d'échange de clé via Firestore.
 ///
@@ -12,13 +13,14 @@ import '../models/key_exchange_session.dart';
 /// - Passer au segment suivant quand tous ont scanné
 class KeyExchangeSyncService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final _log = AppLogger();
 
   /// Collection des sessions d'échange
   CollectionReference<Map<String, dynamic>> get _sessionsRef =>
       _firestore.collection('kex');
 
   /// Crée une nouvelle session d'échange de clé dans Firestore
-  Future<KeyExchangeSessionModel> createSession({
+  Future<KexSessionModel> createSession({
     required String sourceId,
     required List<String> participants,
     required int totalKeyBits,
@@ -30,15 +32,12 @@ class KeyExchangeSyncService {
     // S'assurer que la source est dans les participants
     final allParticipants = {...participants, sourceId}.toList()..sort();
 
-    final session = KeyExchangeSessionModel(
+    final session = KexSessionModel.createInitial(
       id: sessionId,
       conversationId: conversationId,
-      participants: allParticipants,
       sourceId: sourceId,
-      totalKeyBits: totalKeyBits,
+      participants: allParticipants,
       totalSegments: totalSegments,
-      currentSegmentIndex: 0,
-      status: KeyExchangeStatus.inProgress,
     );
 
     await _sessionsRef.doc(sessionId).set(session.toFirestore());
@@ -47,17 +46,17 @@ class KeyExchangeSyncService {
   }
 
   /// Récupère une session par ID
-  Future<KeyExchangeSessionModel?> getSession(String sessionId) async {
+  Future<KexSessionModel?> getSession(String sessionId) async {
     final doc = await _sessionsRef.doc(sessionId).get();
     if (!doc.exists) return null;
-    return KeyExchangeSessionModel.fromFirestore(doc.data()!);
+    return KexSessionModel.fromFirestore(doc.data()!);
   }
 
   /// Écoute les changements d'une session en temps réel
-  Stream<KeyExchangeSessionModel?> watchSession(String sessionId) {
+  Stream<KexSessionModel?> watchSession(String sessionId) {
     return _sessionsRef.doc(sessionId).snapshots().map((snapshot) {
       if (!snapshot.exists) return null;
-      return KeyExchangeSessionModel.fromFirestore(snapshot.data()!);
+      return KexSessionModel.fromFirestore(snapshot.data()!);
     });
   }
 
@@ -67,117 +66,62 @@ class KeyExchangeSyncService {
     required String participantId,
     required int segmentIndex,
   }) async {
-    debugPrint('[KeyExchangeSyncService] ══════════════════════════════════');
-    debugPrint('[KeyExchangeSyncService] markSegmentScanned called:');
-    debugPrint('[KeyExchangeSyncService]   sessionId: $sessionId');
-    debugPrint('[KeyExchangeSyncService]   participantId: ${participantId.substring(0, 8)}...');
-    debugPrint('[KeyExchangeSyncService]   segmentIndex: $segmentIndex');
-    
+    _log.d('KeyExchange', '════════════════════════════════════════');
+    _log.d('KeyExchange', 'markSegmentScanned called:');
+    _log.d('KeyExchange', '  sessionId: $sessionId');
+    _log.d('KeyExchange', '  participantId: ${participantId.substring(0, 8)}...');
+    _log.d('KeyExchange', '  segmentIndex: $segmentIndex');
+
     final docRef = _sessionsRef.doc(sessionId);
 
     await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(docRef);
       if (!snapshot.exists) {
-        debugPrint('[KeyExchangeSyncService] ❌ ERROR: Session not found');
+        _log.w('KeyExchange', '❌ ERROR: Session not found');
         throw Exception('Session not found');
       }
 
-      final session = KeyExchangeSessionModel.fromFirestore(snapshot.data()!);
-      debugPrint('[KeyExchangeSyncService] Current session state:');
-      debugPrint('[KeyExchangeSyncService]   participants: ${session.participants}');
-      debugPrint('[KeyExchangeSyncService]   scannedBy[$segmentIndex] BEFORE: ${session.scannedBy[segmentIndex] ?? []}');
-
-      // Ajouter le participant à la liste des scannés pour ce segment
-      final scannedBy = Map<int, List<String>>.from(session.scannedBy);
-      final segmentScanned = List<String>.from(scannedBy[segmentIndex] ?? []);
-
-      // Vérifier si le participant est dans la liste des participants
-      final participants = List<String>.from(session.participants);
-      final participantAdded = !participants.contains(participantId);
-      if (participantAdded) {
-        participants.add(participantId);
-        participants.sort();
-        debugPrint('[KeyExchangeSyncService] ℹ️  Adding participant to session: ${participantId.substring(0, 8)}...');
-      }
-
-      if (!segmentScanned.contains(participantId)) {
-        segmentScanned.add(participantId);
-        scannedBy[segmentIndex] = segmentScanned;
-        
-        debugPrint('[KeyExchangeSyncService] ✓ Added participant to segment scanners');
-        debugPrint('[KeyExchangeSyncService]   scannedBy[$segmentIndex] AFTER: $segmentScanned');
-
-        final updates = <String, dynamic>{
-          'scannedBy': scannedBy.map((k, v) => MapEntry(k.toString(), v)),
-          'updatedAt': DateTime.now().toIso8601String(),
-        };
-
-        // Ajouter le participant à la liste s'il n'y était pas
-        if (participantAdded) {
-          updates['participants'] = participants;
-        }
-
+      final session = KexSessionModel.fromFirestore(snapshot.data()!);
+      if (!session.hasScanned(participantId, segmentIndex)) {
+        session.addScannedSegment(
+          participantId: participantId,
+          segmentIndex: segmentIndex,
+        );
+        var updates = session.computeFirestoreUpdatesForSegments();
         transaction.update(docRef, updates);
-        debugPrint('[KeyExchangeSyncService] ✅ Transaction update queued');
+        _log.i('KeyExchange', '✅ Transaction update queued');
       } else {
-        debugPrint('[KeyExchangeSyncService] ℹ️  Participant already scanned this segment - no update needed');
+        _log.i('KeyExchange', 'ℹ️  Participant already scanned this segment - no update needed');
       }
     });
-    
-    debugPrint('[KeyExchangeSyncService] ══════════════════════════════════');
-  }
 
-  /// Passe au segment suivant (appelé par la source)
-  Future<void> moveToNextSegment(String sessionId) async {
-    final docRef = _sessionsRef.doc(sessionId);
-
-    await _firestore.runTransaction((transaction) async {
-      final snapshot = await transaction.get(docRef);
-      if (!snapshot.exists) {
-        throw Exception('Session not found');
-      }
-
-      final session = KeyExchangeSessionModel.fromFirestore(snapshot.data()!);
-      final newIndex = session.currentSegmentIndex + 1;
-
-      final updates = <String, dynamic>{
-        'currentSegmentIndex': newIndex,
-        'updatedAt': DateTime.now().toIso8601String(),
-      };
-
-      // Si c'est le dernier segment, marquer comme terminé
-      if (newIndex >= session.totalSegments) {
-        updates['status'] = KeyExchangeStatus.completed.name;
-      }
-
-      transaction.update(docRef, updates);
-    });
+    _log.d('KeyExchange', '════════════════════════════════════════');
   }
 
   /// Marque la session comme terminée
   Future<void> completeSession(String sessionId) async {
     await _sessionsRef.doc(sessionId).update({
       'status': KeyExchangeStatus.completed.name,
-      'updatedAt': DateTime.now().toIso8601String(),
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
     });
   }
 
   /// Met à jour le conversationId de la session
   Future<void> setConversationId(String sessionId, String conversationId) async {
-    debugPrint('[KeyExchangeSyncService] setConversationId: sessionId=$sessionId, conversationId=$conversationId');
+    _log.d('KeyExchange', 'setConversationId: sessionId=$sessionId, conversationId=$conversationId');
     await _sessionsRef.doc(sessionId).update({
       'conversationId': conversationId,
-      'updatedAt': DateTime.now().toIso8601String(),
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
     });
   }
 
   /// Met à jour le nombre total de segments (utilisé lors d'une terminaison anticipée)
   Future<void> updateTotalSegments(String sessionId, int totalSegments, int totalKeyBits) async {
-    debugPrint('[KeyExchangeSyncService] updateTotalSegments: sessionId=$sessionId, totalSegments=$totalSegments, totalKeyBits=$totalKeyBits');
+    _log.d('KeyExchange', 'updateTotalSegments: sessionId=$sessionId, totalSegments=$totalSegments, totalKeyBits=$totalKeyBits');
     await _sessionsRef.doc(sessionId).update({
       'totalSegments': totalSegments,
       'totalKeyBits': totalKeyBits,
-      'updatedAt': DateTime.now().toIso8601String(),
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
     });
   }
 
@@ -185,7 +129,7 @@ class KeyExchangeSyncService {
   Future<void> cancelSession(String sessionId) async {
     await _sessionsRef.doc(sessionId).update({
       'status': KeyExchangeStatus.cancelled.name,
-      'updatedAt': DateTime.now().toIso8601String(),
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
     });
   }
 
@@ -198,18 +142,18 @@ class KeyExchangeSyncService {
   Future<void> cleanupOldSessions(String userId) async {
     try {
       final oneHourAgo = DateTime.now().subtract(const Duration(hours: 1));
-      
+
       // Trouver les sessions créées ou mises à jour il y a plus d'une heure
       // On filtre aussi par participant car les règles de sécurité ne permettent
       // de lire/supprimer que ses propres sessions.
       final snapshot = await _sessionsRef
           .where('participants', arrayContains: userId)
-          .where('createdAt', isLessThan: oneHourAgo.toIso8601String())
+          .where('createdAt', isLessThan: Timestamp.fromDate(oneHourAgo))
           .get();
-      
+
       final batch = _firestore.batch();
       int count = 0;
-      
+
       for (final doc in snapshot.docs) {
         batch.delete(doc.reference);
         count++;
@@ -219,19 +163,19 @@ class KeyExchangeSyncService {
           count = 0;
         }
       }
-      
+
       if (count > 0) {
         await batch.commit();
       }
-      
-      debugPrint('[KeyExchangeSyncService] Cleaned up $count old sessions');
+
+      _log.i('KeyExchange', 'Cleaned up $count old sessions');
     } catch (e) {
-      debugPrint('[KeyExchangeSyncService] Error cleaning up sessions: $e');
+      _log.e('KeyExchange', 'Error cleaning up sessions: $e');
     }
   }
 
   /// Trouve les sessions actives pour un participant
-  Stream<List<KeyExchangeSessionModel>> watchActiveSessionsForParticipant(
+  Stream<List<KexSessionModel>> watchActiveSessionsForParticipant(
     String participantId,
   ) {
     return _sessionsRef
@@ -239,7 +183,7 @@ class KeyExchangeSyncService {
         .where('status', isEqualTo: KeyExchangeStatus.inProgress.name)
         .snapshots()
         .map((snapshot) => snapshot.docs
-            .map((doc) => KeyExchangeSessionModel.fromFirestore(doc.data()))
+            .map((doc) => KexSessionModel.fromFirestore(doc.data()))
             .toList());
   }
 }

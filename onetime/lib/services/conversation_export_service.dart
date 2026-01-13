@@ -5,32 +5,34 @@ import '../models/shared_key.dart';
 import 'key_storage_service.dart';
 import 'message_storage_service.dart';
 import 'conversation_pseudo_service.dart';
+import 'app_logger.dart';
 
 /// Service pour exporter et importer des conversations vers un autre appareil.
 class ConversationExportService {
   final KeyStorageService _keyStorage = KeyStorageService();
   final MessageStorageService _messageStorage = MessageStorageService();
   final ConversationPseudoService _pseudoService = ConversationPseudoService();
+  final _log = AppLogger();
 
   /// Exporte une conversation unique avec toutes ses données
   Future<ConversationExportData?> exportConversation(String conversationId) async {
     try {
-      debugPrint('[ExportService] Exporting conversation $conversationId');
+      _log.d('ExportService', 'Exporting conversation $conversationId');
 
       // Charger la clé partagée
       final sharedKey = await _keyStorage.getKey(conversationId);
       if (sharedKey == null) {
-        debugPrint('[ExportService] No shared key found for conversation');
+        _log.w('ExportService', 'No shared key found for conversation');
         return null;
       }
 
       // Charger les messages locaux
       final messages = await _messageStorage.getConversationMessages(conversationId);
-      debugPrint('[ExportService] Found ${messages.length} local messages');
+      _log.d('ExportService', 'Found ${messages.length} local messages');
 
       // Charger les pseudos
       final pseudos = await _pseudoService.getPseudos(conversationId);
-      debugPrint('[ExportService] Found ${pseudos.length} pseudos');
+      _log.d('ExportService', 'Found ${pseudos.length} pseudos');
 
       // Calculate used bits by counting set bits in the bitmap
       int usedBits = 0;
@@ -51,7 +53,7 @@ class ConversationExportService {
         exportedAt: DateTime.now(),
       );
     } catch (e) {
-      debugPrint('[ExportService] Error exporting conversation: $e');
+      _log.e('ExportService', 'Error exporting conversation: $e');
       return null;
     }
   }
@@ -63,7 +65,7 @@ class ConversationExportService {
     try {
       // Obtenir la liste de toutes les conversations avec des clés
       final conversationIds = await _keyStorage.listConversationsWithKeys();
-      debugPrint('[ExportService] Exporting ${conversationIds.length} conversations');
+      _log.d('ExportService', 'Exporting ${conversationIds.length} conversations');
 
       for (final convId in conversationIds) {
         final exportData = await exportConversation(convId);
@@ -72,10 +74,10 @@ class ConversationExportService {
         }
       }
 
-      debugPrint('[ExportService] Successfully exported ${exports.length} conversations');
+      _log.i('ExportService', 'Successfully exported ${exports.length} conversations');
       return exports;
     } catch (e) {
-      debugPrint('[ExportService] Error exporting all conversations: $e');
+      _log.e('ExportService', 'Error exporting all conversations: $e');
       return exports;
     }
   }
@@ -83,12 +85,12 @@ class ConversationExportService {
   /// Importe une conversation sur ce nouvel appareil
   Future<bool> importConversation(ConversationExportData exportData) async {
     try {
-      debugPrint('[ExportService] Importing conversation ${exportData.conversationId}');
+      _log.d('ExportService', 'Importing conversation ${exportData.conversationId}');
 
       // Vérifier si la conversation existe déjà
       final existing = await _keyStorage.getKey(exportData.conversationId);
       if (existing != null) {
-        debugPrint('[ExportService] Conversation already exists, skipping import');
+        _log.d('ExportService', 'Conversation already exists, skipping import');
         return false;
       }
 
@@ -106,7 +108,7 @@ class ConversationExportService {
 
       // Sauvegarder la clé
       await _keyStorage.saveKey(exportData.conversationId, sharedKey);
-      debugPrint('[ExportService] Shared key imported');
+      _log.i('ExportService', 'Shared key imported');
 
       // Importer les messages locaux
       for (final msgJson in exportData.localMessages) {
@@ -116,7 +118,7 @@ class ConversationExportService {
           message: message,
         );
       }
-      debugPrint('[ExportService] ${exportData.localMessages.length} messages imported');
+      _log.d('ExportService', '${exportData.localMessages.length} messages imported');
 
       // Importer les pseudos
       for (final entry in exportData.pseudos.entries) {
@@ -126,12 +128,12 @@ class ConversationExportService {
           entry.value,
         );
       }
-      debugPrint('[ExportService] ${exportData.pseudos.length} pseudos imported');
+      _log.d('ExportService', '${exportData.pseudos.length} pseudos imported');
 
-      debugPrint('[ExportService] Conversation imported successfully');
+      _log.i('ExportService', 'Conversation imported successfully');
       return true;
     } catch (e) {
-      debugPrint('[ExportService] Error importing conversation: $e');
+      _log.e('ExportService', 'Error importing conversation: $e');
       return false;
     }
   }
@@ -145,7 +147,7 @@ class ConversationExportService {
       if (success) successCount++;
     }
 
-    debugPrint('[ExportService] Imported $successCount/${exports.length} conversations');
+    _log.d('ExportService', 'Imported $successCount/${exports.length} conversations');
     return successCount;
   }
 
@@ -165,7 +167,7 @@ class ConversationExportService {
       final json = jsonDecode(jsonStr) as Map<String, dynamic>;
       return ConversationExportData.fromJson(json);
     } catch (e) {
-      debugPrint('[ExportService] Error decoding export data: $e');
+      _log.e('ExportService', 'Error decoding export data: $e');
       return null;
     }
   }
@@ -178,7 +180,7 @@ class ConversationExportService {
           .map((json) => ConversationExportData.fromJson(json as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      debugPrint('[ExportService] Error decoding export data list: $e');
+      _log.e('ExportService', 'Error decoding export data list: $e');
       return [];
     }
   }

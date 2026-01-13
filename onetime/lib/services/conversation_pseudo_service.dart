@@ -1,22 +1,24 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'app_logger.dart';
 
 /// Service pour stocker les pseudos par conversation
 class ConversationPseudoService {
   static const String _prefix = 'conv_pseudos_';
 
   final _pseudoUpdateController = StreamController<String>.broadcast();
+  final _log = AppLogger();
 
   /// Stream des mises à jour de pseudos (renvoie l'ID de la conversation modifiée)
   Stream<String> get pseudoUpdates => _pseudoUpdateController.stream;
 
   /// Sauvegarde un pseudo pour un utilisateur dans une conversation
   Future<void> setPseudo(String conversationId, String userId, String pseudo) async {
-    debugPrint('[ConvPseudo] Setting pseudo for $userId in $conversationId: $pseudo');
-    
+    _log.d('ConvPseudo', 'Setting pseudo for $userId in $conversationId: $pseudo');
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final key = '$_prefix$conversationId';
@@ -35,9 +37,9 @@ class ConversationPseudoService {
       // Notifier
       _pseudoUpdateController.add(conversationId);
       
-      debugPrint('[ConvPseudo] Pseudo saved successfully');
+      _log.i('ConvPseudo', 'Pseudo saved successfully');
     } catch (e) {
-      debugPrint('[ConvPseudo] Error saving pseudo: $e');
+      _log.e('ConvPseudo', 'Error saving pseudo: $e');
     }
   }
 
@@ -53,7 +55,7 @@ class ConversationPseudoService {
       final Map<String, dynamic> json = jsonDecode(data);
       return json.map((key, value) => MapEntry(key, value.toString()));
     } catch (e) {
-      debugPrint('[ConvPseudo] Error getting pseudos: $e');
+      _log.e('ConvPseudo', 'Error getting pseudos: $e');
       return {};
     }
   }
@@ -70,9 +72,9 @@ class ConversationPseudoService {
       final prefs = await SharedPreferences.getInstance();
       final key = '$_prefix$conversationId';
       await prefs.remove(key);
-      debugPrint('[ConvPseudo] Pseudos deleted for conversation $conversationId');
+      _log.i('ConvPseudo', 'Pseudos deleted for conversation $conversationId');
     } catch (e) {
-      debugPrint('[ConvPseudo] Error deleting pseudos: $e');
+      _log.e('ConvPseudo', 'Error deleting pseudos: $e');
     }
   }
 
@@ -88,9 +90,9 @@ class ConversationPseudoService {
         }
       }
       
-      debugPrint('[ConvPseudo] All pseudos deleted');
+      _log.i('ConvPseudo', 'All pseudos deleted');
     } catch (e) {
-      debugPrint('[ConvPseudo] Error deleting all pseudos: $e');
+      _log.e('ConvPseudo', 'Error deleting all pseudos: $e');
     }
   }
 }

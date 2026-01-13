@@ -69,7 +69,7 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
         ? FormatService.formatBytes(widget.sharedKey!.lengthInBytes)
         : FormatService.formatBytes(widget.conversation.totalKeyBits ~/ 8);
 
-    final keyUsagePercent = widget.sharedKey != null && _currentUserId.isNotEmpty && widget.sharedKey!.peerIds.contains(_currentUserId)
+    final keyUsagePercent = widget.sharedKey != null && _currentUserId.isNotEmpty
         ? (1 - (widget.sharedKey!.countAvailableBits(_currentUserId) / widget.sharedKey!.lengthInBits)) * 100
         : widget.conversation.keyUsagePercent;
 
@@ -141,12 +141,8 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
                   if (widget.sharedKey != null && peerId.isNotEmpty) {
                     try {
                       // Check if peer exists in key first to avoid ArgumentError
-                      if (widget.sharedKey!.peerIds.contains(peerId)) {
-                        final availableBits = widget.sharedKey!.countAvailableBits(peerId);
-                        debugInfo = '\n[Local] Clé: $availableBits bits dispos (sur ${widget.sharedKey!.lengthInBits})';
-                      } else {
-                        debugInfo = '\n[Local] Pas de clé pour ce participant';
-                      }
+                      final availableBits = widget.sharedKey!.countAvailableBits(peerId);
+                      debugInfo = '\n[Local] Clé: $availableBits bits dispos (sur ${widget.sharedKey!.lengthInBits})';
                     } catch (e) {
                       debugInfo = '\n[Local] Erreur lecture clé';
                     }
@@ -155,23 +151,14 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
                   // Add Remote Key Info from Firestore
                   if (widget.conversation.keyDebugInfo.containsKey(peerId)) {
                     final info = widget.conversation.keyDebugInfo[peerId] as Map<String, dynamic>;
-                    final consistencyHash = info['consistencyHash'] as String?;
+                    final remoteBits = info['availableBits'];
+                    final remoteStart = info['firstAvailableIndex'];
+                    final remoteEnd = info['lastAvailableIndex'];
                     final lastUpdate = info['updatedAt'] != null 
                         ? _formatTime(DateTime.parse(info['updatedAt'])) 
                         : '?';
-                    
-                    if (consistencyHash != null) {
-                      // Parse hash: "firstAvailable|lastAvailable|availableBits"
-                      final parts = consistencyHash.split('|');
-                      if (parts.length == 3) {
-                        final remoteStart = parts[0];
-                        final remoteEnd = parts[1];
-                        final remoteBits = parts[2];
-                        debugInfo += '\n[Remote $lastUpdate] Clé: $remoteBits bits dispos ($remoteStart-$remoteEnd)';
-                      } else {
-                        debugInfo += '\n[Remote $lastUpdate] Hash: $consistencyHash';
-                      }
-                    }
+                        
+                    debugInfo += '\n[Remote $lastUpdate] Clé: $remoteBits bits dispos ($remoteStart-$remoteEnd)';
                   }
                   
                   return ListTile(

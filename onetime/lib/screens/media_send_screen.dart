@@ -9,6 +9,7 @@ import '../services/key_storage_service.dart';
 import '../services/conversation_service.dart';
 import '../services/message_storage_service.dart';
 import '../services/format_service.dart';
+import '../services/app_logger.dart';
 
 /// Écran complet pour l'envoi d'un média avec preview et debug
 class MediaSendScreen extends StatefulWidget {
@@ -32,6 +33,7 @@ class MediaSendScreen extends StatefulWidget {
 class _MediaSendScreenState extends State<MediaSendScreen> {
   final MediaService _mediaService = MediaService();
   final List<String> _debugLogs = [];
+  final _log = AppLogger();
   bool _isProcessing = false;
   bool _isComplete = false;
   String? _errorMessage;
@@ -52,7 +54,7 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
       _debugLogs.add('[${DateTime.now().toIso8601String().substring(11, 23)}] $message');
     });
     if (AppConfig.verboseCryptoLogs) {
-      debugPrint('[MediaSend] $message');
+      _log.d('MediaSend', message);
     }
   }
 
@@ -106,7 +108,14 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
       final encryptTime = DateTime.now().difference(startTime).inMilliseconds;
       _addLog('Chiffré en ${encryptTime}ms');
       _addLog('Données chiffrées: ${FormatService.formatBytes(result.message.ciphertext.length)}');
-      _addLog('Segments utilisés: ${result.message.keySegments.length}');
+
+      // Single segment model: log start/end
+      if (result.message.keySegment != null) {
+        final ks = result.message.keySegment!;
+        _addLog('Segment utilisé: ${ks.startBit}-${ks.endBit} (${result.message.totalBitsUsed} bits)');
+      } else {
+        _addLog('Segment utilisé: none');
+      }
 
       // Store decrypted message locally FIRST
       _addLog('Sauvegarde locale...');
@@ -121,7 +130,6 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
           fileName: _currentResult!.fileName,
           mimeType: _currentResult!.mimeType,
           isCompressed: result.message.isCompressed,
-          deleteAfterRead: result.message.deleteAfterRead,
         ),
       );
 

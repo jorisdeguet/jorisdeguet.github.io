@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/encrypted_message.dart';
+import 'app_logger.dart';
 
 /// Représente un message déchiffré stocké localement
 class DecryptedMessageData {
@@ -76,14 +77,15 @@ class DecryptedMessageData {
 /// Service pour stocker localement les messages déchiffrés
 class MessageStorageService {
   static const String _messagePrefix = 'decrypted_msg_';
+  final _log = AppLogger();
 
   /// Sauvegarde un message déchiffré localement
   Future<void> saveDecryptedMessage({
     required String conversationId,
     required DecryptedMessageData message,
   }) async {
-    debugPrint('[MessageStorage] Saving decrypted message ${message.id}');
-    
+    _log.i('MessageStorage', 'Saving decrypted message ${message.id}');
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final key = '$_messagePrefix${conversationId}_${message.id}';
@@ -93,9 +95,9 @@ class MessageStorageService {
       // Maintenir une liste des IDs de messages pour cette conversation
       await _addMessageIdToConversation(conversationId, message.id);
       
-      debugPrint('[MessageStorage] Message saved successfully');
+      _log.i('MessageStorage', 'Message saved successfully');
     } catch (e) {
-      debugPrint('[MessageStorage] Error saving message: $e');
+      _log.e('MessageStorage', 'Error saving message: $e');
       rethrow;
     }
   }
@@ -114,7 +116,7 @@ class MessageStorageService {
       
       return DecryptedMessageData.fromJson(jsonDecode(data));
     } catch (e) {
-      debugPrint('[MessageStorage] Error getting message: $e');
+      _log.e('MessageStorage', 'Error getting message: $e');
       return null;
     }
   }
@@ -140,7 +142,7 @@ class MessageStorageService {
       
       return messages;
     } catch (e) {
-      debugPrint('[MessageStorage] Error getting conversation messages: $e');
+      _log.e('MessageStorage', 'Error getting conversation messages: $e');
       return [];
     }
   }
@@ -160,7 +162,7 @@ class MessageStorageService {
       
       return message?.createdAt;
     } catch (e) {
-      debugPrint('[MessageStorage] Error getting last message timestamp: $e');
+      _log.e('MessageStorage', 'Error getting last message timestamp: $e');
       return null;
     }
   }
@@ -170,8 +172,8 @@ class MessageStorageService {
     required String conversationId,
     required String messageId,
   }) async {
-    debugPrint('[MessageStorage] Deleting decrypted message $messageId');
-    
+    _log.i('MessageStorage', 'Deleting decrypted message $messageId');
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final key = '$_messagePrefix${conversationId}_$messageId';
@@ -179,16 +181,16 @@ class MessageStorageService {
       await prefs.remove(key);
       await _removeMessageIdFromConversation(conversationId, messageId);
       
-      debugPrint('[MessageStorage] Message deleted successfully');
+      _log.i('MessageStorage', 'Message deleted successfully');
     } catch (e) {
-      debugPrint('[MessageStorage] Error deleting message: $e');
+      _log.e('MessageStorage', 'Error deleting message: $e');
     }
   }
 
   /// Supprime tous les messages d'une conversation
   Future<void> deleteConversationMessages(String conversationId) async {
-    debugPrint('[MessageStorage] Deleting all messages for conversation $conversationId');
-    
+    _log.i('MessageStorage', 'Deleting all messages for conversation $conversationId');
+
     try {
       final messageIds = await _getMessageIdsForConversation(conversationId);
       
@@ -202,9 +204,9 @@ class MessageStorageService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('${_messagePrefix}list_$conversationId');
       
-      debugPrint('[MessageStorage] All messages deleted');
+      _log.i('MessageStorage', 'All messages deleted');
     } catch (e) {
-      debugPrint('[MessageStorage] Error deleting conversation messages: $e');
+      _log.e('MessageStorage', 'Error deleting conversation messages: $e');
     }
   }
 

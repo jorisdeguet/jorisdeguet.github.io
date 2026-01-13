@@ -2,6 +2,27 @@ import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:math';
 
+/// Contribution d'une session KEX à une clé partagée
+class KexContribution {
+  final String kexId;
+  final int startBit;
+  final int endBit;
+
+  KexContribution({required this.kexId, required this.startBit, required this.endBit});
+
+  Map<String, dynamic> toJson() => {
+        'kexId': kexId,
+        'startBit': startBit,
+        'endBit': endBit,
+      };
+
+  factory KexContribution.fromJson(Map<String, dynamic> json) => KexContribution(
+        kexId: json['kexId'] as String,
+        startBit: json['startBit'] as int,
+        endBit: json['endBit'] as int,
+      );
+}
+
 /// Représente une clé partagée entre plusieurs pairs pour le chiffrement One-Time Pad.
 /// 
 /// L'allocation est linéaire : tous les pairs partagent l'espace entier de la clé.
@@ -25,6 +46,8 @@ class SharedKey {
   /// Indique combien de bits ont été tronqués au début de la clé.
   final int startOffset;
 
+  final List<KexContribution>? kexContributions;
+
   SharedKey({
     required this.id,
     required this.keyData,
@@ -32,6 +55,7 @@ class SharedKey {
     Uint8List? usedBitmap,
     DateTime? createdAt,
     this.startOffset = 0,
+    this.kexContributions,
   }) : _usedBitmap = usedBitmap ?? Uint8List((keyData.length * 8 + 7) ~/ 8),
        createdAt = createdAt ?? DateTime.now() {
     // S'assurer que les peers sont triés
@@ -294,11 +318,16 @@ class SharedKey {
       'usedBitmap': base64Encode(_usedBitmap),
       'createdAt': createdAt.toIso8601String(),
       'startOffset': startOffset,
+      'kexContributions': kexContributions?.map((c) => c.toJson()).toList(),
     };
   }
 
   /// Désérialise une clé depuis le stockage local
   factory SharedKey.fromJson(Map<String, dynamic> json) {
+    final kexList = (json['kexContributions'] as List?)
+        ?.map((e) => KexContribution.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+
     return SharedKey(
       id: json['id'] as String,
       keyData: base64Decode(json['keyData'] as String),
@@ -306,6 +335,7 @@ class SharedKey {
       usedBitmap: base64Decode(json['usedBitmap'] as String),
       createdAt: DateTime.parse(json['createdAt'] as String),
       startOffset: json['startOffset'] as int? ?? 0,
+      kexContributions: kexList,
     );
   }
 
