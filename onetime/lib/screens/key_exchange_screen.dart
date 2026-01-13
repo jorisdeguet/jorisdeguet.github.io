@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
-
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -462,7 +460,10 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
       // Sauvegarder la clé localement avec le même conversationId
       debugPrint('[KeyExchange] Reader: Saving shared key locally for conversation ${conversation.id}');
-      await _keyStorageService.saveKey(conversation.id, finalKey);
+      final readerContrib = _firestoreSession != null
+        ? [{'kexId': _firestoreSession!.id, 'startBit': 0, 'endBit': finalKey.lengthInBits}]
+        : null;
+      await _keyStorageService.saveKey(conversation.id, finalKey, lastKexId: _firestoreSession?.id, kexContributions: readerContrib);
       debugPrint('[KeyExchange] Reader: Shared key saved successfully');
 
       // Update Firestore keyDebugInfo immediately with the new key size
@@ -893,7 +894,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         );
         
         final conversation = await conversationService.createConversation(
-          peerIds: finalKey.peerIds,
+          peerIds: _session != null ? _session!.peerIds : widget.peerIds,
           totalKeyBits: finalKey.lengthInBits,
         );
         conversationId = conversation.id;
@@ -917,7 +918,10 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
       // Sauvegarder la clé localement
       debugPrint('[KeyExchange] Saving shared key locally for conversation $conversationId');
-      await _keyStorageService.saveKey(conversationId, finalKey);
+      final sourceContrib = _firestoreSession != null
+        ? [{'kexId': _firestoreSession!.id, 'startBit': 0, 'endBit': finalKey.lengthInBits}]
+        : null;
+      await _keyStorageService.saveKey(conversationId, finalKey, lastKexId: _firestoreSession?.id, kexContributions: sourceContrib);
       debugPrint('[KeyExchange] Shared key saved successfully');
 
       // Update Firestore keyDebugInfo immediately with the new key size
