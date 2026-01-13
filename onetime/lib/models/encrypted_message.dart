@@ -34,9 +34,9 @@ class EncryptedMessage {
   /// ID de l'expéditeur
   final String senderId;
   
-  /// Liste des segments de clé utilisés (permet les longs messages)
-  final List<({int startBit, int endBit})> keySegments;
-  
+  /// Segment unique de clé utilisé (startBit inclusive, endBit exclusive)
+  final ({int startBit, int endBit})? keySegment;
+
   /// Données chiffrées (XOR du message avec la clé)
   final Uint8List ciphertext;
   
@@ -65,7 +65,7 @@ class EncryptedMessage {
     required this.id,
     required this.keyId,
     required this.senderId,
-    required this.keySegments,
+    this.keySegment,
     required this.ciphertext,
     DateTime? createdAt,
     List<String>? readBy,
@@ -80,18 +80,18 @@ class EncryptedMessage {
        transferredBy = transferredBy ?? [senderId];
 
   /// Indique si le message est chiffré (a des segments de clé)
-  bool get isEncrypted => keySegments.isNotEmpty;
+  bool get isEncrypted => keySegment != null;
 
   /// Index du premier bit utilisé (du premier segment), ou 0 si non chiffré
-  int get startBit => keySegments.isNotEmpty ? keySegments.first.startBit : 0;
-  
+  int get startBit => keySegment != null ? keySegment!.startBit : 0;
+
   /// Index du dernier bit utilisé (du dernier segment), ou 0 si non chiffré
-  int get endBit => keySegments.isNotEmpty ? keySegments.last.endBit : 0;
-  
+  int get endBit => keySegment != null ? keySegment!.endBit : 0;
+
   /// Longueur totale des segments utilisés en bits
   int get totalBitsUsed {
-    if (keySegments.isEmpty) return 0;
-    return keySegments.fold(0, (sum, seg) => sum + (seg.endBit - seg.startBit));
+    if (keySegment == null) return 0;
+    return keySegment!.endBit - keySegment!.startBit;
   }
 
   /// Vérifie si tous les participants ont transféré le message
@@ -124,10 +124,8 @@ class EncryptedMessage {
       'id': id,
       'keyId': keyId,
       'senderId': senderId,
-      'keySegments': keySegments.map((s) => {
-        'startBit': s.startBit,
-        'endBit': s.endBit,
-      }).toList(),
+      // store single key segment as object for simplicity
+      'keySegment': keySegment != null ? {'startBit': keySegment!.startBit, 'endBit': keySegment!.endBit} : null,
       'ciphertext': base64Encode(ciphertext),
       'createdAt': createdAt.toIso8601String(),
       'readBy': readBy,
@@ -141,19 +139,20 @@ class EncryptedMessage {
 
   /// Désérialise un message depuis Firebase
   factory EncryptedMessage.fromJson(Map<String, dynamic> json) {
-    final segmentsList = (json['keySegments'] as List).map((s) {
-      final map = s as Map<String, dynamic>;
-      return (
-        startBit: map['startBit'] as int,
-        endBit: map['endBit'] as int,
-      );
-    }).toList();
+    // Support new single-segment format. If absent, leave as null.
+    final segRaw = json['keySegment'] as Map<String, dynamic>?;
+    ({int startBit, int endBit})? parsedSeg;
+    if (segRaw != null) {
+      parsedSeg = (startBit: segRaw['startBit'] as int, endBit: segRaw['endBit'] as int);
+    } else {
+      parsedSeg = null;
+    }
 
     return EncryptedMessage(
       id: json['id'] as String,
       keyId: json['keyId'] as String,
       senderId: json['senderId'] as String,
-      keySegments: segmentsList,
+      keySegment: parsedSeg,
       ciphertext: base64Decode(json['ciphertext'] as String),
       createdAt: DateTime.parse(json['createdAt'] as String),
       readBy: List<String>.from(json['readBy'] as List? ?? [json['senderId']]),

@@ -108,7 +108,14 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
       final encryptTime = DateTime.now().difference(startTime).inMilliseconds;
       _addLog('Chiffré en ${encryptTime}ms');
       _addLog('Données chiffrées: ${FormatService.formatBytes(result.message.ciphertext.length)}');
-      _addLog('Segments utilisés: ${result.message.keySegments.length}');
+
+      // Single segment model: log start/end
+      if (result.message.keySegment != null) {
+        final ks = result.message.keySegment!;
+        _addLog('Segment utilisé: ${ks.startBit}-${ks.endBit} (${result.message.totalBitsUsed} bits)');
+      } else {
+        _addLog('Segment utilisé: none');
+      }
 
       // Store decrypted message locally FIRST
       _addLog('Sauvegarde locale...');

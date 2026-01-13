@@ -72,7 +72,7 @@ class CryptoService {
       id: _generateMessageId(),
       keyId: sharedKey.id,
       senderId: localPeerId,
-      keySegments: [(startBit: segment.startBit, endBit: segment.endBit)],
+      keySegment: (startBit: segment.startBit, endBit: segment.endBit),
       ciphertext: ciphertext,
       isCompressed: isCompressed,
       contentType: MessageContentType.text,
@@ -131,7 +131,7 @@ class CryptoService {
       id: _generateMessageId(),
       keyId: sharedKey.id,
       senderId: localPeerId,
-      keySegments: [(startBit: segment.startBit, endBit: segment.endBit)],
+      keySegment: (startBit: segment.startBit, endBit: segment.endBit),
       ciphertext: ciphertext,
       isCompressed: false,
       contentType: contentType,
@@ -161,22 +161,21 @@ class CryptoService {
       throw ArgumentError('Key ID mismatch');
     }
 
-    // Extraire les bits de clé utilisés pour ce message
+    // Extraire le segment unique
+    if (encryptedMessage.keySegment == null) {
+      // Not encrypted
+      return encryptedMessage.ciphertext;
+    }
+    final seg = encryptedMessage.keySegment!;
     final totalBits = encryptedMessage.totalBitsUsed;
-    final keyBits = _extractMultipleSegments(
-      sharedKey,
-      encryptedMessage.keySegments,
-      totalBits,
-    );
+    final keyBits = sharedKey.extractKeyBits(seg.startBit, seg.endBit);
 
     // XOR pour déchiffrer
     final decryptedData = _xor(encryptedMessage.ciphertext, keyBits);
 
     // Marquer comme utilisé si demandé
     if (markAsUsed) {
-      for (final seg in encryptedMessage.keySegments) {
-        sharedKey.markBitsAsUsed(seg.startBit, seg.endBit);
-      }
+      sharedKey.markBitsAsUsed(seg.startBit, seg.endBit);
     }
 
     return decryptedData;
@@ -203,70 +202,35 @@ class CryptoService {
       dataToEncrypt = Uint8List.fromList(utf8.encode(plaintext));
     }
     
+    // Option A: Do not support long messages across multiple segments.
+    // If compressed data doesn't fit in a single contiguous segment, throw.
     final totalBitsNeeded = dataToEncrypt.length * 8;
-    
-    // Collecter les segments disponibles
-    final segments = <({int startBit, int endBit})>[];
-    final usedSegments = <KeySegment>[];
-    int bitsCollected = 0;
-    
-    // Allocation linéaire: on cherche dans toute la clé
-    int searchStart = 0;
-    final totalKeyBits = sharedKey.lengthInBits;
-    
-    while (bitsCollected < totalBitsNeeded && searchStart < totalKeyBits) {
-      // Chercher le prochain bit disponible
-      while (searchStart < totalKeyBits && sharedKey.isBitUsed(searchStart)) {
-        searchStart++;
-      }
-      
-      if (searchStart >= totalKeyBits) break;
-      
-      // Trouver la fin du segment disponible
-      int segmentEnd = searchStart;
-      while (segmentEnd < totalKeyBits && 
-             !sharedKey.isBitUsed(segmentEnd) &&
-             (segmentEnd - searchStart) < (totalBitsNeeded - bitsCollected)) {
-        segmentEnd++;
-      }
-      
-      if (segmentEnd > searchStart) {
-        segments.add((startBit: searchStart, endBit: segmentEnd));
-        bitsCollected += segmentEnd - searchStart;
-        
-        usedSegments.add(KeySegment(
-          keyId: sharedKey.id,
-          startBit: searchStart,
-          endBit: segmentEnd,
-          usedByPeerId: localPeerId,
-        ));
-      }
-      
-      searchStart = segmentEnd + 1;
-    }
-    
-    if (bitsCollected < totalBitsNeeded) {
+    final segment = sharedKey.findAvailableSegment(localPeerId, totalBitsNeeded);
+    if (segment == null) {
       throw InsufficientKeyException(
-        'Not enough key bits. Needed: $totalBitsNeeded, Available: $bitsCollected',
+        'Not enough contiguous key bits for a single-segment message. Needed: $totalBitsNeeded bits',
       );
     }
-    
-    // Extraire et concaténer les bits de clé
-    final keyBits = _extractMultipleSegments(sharedKey, segments, totalBitsNeeded);
-    
-    // XOR
+
+    // Extract and XOR
+    final keyBits = sharedKey.extractKeyBits(segment.startBit, segment.endBit);
     final ciphertext = _xor(dataToEncrypt, keyBits);
-    
-    // Marquer tous les segments comme utilisés
-    for (final seg in segments) {
-      sharedKey.markBitsAsUsed(seg.startBit, seg.endBit);
-    }
-    
+
+    // Mark used
+    sharedKey.markBitsAsUsed(segment.startBit, segment.endBit);
+
+    final usedSegments = <KeySegment>[KeySegment(
+      keyId: sharedKey.id,
+      startBit: segment.startBit,
+      endBit: segment.endBit,
+      usedByPeerId: localPeerId,
+    )];
+
     final encryptedMessage = EncryptedMessage(
       id: _generateMessageId(),
       keyId: sharedKey.id,
       senderId: localPeerId,
-      keySegments: segments,
+      keySegment: (startBit: segment.startBit, endBit: segment.endBit),
       ciphertext: ciphertext,
       isCompressed: isCompressed,
     );
@@ -289,14 +253,13 @@ class CryptoService {
       throw ArgumentError('Key ID mismatch');
     }
     
-    // Extraire les bits de clé utilisés pour ce message
-    final totalBits = encryptedMessage.totalBitsUsed;
-    final keyBits = _extractMultipleSegments(
-      sharedKey, 
-      encryptedMessage.keySegments,
-      totalBits,
-    );
-    
+    // Extract key bits from the single segment
+    if (encryptedMessage.keySegment == null) {
+      return '';
+    }
+    final seg = encryptedMessage.keySegment!;
+    final keyBits = sharedKey.extractKeyBits(seg.startBit, seg.endBit);
+
     // XOR pour déchiffrer
     final decryptedData = _xor(encryptedMessage.ciphertext, keyBits);
     
@@ -310,9 +273,7 @@ class CryptoService {
     
     // Marquer comme utilisé SEULEMENT si le déchiffrement a réussi
     if (markAsUsed) {
-      for (final seg in encryptedMessage.keySegments) {
-        sharedKey.markBitsAsUsed(seg.startBit, seg.endBit);
-      }
+      sharedKey.markBitsAsUsed(seg.startBit, seg.endBit);
     }
     
     return result;
@@ -323,11 +284,10 @@ class CryptoService {
   /// Retourne true si tous les segments nécessaires sont disponibles.
   bool canDecrypt(EncryptedMessage message, SharedKey sharedKey) {
     if (message.keyId != sharedKey.id) return false;
-    
-    for (final seg in message.keySegments) {
-      for (int i = seg.startBit; i < seg.endBit; i++) {
-        if (i >= sharedKey.lengthInBits) return false;
-      }
+    final seg = message.keySegment;
+    if (seg == null) return true;
+    for (int i = seg.startBit; i < seg.endBit; i++) {
+      if (i >= sharedKey.lengthInBits) return false;
     }
     return true;
   }
@@ -336,8 +296,8 @@ class CryptoService {
   /// 
   /// Après cet appel, le message ne pourra plus jamais être déchiffré.
   void secureDelete(EncryptedMessage message, SharedKey sharedKey) {
-    // Écraser les bits de clé avec des zéros
-    for (final seg in message.keySegments) {
+    final seg = message.keySegment;
+    if (seg != null) {
       for (int i = seg.startBit; i < seg.endBit; i++) {
         final byteIndex = i ~/ 8;
         final bitOffset = i % 8;
@@ -345,7 +305,6 @@ class CryptoService {
         sharedKey.keyData[byteIndex] &= ~(1 << bitOffset);
       }
     }
-    // Les bits sont déjà marqués comme utilisés par decrypt
   }
 
   /// Calcule le nombre de bits nécessaires pour un message.

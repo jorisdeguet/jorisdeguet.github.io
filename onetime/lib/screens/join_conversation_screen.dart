@@ -307,7 +307,7 @@ class _JoinConversationScreenState extends State<JoinConversationScreen> {
             stream: _watchConversationState(),
             builder: (context, snapshot) {
               final state = snapshot.data;
-              debugPrint('[JoinConversation] StreamBuilder: state=$state, isNavigating=$_isNavigating');
+              _log.d('JoinConversation', 'StreamBuilder: state=$state, isNavigating=$_isNavigating');
               if (state == 'exchanging' && _scannedConversationId != null && !_isNavigating) {
                 _isNavigating = true;
                 // Naviguer vers l'écran d'échange de clé
