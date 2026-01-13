@@ -9,7 +9,7 @@ class AppLogger {
 
   final Logger _logger;
   final Set<String> _enabledTags = {};
-  final int _minLevel;
+  final int _minLevel = 1;
 
   AppLogger._internal()
       : _logger = Logger(
@@ -21,9 +21,6 @@ class AppLogger {
         _enabledTags.add(t);
       }
     }
-
-    // Initialize minimum log level
-    _minLevel = _levelFromString(AppConfig.minLogLevel);
   }
 
   /// Enable messages for a tag (e.g. 'KeyStorage', 'KeyExchange')
