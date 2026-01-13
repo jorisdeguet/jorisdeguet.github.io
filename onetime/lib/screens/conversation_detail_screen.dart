@@ -704,7 +704,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
         conversationId: widget.conversation.id,
         message: message,
         messagePreview: messagePreview,
-        plaintextDebug: AppConfig.plaintextMessageFirestore ? text : null,
       );
 
       // Mark as transferred immediately (we sent it)

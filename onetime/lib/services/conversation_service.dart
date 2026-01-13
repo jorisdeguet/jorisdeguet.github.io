@@ -219,12 +219,6 @@ class ConversationService {
       _log.d('Conversation', 'Adding message to Firestore...');
       final messageData = message.toJson();
       
-      // Ajouter le plaintext si le debug est activé
-      if (AppConfig.plaintextMessageFirestore && plaintextDebug != null) {
-        messageData['plaintextDebug'] = plaintextDebug;
-        _log.d('Conversation', 'DEBUG: Plaintext added to Firestore');
-      }
-      
       await _messagesRef(conversationId).doc(message.id).set(messageData);
       _log.i('Conversation', 'Message added successfully');
 
