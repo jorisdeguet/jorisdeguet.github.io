@@ -1,7 +1,6 @@
-import 'dart:convert';
-
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'app_logger.dart';
 
 import 'message_storage_service.dart';
 
@@ -9,6 +8,7 @@ import 'message_storage_service.dart';
 class UnreadMessageService {
   static const String _readMessagesPrefix = 'read_msg_ids_';
   final MessageStorageService _messageStorage = MessageStorageService();
+  final _log = AppLogger();
 
   /// Marque un message comme lu
   Future<void> markMessageAsRead(String conversationId, String messageId) async {
@@ -20,10 +20,10 @@ class UnreadMessageService {
       if (!readIds.contains(messageId)) {
         readIds.add(messageId);
         await prefs.setStringList(key, readIds);
-        debugPrint('[UnreadMsg] Marked message $messageId as read');
+        _log.i('UnreadMsg', 'Marked message $messageId as read');
       }
     } catch (e) {
-      debugPrint('[UnreadMsg] Error marking message as read: $e');
+      _log.e('UnreadMsg', 'Error marking message as read: $e');
     }
   }
 
@@ -43,7 +43,7 @@ class UnreadMessageService {
       
       return unreadCount;
     } catch (e) {
-      debugPrint('[UnreadMsg] Error getting unread count: $e');
+      _log.e('UnreadMsg', 'Error getting unread count: $e');
       return 0;
     }
   }
@@ -64,7 +64,7 @@ class UnreadMessageService {
       
       return unreadCount;
     } catch (e) {
-      debugPrint('[UnreadMsg] Error getting unread count: $e');
+      _log.e('UnreadMsg', 'Error getting unread count: $e');
       return 0;
     }
   }
@@ -81,9 +81,9 @@ class UnreadMessageService {
       final allIds = allMessages.map((m) => m.id).toList();
       await prefs.setStringList(key, allIds);
       
-      debugPrint('[UnreadMsg] Marked all ${allIds.length} messages as read for $conversationId');
+      _log.i('UnreadMsg', 'Marked all ${allIds.length} messages as read for $conversationId');
     } catch (e) {
-      debugPrint('[UnreadMsg] Error marking all as read: $e');
+      _log.e('UnreadMsg', 'Error marking all as read: $e');
     }
   }
 
@@ -94,7 +94,7 @@ class UnreadMessageService {
       final key = '$_readMessagesPrefix$conversationId';
       await prefs.remove(key);
     } catch (e) {
-      debugPrint('[UnreadMsg] Error deleting unread data: $e');
+      _log.e('UnreadMsg', 'Error deleting unread data: $e');
     }
   }
 
@@ -110,9 +110,9 @@ class UnreadMessageService {
         }
       }
       
-      debugPrint('[UnreadMsg] All unread data deleted');
+      _log.i('UnreadMsg', 'All unread data deleted');
     } catch (e) {
-      debugPrint('[UnreadMsg] Error deleting all unread data: $e');
+      _log.e('UnreadMsg', 'Error deleting all unread data: $e');
     }
   }
 
@@ -123,7 +123,7 @@ class UnreadMessageService {
       final key = '$_readMessagesPrefix$conversationId';
       return prefs.getStringList(key) ?? [];
     } catch (e) {
-      debugPrint('[UnreadMsg] Error getting read message IDs: $e');
+      _log.e('UnreadMsg', 'Error getting read message IDs: $e');
       return [];
     }
   }

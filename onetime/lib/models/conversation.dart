@@ -51,9 +51,6 @@ class Conversation {
   /// La conversation a-t-elle une clé de chiffrement ?
   bool get hasKey => totalKeyBits > 0;
 
-  /// La conversation est-elle non chiffrée ?
-  bool get isUnencrypted => totalKeyBits == 0;
-
   /// La conversation est-elle prête à utiliser ?
   bool get isReady => state == ConversationState.ready;
 
@@ -142,65 +139,5 @@ class Conversation {
   factory Conversation.fromJson(Map<String, dynamic> json) => 
       Conversation.fromFirestore(json);
 
-  Conversation copyWith({
-    int? usedKeyBits,
-    Map<String, dynamic>? keyDebugInfo,
-  }) {
-    return Conversation(
-      id: id,
-      peerIds: peerIds,
-      createdAt: createdAt,
-      totalKeyBits: totalKeyBits,
-      usedKeyBits: usedKeyBits ?? this.usedKeyBits,
-      keyDebugInfo: keyDebugInfo ?? this.keyDebugInfo,
-    );
-  }
 }
 
-/// Métadonnées de la clé locale (stockée séparément des données de clé)
-class LocalKeyMetadata {
-  /// ID de la conversation/clé
-  final String keyId;
-  
-  /// Chemin du fichier binaire de la clé
-  final String keyFilePath;
-  
-  /// Taille de la clé en bytes
-  final int sizeBytes;
-  
-  /// Bitmap d'utilisation (chemin fichier)
-  final String usageBitmapPath;
-  
-  /// Date de création locale
-  final DateTime createdAt;
-
-  LocalKeyMetadata({
-    required this.keyId,
-    required this.keyFilePath,
-    required this.sizeBytes,
-    required this.usageBitmapPath,
-    DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
-
-  int get sizeBits => sizeBytes * 8;
-
-  Map<String, dynamic> toJson() {
-    return {
-      'keyId': keyId,
-      'keyFilePath': keyFilePath,
-      'sizeBytes': sizeBytes,
-      'usageBitmapPath': usageBitmapPath,
-      'createdAt': createdAt.toIso8601String(),
-    };
-  }
-
-  factory LocalKeyMetadata.fromJson(Map<String, dynamic> json) {
-    return LocalKeyMetadata(
-      keyId: json['keyId'] as String,
-      keyFilePath: json['keyFilePath'] as String,
-      sizeBytes: json['sizeBytes'] as int,
-      usageBitmapPath: json['usageBitmapPath'] as String,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-    );
-  }
-}

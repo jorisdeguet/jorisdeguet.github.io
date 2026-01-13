@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
-import '../models/key_exchange_session.dart';
 import '../services/key_exchange_service.dart';
+import 'app_logger.dart';
 
 /// Service pour pré-générer et cacher les segments QR
 class QrSegmentCacheService {
@@ -12,10 +12,11 @@ class QrSegmentCacheService {
 
   final Map<String, List<Uint8List>> _segmentCache = {};
   bool _isGenerating = false;
+  final _log = AppLogger();
 
   /// Pré-génère les segments pour une session
   Future<void> pregenerateSegments(
-    KeyExchangeSession session,
+    KexSessionSource session,
     KeyExchangeService service,
   ) async {
     final sessionId = session.sessionId;
@@ -24,7 +25,7 @@ class QrSegmentCacheService {
     if (_segmentCache.containsKey(sessionId)) return;
 
     _isGenerating = true;
-    debugPrint('[QrCache] Pre-generating ${session.totalSegments} segments...');
+    _log.i('QrCache', 'Pre-generating ${session.totalSegments} segments...');
     final startTime = DateTime.now();
 
     try {
@@ -41,9 +42,9 @@ class QrSegmentCacheService {
       // les segments sont déjà dans la session)
       
       final duration = DateTime.now().difference(startTime).inMilliseconds;
-      debugPrint('[QrCache] Pre-generated ${session.totalSegments} segments in ${duration}ms');
+      _log.i('QrCache', 'Pre-generated ${session.totalSegments} segments in ${duration}ms');
     } catch (e) {
-      debugPrint('[QrCache] Error pre-generating segments: $e');
+      _log.e('QrCache', 'Error pre-generating segments: $e');
     } finally {
       _isGenerating = false;
     }
@@ -64,12 +65,12 @@ class QrSegmentCacheService {
   /// Nettoie le cache pour une session
   void clearSession(String sessionId) {
     _segmentCache.remove(sessionId);
-    debugPrint('[QrCache] Cleared cache for session $sessionId');
+    _log.i('QrCache', 'Cleared cache for session $sessionId');
   }
 
   /// Nettoie tout le cache
   void clearAll() {
     _segmentCache.clear();
-    debugPrint('[QrCache] Cleared all cache');
+    _log.i('QrCache', 'Cleared all cache');
   }
 }

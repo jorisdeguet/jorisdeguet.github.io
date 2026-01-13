@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../services/auth_service.dart';
 import '../services/conversation_service.dart';
+import '../services/app_logger.dart';
 import 'key_exchange_screen.dart';
 
 /// Écran de création d'une nouvelle conversation.
@@ -22,6 +23,7 @@ class NewConversationScreen extends StatefulWidget {
 class _NewConversationScreenState extends State<NewConversationScreen> {
   final AuthService _authService = AuthService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final _log = AppLogger();
 
   String? _conversationId;
   bool _isCreating = false;
@@ -112,7 +114,7 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
       // Mettre la conversation en état "exchanging" pour notifier les autres participants
       final conversationService = ConversationService(localUserId: _currentUserId);
       await conversationService.startKeyExchange(_conversationId!);
-      debugPrint('[NewConversation] Conversation state set to exchanging');
+      _log.d('NewConversation', 'Conversation state set to exchanging');
 
       if (mounted) {
         // Passer à l'écran d'échange de clé

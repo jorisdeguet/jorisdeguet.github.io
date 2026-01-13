@@ -28,7 +28,7 @@ class KeyExchangeService {
   /// [peerIds] - Liste des IDs des pairs qui recevront la clé
   /// [sessionId] - ID de session optionnel (si non fourni, un ID est généré)
   /// [preGeneratedSegments] - Segments déjà générés à inclure
-  KeyExchangeSession createSourceSession({
+  KexSessionSource createSourceSession({
     required int totalBits,
     required List<String> peerIds,
     required String sourceId,
@@ -38,12 +38,12 @@ class KeyExchangeService {
     // Inclure le source dans la liste des peers
     final allPeers = [sourceId, ...peerIds]..sort();
     
-    final session = KeyExchangeSession(
+    final session = KexSessionSource(
       sessionId: sessionId ?? _generateSessionId(),
       role: KeyExchangeRole.source,
-      totalBits: totalBits,
       peerIds: allPeers,
       localPeerId: sourceId,
+      totalBits: totalBits,
     );
 
     // Injecter les segments pré-générés si disponibles
@@ -73,7 +73,7 @@ class KeyExchangeService {
   }
 
   /// Injecte un segment manuellement dans la session (usage interne pour pré-génération)
-  void _injectSegmentIntoSession(KeyExchangeSession session, KeySegmentQrData segment) {
+  void _injectSegmentIntoSession(KexSessionReader session, KeySegmentQrData segment) {
     session.addSegmentData(segment.startBit, segment.keyData);
   }
 
@@ -81,33 +81,38 @@ class KeyExchangeService {
   /// 
   /// [sessionId] - ID de la session partagé par la source
   /// [localPeerId] - ID local de ce lecteur
-  KeyExchangeSession createReaderSession({
+  KexSessionReader createReaderSession({
     required String sessionId,
     required String localPeerId,
     required List<String> peerIds,
-    required int totalBits,
   }) {
-    return KeyExchangeSession(
+    return KexSessionReader(
       sessionId: sessionId,
       role: KeyExchangeRole.reader,
-      totalBits: totalBits,
       peerIds: peerIds,
       localPeerId: localPeerId,
     );
   }
 
   /// Génère le prochain segment de clé à afficher (côté source).
-  KeySegmentQrData generateNextSegment(KeyExchangeSession session) {
+  /// Accepte maintenant KexSessionReader pour simplifier les appels; vérifie que c'est une source.
+  KeySegmentQrData generateNextSegment(KexSessionReader session) {
     if (session.role != KeyExchangeRole.source) {
       throw StateError('Only source can generate segments');
     }
-    
+
+    // Cast sécurisé vers KexSessionSource pour accéder à totalBits
+    if (session is! KexSessionSource) {
+      throw StateError('Session must be KexSessionSource to generate segments');
+    }
+    final src = session as KexSessionSource;
+
     // Capturer l'index AVANT de modifier la session
     final segmentIndex = session.currentSegmentIndex;
     final startBit = segmentIndex * segmentSizeBits;
-    final endBit = min(startBit + segmentSizeBits, session.totalBits);
-    
-    if (startBit >= session.totalBits) {
+    final endBit = min(startBit + segmentSizeBits, src.totalBits);
+
+    if (startBit >= src.totalBits) {
       throw StateError('All segments have been generated');
     }
     
@@ -133,7 +138,7 @@ class KeyExchangeService {
   }
 
   /// Enregistre un segment lu depuis un QR code (côté lecteur).
-  void recordReadSegment(KeyExchangeSession session, KeySegmentQrData segment) {
+  void recordReadSegment(KexSessionReader session, KeySegmentQrData segment) {
     if (session.role != KeyExchangeRole.reader) {
       throw StateError('Only readers record segments');
     }
@@ -145,7 +150,7 @@ class KeyExchangeService {
   /// Génère la confirmation d'un segment lu.
   /// Contient SEULEMENT l'index, jamais les bits de clé.
   KeySegmentConfirmation createReadConfirmation(
-    KeyExchangeSession session,
+    KexSessionReader session,
     int segmentIndex,
   ) {
     return KeySegmentConfirmation(
@@ -158,22 +163,23 @@ class KeyExchangeService {
 
   /// Enregistre une confirmation reçue d'un lecteur (côté source).
   void recordConfirmation(
-    KeyExchangeSession session,
+    KexSessionSource session,
     KeySegmentConfirmation confirmation,
   ) {
     session.markPeerHasSegment(confirmation.peerId, confirmation.segmentIndex);
   }
 
   /// Vérifie si tous les peers ont lu tous les segments.
-  bool isExchangeComplete(KeyExchangeSession session) {
+  bool isExchangeComplete(KexSessionSource session) {
     return session.isComplete;
   }
 
   /// Finalise l'échange et crée la clé partagée.
    /// [force] permet de forcer la finalisation même si tous les peers n'ont pas confirmé localement
   /// (utile quand la vérification est faite via Firestore)
-  SharedKey finalizeExchange(KeyExchangeSession session, {bool force = false}) {
-    if (!force && !session.isComplete && session.role == KeyExchangeRole.source) {
+  SharedKey finalizeExchange(KexSessionReader session, {bool force = false}) {
+    // Si c'est une source et qu'on ne force pas, vérifier l'état
+    if (!force && session is KexSessionSource && session.role == KeyExchangeRole.source && !session.isComplete) {
       throw StateError('Exchange is not complete, not all peers confirmed');
     }
     
@@ -209,11 +215,10 @@ enum KeyExchangeRole {
   reader,
 }
 
-/// Session d'échange de clé en cours
-class KeyExchangeSession {
+/// Session en lecture (base pour reader et source)
+class KexSessionReader {
   final String sessionId;
   final KeyExchangeRole role;
-  final int totalBits;
   final List<String> peerIds;
   final String localPeerId;
   
@@ -226,10 +231,9 @@ class KeyExchangeSession {
   /// Index du segment courant (côté source)
   int _currentSegmentIndex = 0;
 
-  KeyExchangeSession({
+  KexSessionReader({
     required this.sessionId,
     required this.role,
-    required this.totalBits,
     required this.peerIds,
     required this.localPeerId,
   }) {
@@ -242,9 +246,6 @@ class KeyExchangeSession {
   
   /// Nombre de segments lus (pour le reader)
   int get readSegmentsCount => _peerReadSegments[localPeerId]?.length ?? 0;
-
-  int get totalSegments => (totalBits + KeyExchangeService.segmentSizeBits - 1) ~/
-                           KeyExchangeService.segmentSizeBits;
 
   /// Accède aux données d'un segment par son index (pour le mode torrent)
   Uint8List? getSegmentData(int segmentIndex) => _segmentData[segmentIndex];
@@ -276,6 +277,63 @@ class KeyExchangeSession {
     _peerReadSegments[peerId]?.add(segmentIndex);
   }
 
+  /// Retourne les peers qui n'ont pas encore confirmé un segment
+  List<String> getPeersMissingSegment(int segmentIndex) {
+    return peerIds.where((peer) {
+      return !(_peerReadSegments[peer]?.contains(segmentIndex) ?? false);
+    }).toList();
+  }
+
+  /// Construit la clé partagée finale (fonctionne pour reader et source)
+  SharedKey buildSharedKey() {
+    // Assembler tous les segments dans l'ordre
+    final sortedIndexes = _segmentData.keys.toList()..sort();
+
+    // Calculer la taille totale
+    int totalBytes = 0;
+    for (final index in sortedIndexes) {
+      totalBytes += _segmentData[index]!.length;
+    }
+
+    // Assembler la clé
+    final keyData = Uint8List(totalBytes);
+    int offset = 0;
+    for (final index in sortedIndexes) {
+      final segment = _segmentData[index]!;
+      keyData.setRange(offset, offset + segment.length, segment);
+      offset += segment.length;
+    }
+
+    return SharedKey(
+      id: sessionId,
+      keyData: keyData,
+      peerIds: List.from(peerIds),
+    );
+  }
+
+  int get totalSegments => _segmentData.length;
+}
+
+/// Session côté source avec informations supplémentaires
+class KexSessionSource extends KexSessionReader {
+  final int totalBits;
+
+  KexSessionSource({
+    required String sessionId,
+    required KeyExchangeRole role,
+    required List<String> peerIds,
+    required String localPeerId,
+    required this.totalBits,
+  }) : super(
+          sessionId: sessionId,
+          role: role,
+          peerIds: peerIds,
+          localPeerId: localPeerId,
+        );
+
+  int get totalSegments => (totalBits + KeyExchangeService.segmentSizeBits - 1) ~/
+                           KeyExchangeService.segmentSizeBits;
+
   /// Vérifie si l'échange est complet
   bool get isComplete {
     for (final peer in peerIds) {
@@ -285,40 +343,6 @@ class KeyExchangeSession {
       }
     }
     return true;
-  }
-
-  /// Construit la clé partagée finale
-  SharedKey buildSharedKey() {
-    // Assembler tous les segments dans l'ordre
-    final sortedIndexes = _segmentData.keys.toList()..sort();
-    
-    // Calculer la taille totale
-    int totalBytes = 0;
-    for (final index in sortedIndexes) {
-      totalBytes += _segmentData[index]!.length;
-    }
-    
-    // Assembler la clé
-    final keyData = Uint8List(totalBytes);
-    int offset = 0;
-    for (final index in sortedIndexes) {
-      final segment = _segmentData[index]!;
-      keyData.setRange(offset, offset + segment.length, segment);
-      offset += segment.length;
-    }
-    
-    return SharedKey(
-      id: sessionId,
-      keyData: keyData,
-      peerIds: List.from(peerIds),
-    );
-  }
-
-  /// Retourne les peers qui n'ont pas encore confirmé un segment
-  List<String> getPeersMissingSegment(int segmentIndex) {
-    return peerIds.where((peer) {
-      return !(_peerReadSegments[peer]?.contains(segmentIndex) ?? false);
-    }).toList();
   }
 }
 

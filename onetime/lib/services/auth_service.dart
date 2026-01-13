@@ -1,12 +1,16 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import 'app_logger.dart';
+
 /// Service d'authentification utilisant Firebase Anonymous Auth.
 class AuthService {
   // Singleton instance
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
   AuthService._internal();
+
+  final _log = AppLogger();
 
   /// ID de l'utilisateur connecté
   String? get currentUserId => FirebaseAuth.instance.currentUser?.uid;
@@ -16,22 +20,22 @@ class AuthService {
 
   /// Initialise le service et connecte l'utilisateur anonymement si nécessaire
   Future<bool> initialize() async {
-    debugPrint('[AuthService] initialize()');
-    
+    _log.d('AuthService', 'initialize()');
+
     // Écouter les changements d'état (optionnel pour debug)
     FirebaseAuth.instance.authStateChanges().listen((User? user) {
       if (user == null) {
-        debugPrint('[AuthService] User is currently signed out!');
+        _log.d('AuthService', 'User is currently signed out!');
       } else {
-        debugPrint('[AuthService] User is signed in: ${user.uid}');
+        _log.d('AuthService', 'User is signed in: ${user.uid}');
       }
     });
 
     if (!isSignedIn) {
-      debugPrint('[AuthService] No user signed in, attempting anonymous sign-in...');
+      _log.d('AuthService', 'No user signed in, attempting anonymous sign-in...');
       await signInAnonymously();
     } else {
-      debugPrint('[AuthService] Already signed in with ID: $currentUserId');
+      _log.d('AuthService', 'Already signed in with ID: $currentUserId');
     }
     
     return isSignedIn;
@@ -39,14 +43,14 @@ class AuthService {
 
   /// Connecte l'utilisateur de manière anonyme
   Future<String?> signInAnonymously() async {
-    debugPrint('[AuthService] signInAnonymously');
+    _log.d('AuthService', 'signInAnonymously');
     try {
       final userCredential = await FirebaseAuth.instance.signInAnonymously();
       final user = userCredential.user;
-      debugPrint('[AuthService] Signed in anonymously with UID: ${user?.uid}');
+      _log.i('AuthService', 'Signed in anonymously with UID: ${user?.uid}');
       return user?.uid;
     } catch (e) {
-      debugPrint('[AuthService] signInAnonymously ERROR: $e');
+      _log.e('AuthService', 'signInAnonymously ERROR: $e');
       throw AuthException('Failed to sign in anonymously: $e');
     }
   }
@@ -56,7 +60,7 @@ class AuthService {
     // Si déjà connecté, on garde l'utilisateur actuel
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
-      debugPrint('[AuthService] createUser: Already signed in as ${currentUser.uid}');
+      _log.d('AuthService', 'createUser: Already signed in as ${currentUser.uid}');
       return currentUser.uid;
     }
 
@@ -67,7 +71,7 @@ class AuthService {
 
   /// Déconnexion
   Future<void> signOut() async {
-    debugPrint('[AuthService] signOut()');
+    _log.d('AuthService', 'signOut()');
     await FirebaseAuth.instance.signOut();
   }
 
@@ -80,9 +84,9 @@ class AuthService {
 
     try {
       await user.delete();
-      debugPrint('[AuthService] Account deleted');
+      _log.i('AuthService', 'Account deleted');
     } catch (e) {
-      debugPrint('[AuthService] deleteAccount ERROR: $e');
+      _log.e('AuthService', 'deleteAccount ERROR: $e');
       throw AuthException('Failed to delete account: $e');
     }
   }

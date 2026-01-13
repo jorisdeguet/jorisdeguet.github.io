@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'app_logger.dart';
 
 /// Service pour stocker localement les pseudos des utilisateurs.
 ///
@@ -13,6 +13,7 @@ class PseudoStorageService {
 
   /// Cache en mémoire des pseudos
   Map<String, String>? _pseudosCache;
+  final _log = AppLogger();
 
   /// Récupère le pseudo local de l'utilisateur actuel
   Future<String?> getMyPseudo() async {
@@ -24,7 +25,7 @@ class PseudoStorageService {
   Future<void> setMyPseudo(String pseudo) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_myPseudoKey, pseudo);
-    debugPrint('[PseudoStorageService] My pseudo set: $pseudo');
+    _log.i('PseudoStorage', 'My pseudo set: $pseudo');
   }
 
   /// Charge tous les pseudos depuis le stockage local
@@ -44,7 +45,7 @@ class PseudoStorageService {
       _pseudosCache = decoded.map((k, v) => MapEntry(k, v.toString()));
       return _pseudosCache!;
     } catch (e) {
-      debugPrint('[PseudoStorageService] Error loading pseudos: $e');
+      _log.e('PseudoStorage', 'Error loading pseudos: $e');
       _pseudosCache = {};
       return _pseudosCache!;
     }
@@ -76,7 +77,7 @@ class PseudoStorageService {
     
     _pseudosCache![oderId] = pseudo;
     await _savePseudos();
-    debugPrint('[PseudoStorageService] Pseudo set for $oderId: $pseudo');
+    _log.i('PseudoStorage', 'Pseudo set for $oderId: $pseudo');
   }
 
   /// Définit plusieurs pseudos en une fois
@@ -84,7 +85,7 @@ class PseudoStorageService {
     await loadPseudos();
     _pseudosCache!.addAll(pseudos);
     await _savePseudos();
-    debugPrint('[PseudoStorageService] Pseudos set: ${pseudos.keys.join(", ")}');
+    _log.i('PseudoStorage', 'Pseudos set: ${pseudos.keys.join(", ")}');
   }
 
   /// Supprime le pseudo d'un utilisateur
@@ -176,4 +177,3 @@ class PseudoExchangeMessage {
     }
   }
 }
-
