@@ -9,6 +9,7 @@ class AppLogger {
 
   final Logger _logger;
   final Set<String> _enabledTags = {};
+  final int _minLevel;
 
   AppLogger._internal()
       : _logger = Logger(
@@ -20,6 +21,9 @@ class AppLogger {
         _enabledTags.add(t);
       }
     }
+
+    // Initialize minimum log level
+    _minLevel = _levelFromString(AppConfig.minLogLevel);
   }
 
   /// Enable messages for a tag (e.g. 'KeyStorage', 'KeyExchange')
@@ -27,23 +31,49 @@ class AppLogger {
   void disableTag(String tag) => _enabledTags.remove(tag);
   bool isTagEnabled(String tag) => _enabledTags.isEmpty || _enabledTags.contains(tag);
 
+  int _levelFromString(String s) {
+    switch (s.toLowerCase()) {
+      case 'verbose':
+      case 'v':
+        return 0;
+      case 'debug':
+      case 'd':
+        return 1;
+      case 'info':
+      case 'i':
+        return 2;
+      case 'warn':
+      case 'w':
+        return 3;
+      case 'error':
+      case 'e':
+        return 4;
+      case 'off':
+        return 999;
+      default:
+        return 1;
+    }
+  }
+
+  bool _levelEnabled(int level) => level >= _minLevel && _minLevel != 999;
+
   void v(String tag, String message) {
-    if (isTagEnabled(tag)) _logger.v('[$tag] $message');
+    if (isTagEnabled(tag) && _levelEnabled(0)) _logger.v('[$tag] $message');
   }
 
   void d(String tag, String message) {
-    if (isTagEnabled(tag)) _logger.d('[$tag] $message');
+    if (isTagEnabled(tag) && _levelEnabled(1)) _logger.d('[$tag] $message');
   }
 
   void i(String tag, String message) {
-    if (isTagEnabled(tag)) _logger.i('[$tag] $message');
+    if (isTagEnabled(tag) && _levelEnabled(2)) _logger.i('[$tag] $message');
   }
 
   void w(String tag, String message) {
-    if (isTagEnabled(tag)) _logger.w('[$tag] $message');
+    if (isTagEnabled(tag) && _levelEnabled(3)) _logger.w('[$tag] $message');
   }
 
   void e(String tag, String message) {
-    if (isTagEnabled(tag)) _logger.e('[$tag] $message');
+    if (isTagEnabled(tag) && _levelEnabled(4)) _logger.e('[$tag] $message');
   }
 }
