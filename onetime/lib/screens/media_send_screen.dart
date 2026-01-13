@@ -9,6 +9,7 @@ import '../services/key_storage_service.dart';
 import '../services/conversation_service.dart';
 import '../services/message_storage_service.dart';
 import '../services/format_service.dart';
+import '../services/app_logger.dart';
 
 /// Écran complet pour l'envoi d'un média avec preview et debug
 class MediaSendScreen extends StatefulWidget {
@@ -32,6 +33,7 @@ class MediaSendScreen extends StatefulWidget {
 class _MediaSendScreenState extends State<MediaSendScreen> {
   final MediaService _mediaService = MediaService();
   final List<String> _debugLogs = [];
+  final _log = AppLogger();
   bool _isProcessing = false;
   bool _isComplete = false;
   String? _errorMessage;
@@ -52,7 +54,7 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
       _debugLogs.add('[${DateTime.now().toIso8601String().substring(11, 23)}] $message');
     });
     if (AppConfig.verboseCryptoLogs) {
-      debugPrint('[MediaSend] $message');
+      _log.d('MediaSend', message);
     }
   }
 

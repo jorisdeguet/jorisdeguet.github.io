@@ -6,11 +6,13 @@ import 'package:flutter/foundation.dart';
 import '../config/app_config.dart';
 import '../models/conversation.dart';
 import '../models/encrypted_message.dart';
+import 'app_logger.dart';
 
 /// Service de gestion des conversations sur Firebase.
 class ConversationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final String localUserId;
+  final _log = AppLogger();
 
   ConversationService({required this.localUserId});
 
@@ -30,7 +32,7 @@ class ConversationService {
     int totalKeyBits = 0,
     ConversationState state = ConversationState.joining,
   }) async {
-    debugPrint('[ConversationService] createConversation: peerIds=$peerIds, state=$state');
+    _log.d('Conversation', 'createConversation: peerIds=$peerIds, state=$state');
 
     // S'assurer que l'utilisateur local est inclus
     final allPeers = {...peerIds, localUserId}.toList()..sort();
@@ -45,14 +47,14 @@ class ConversationService {
     );
 
     await _conversationsRef.doc(conversationId).set(conversation.toFirestore());
-    debugPrint('[ConversationService] Conversation created: $conversationId');
+    _log.i('Conversation', 'Conversation created: $conversationId');
 
     return conversation;
   }
 
   /// Change l'état d'une conversation
   Future<void> setConversationState(String conversationId, ConversationState state) async {
-    debugPrint('[ConversationService] setConversationState: $conversationId -> $state');
+    _log.d('Conversation', 'setConversationState: $conversationId -> $state');
     await _conversationsRef.doc(conversationId).update({
       'state': state.name,
     });
@@ -65,7 +67,7 @@ class ConversationService {
 
   /// Passe la conversation en mode "ready" (prête à utiliser)
   Future<void> markConversationReady(String conversationId, int totalKeyBits) async {
-    debugPrint('[ConversationService] markConversationReady: $conversationId, totalKeyBits=$totalKeyBits');
+    _log.d('Conversation', 'markConversationReady: $conversationId, totalKeyBits=$totalKeyBits');
     await _conversationsRef.doc(conversationId).update({
       'state': ConversationState.ready.name,
       'totalKeyBits': totalKeyBits,
@@ -115,15 +117,15 @@ class ConversationService {
     required String conversationId,
     required int bitsUsed,
   }) async {
-    debugPrint('[ConversationService] updateConversationWithMessage: conversationId=$conversationId');
+    _log.d('Conversation', 'updateConversationWithMessage: conversationId=$conversationId');
     try {
       await _conversationsRef.doc(conversationId).update({
         'usedKeyBits': FieldValue.increment(bitsUsed),
       });
-      debugPrint('[ConversationService] updateConversationWithMessage: SUCCESS');
+      _log.i('Conversation', 'updateConversationWithMessage: SUCCESS');
     } catch (e, stackTrace) {
-      debugPrint('[ConversationService] updateConversationWithMessage ERROR: $e');
-      debugPrint('[ConversationService] Stack trace: $stackTrace');
+      _log.e('Conversation', 'updateConversationWithMessage ERROR: $e');
+      _log.e('Conversation', 'Stack trace: $stackTrace');
       rethrow;
     }
   }
@@ -141,7 +143,7 @@ class ConversationService {
     required int totalKeyBits,
     bool addToExisting = false,
   }) async {
-    debugPrint('[ConversationService] updateConversationKey: $conversationId, $totalKeyBits bits, addToExisting=$addToExisting');
+    _log.d('Conversation', 'updateConversationKey: $conversationId, $totalKeyBits bits, addToExisting=$addToExisting');
 
     if (addToExisting) {
       // Ajouter aux bits existants (extension de clé)
@@ -165,7 +167,7 @@ class ConversationService {
     required String userId,
     required Map<String, dynamic> info,
   }) async {
-    debugPrint('[ConversationService] updateKeyDebugInfo: $conversationId, user=$userId');
+    _log.d('Conversation', 'updateKeyDebugInfo: $conversationId, user=$userId');
     // Utiliser dot notation pour mettre à jour un champ spécifique de la map
     await _conversationsRef.doc(conversationId).update({
       'keyDebugInfo.$userId': info,
@@ -174,7 +176,7 @@ class ConversationService {
 
   /// Supprime une conversation (et tous ses messages)
   Future<void> deleteConversation(String conversationId) async {
-    debugPrint('[ConversationService] deleteConversation: $conversationId');
+    _log.d('Conversation', 'deleteConversation: $conversationId');
 
     // Supprimer tous les messages d'abord
     final messages = await _messagesRef(conversationId).get();
@@ -196,7 +198,7 @@ class ConversationService {
     // Supprimer la conversation
     await _conversationsRef.doc(conversationId).delete();
 
-    debugPrint('[ConversationService] Conversation deleted: $conversationId');
+    _log.i('Conversation', 'Conversation deleted: $conversationId');
   }
 
   // ==================== MESSAGES ====================
@@ -208,34 +210,34 @@ class ConversationService {
     required String messagePreview,
     String? plaintextDebug,
   }) async {
-    debugPrint('[ConversationService] sendMessage: conversationId=$conversationId');
-    debugPrint('[ConversationService] sendMessage: messageId=${message.id}');
-    debugPrint('[ConversationService] sendMessage: senderId=${message.senderId}');
+    _log.d('Conversation', 'sendMessage: conversationId=$conversationId');
+    _log.d('Conversation', 'sendMessage: messageId=${message.id}');
+    _log.d('Conversation', 'sendMessage: senderId=${message.senderId}');
 
     try {
       // Ajouter le message
-      debugPrint('[ConversationService] Adding message to Firestore...');
+      _log.d('Conversation', 'Adding message to Firestore...');
       final messageData = message.toJson();
       
       // Ajouter le plaintext si le debug est activé
       if (AppConfig.plaintextMessageFirestore && plaintextDebug != null) {
         messageData['plaintextDebug'] = plaintextDebug;
-        debugPrint('[ConversationService] DEBUG: Plaintext added to Firestore');
+        _log.d('Conversation', 'DEBUG: Plaintext added to Firestore');
       }
       
       await _messagesRef(conversationId).doc(message.id).set(messageData);
-      debugPrint('[ConversationService] Message added successfully');
+      _log.i('Conversation', 'Message added successfully');
 
       // Mettre à jour la conversation
-      debugPrint('[ConversationService] Updating conversation...');
+      _log.d('Conversation', 'Updating conversation...');
       await updateConversationWithMessage(
         conversationId: conversationId,
         bitsUsed: message.totalBitsUsed,
       );
-      debugPrint('[ConversationService] Conversation updated successfully');
+      _log.i('Conversation', 'Conversation updated successfully');
     } catch (e, stackTrace) {
-      debugPrint('[ConversationService] ERROR in sendMessage: $e');
-      debugPrint('[ConversationService] Stack trace: $stackTrace');
+      _log.e('Conversation', 'ERROR in sendMessage: $e');
+      _log.e('Conversation', 'Stack trace: $stackTrace');
       rethrow;
     }
   }
@@ -304,7 +306,7 @@ class ConversationService {
           'transferredBy': transferredBy,
           'ciphertext': '', // Vider le ciphertext
         });
-        debugPrint('[ConversationService] Message $messageId ciphertext deleted (all transferred)');
+        _log.d('Conversation', 'Message $messageId ciphertext deleted (all transferred)');
       } else {
         transaction.update(docRef, {
           'transferredBy': transferredBy,
@@ -338,7 +340,7 @@ class ConversationService {
       if (allRead) {
         // Supprimer complètement le message
         transaction.delete(docRef);
-        debugPrint('[ConversationService] Message $messageId deleted (all read)');
+        _log.d('Conversation', 'Message $messageId deleted (all read)');
       } else {
         transaction.update(docRef, {
           'readBy': readBy,

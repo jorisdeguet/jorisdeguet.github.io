@@ -19,6 +19,12 @@ class KexSessionModel {
   /// contient les indexes des segments scannés par pair
   final Map<String, List<int>> segmentsByPeer;
 
+  /// Start index (segment) de la tentative courante pour créer/étendre la clé
+  final int startIndex;
+
+  /// End index (segment, exclusive) de la tentative courante
+  final int endIndex;
+
   /// Status de la session
   KeyExchangeStatus status;
   final DateTime createdAt;
@@ -36,9 +42,13 @@ class KexSessionModel {
     required this.sourceId,
     required this.segmentsByPeer,
     this.status = KeyExchangeStatus.inProgress,
+    int? startIndex,
+    int? endIndex,
     DateTime? createdAt,
     DateTime? updatedAt,
-  })  : createdAt = createdAt ?? DateTime.now(),
+  })  : startIndex = startIndex ?? 0,
+        endIndex = endIndex ?? 0,
+        createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
 
   /// Constructeur nommé pour création initiale.
@@ -61,6 +71,9 @@ class KexSessionModel {
          (participants.contains(sourceId) ? participants : ([sourceId] + participants))
              .map((p) => MapEntry(p, p == sourceId ? List<int>.generate(totalSegments, (i) => i) : <int>[])),
        ),
+       // Par défaut la tentative couvre l'ensemble des segments produits par la source
+       startIndex = 0,
+       endIndex = totalSegments,
        status = KeyExchangeStatus.inProgress,
        createdAt = createdAt ?? DateTime.now(),
        updatedAt = updatedAt ?? DateTime.now();
@@ -118,6 +131,10 @@ class KexSessionModel {
       'segmentsByPeer': normalized.map((k, v) => MapEntry(k.toString(), v)),
       'participants': normalized.keys.toList(),
       'updatedAt': Timestamp.fromDate(DateTime.now()),
+      // inclure la tentative courante (start/end) pour que les listeners puissent éviter
+      // de sauvegarder deux fois la même clé si plusieurs updates arrivent.
+      'startIndex': startIndex,
+      'endIndex': endIndex,
     };
   }
 
@@ -168,6 +185,8 @@ class KexSessionModel {
       'status': status.name,
       'totalSegments': segmentsNormalized[sourceId]?.length ?? 0,
       'totalKeyBits': (segmentsNormalized[sourceId]?.length ?? 0) * KeyExchangeService.segmentSizeBits,
+      'startIndex': startIndex,
+      'endIndex': endIndex,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(DateTime.now()),
     };
@@ -210,6 +229,8 @@ class KexSessionModel {
         (s) => s.name == statusStr,
         orElse: () => KeyExchangeStatus.inProgress,
       ),
+      startIndex: data['startIndex'] as int? ?? 0,
+      endIndex: data['endIndex'] as int? ?? 0,
       createdAt: parseDate(data['createdAt']),
       updatedAt: parseDate(data['updatedAt']),
     );

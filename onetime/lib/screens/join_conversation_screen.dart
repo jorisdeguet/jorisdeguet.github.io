@@ -4,6 +4,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../services/auth_service.dart';
+import '../services/app_logger.dart';
 import 'key_exchange_screen.dart';
 
 /// Écran pour rejoindre une conversation existante via QR code.
@@ -18,6 +19,7 @@ class JoinConversationScreen extends StatefulWidget {
 class _JoinConversationScreenState extends State<JoinConversationScreen> {
   final AuthService _authService = AuthService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final _log = AppLogger();
 
   String? _scannedConversationId;
   bool _isJoining = false;
@@ -96,11 +98,11 @@ class _JoinConversationScreenState extends State<JoinConversationScreen> {
   /// Vérifie si le créateur a validé (l'état de la conversation change vers "exchanging")
   Stream<String?> _watchConversationState() {
     if (_scannedConversationId == null) {
-      debugPrint('[JoinConversation] _watchConversationState: conversationId is null');
+      _log.d('JoinConversation', '_watchConversationState: conversationId is null');
       return const Stream.empty();
     }
 
-    debugPrint('[JoinConversation] _watchConversationState: watching conversation $_scannedConversationId');
+    _log.d('JoinConversation', '_watchConversationState: watching conversation $_scannedConversationId');
 
     return _firestore
         .collection('conversations')
@@ -111,7 +113,7 @@ class _JoinConversationScreenState extends State<JoinConversationScreen> {
 
           final data = doc.data()!;
           final state = data['state'] as String? ?? 'joining';
-          debugPrint('[JoinConversation] Conversation state: $state');
+          _log.d('JoinConversation', 'Conversation state: $state');
 
           // Si l'état est "exchanging" ou "ready", naviguer vers l'échange de clé
           if (state == 'exchanging') {

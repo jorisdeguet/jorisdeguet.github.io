@@ -10,6 +10,7 @@ import '../services/unread_message_service.dart';
 import '../services/conversation_export_service.dart';
 import '../services/format_service.dart';
 import '../l10n/app_localizations.dart';
+import '../services/app_logger.dart';
 
 /// Profile screen with settings
 class ProfileScreen extends StatefulWidget {
@@ -28,7 +29,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final ConversationPseudoService _convPseudoService = ConversationPseudoService();
   final UnreadMessageService _unreadService = UnreadMessageService();
   final ConversationExportService _exportService = ConversationExportService();
-  
+  final _log = AppLogger();
+
   bool _isLoading = false;
   ThemeMode _themeMode = ThemeMode.system;
   int _totalKeyBytes = 0;
@@ -148,7 +150,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         try {
           await _authService.deleteAccount();
         } catch (e) {
-          debugPrint('Error deleting account: $e');
+          _log.e('Profile', 'Error deleting account: $e');
           // On continue même si erreur pour finir le nettoyage local
         }
         

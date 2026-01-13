@@ -4,6 +4,7 @@ import '../models/kex_session.dart';
 import '../models/shared_key.dart';
 import '../models/conversation.dart';
 import 'conversation_detail_screen.dart';
+import '../services/app_logger.dart';
 
 /// Screen showing detailed summary of a key exchange
 class KeyExchangeSummaryScreen extends StatelessWidget {
@@ -25,13 +26,14 @@ class KeyExchangeSummaryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final summary = _generateSummary();
-    
+    final _log = AppLogger();
+
     // Also print to console
-    debugPrint('═══════════════════════════════════════════════════');
-    debugPrint('KEY EXCHANGE SUMMARY');
-    debugPrint('═══════════════════════════════════════════════════');
-    debugPrint(summary);
-    debugPrint('═══════════════════════════════════════════════════');
+    _log.d('KeyExchangeSummary', '═══════════════════════════════════════════════════');
+    _log.i('KeyExchangeSummary', 'KEY EXCHANGE SUMMARY');
+    _log.d('KeyExchangeSummary', '═══════════════════════════════════════════════════');
+    _log.d('KeyExchangeSummary', summary);
+    _log.d('KeyExchangeSummary', '═══════════════════════════════════════════════════');
 
     return Scaffold(
       appBar: AppBar(

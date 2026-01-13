@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/kex_session.dart';
+import 'app_logger.dart';
 
 /// Service pour synchroniser les sessions d'échange de clé via Firestore.
 ///
@@ -12,6 +13,7 @@ import '../models/kex_session.dart';
 /// - Passer au segment suivant quand tous ont scanné
 class KeyExchangeSyncService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final _log = AppLogger();
 
   /// Collection des sessions d'échange
   CollectionReference<Map<String, dynamic>> get _sessionsRef =>
@@ -64,18 +66,18 @@ class KeyExchangeSyncService {
     required String participantId,
     required int segmentIndex,
   }) async {
-    debugPrint('[KeyExchangeSyncService] ══════════════════════════════════');
-    debugPrint('[KeyExchangeSyncService] markSegmentScanned called:');
-    debugPrint('[KeyExchangeSyncService]   sessionId: $sessionId');
-    debugPrint('[KeyExchangeSyncService]   participantId: ${participantId.substring(0, 8)}...');
-    debugPrint('[KeyExchangeSyncService]   segmentIndex: $segmentIndex');
-    
+    _log.d('KeyExchange', '════════════════════════════════════════');
+    _log.d('KeyExchange', 'markSegmentScanned called:');
+    _log.d('KeyExchange', '  sessionId: $sessionId');
+    _log.d('KeyExchange', '  participantId: ${participantId.substring(0, 8)}...');
+    _log.d('KeyExchange', '  segmentIndex: $segmentIndex');
+
     final docRef = _sessionsRef.doc(sessionId);
 
     await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(docRef);
       if (!snapshot.exists) {
-        debugPrint('[KeyExchangeSyncService] ❌ ERROR: Session not found');
+        _log.w('KeyExchange', '❌ ERROR: Session not found');
         throw Exception('Session not found');
       }
 
@@ -87,39 +89,39 @@ class KeyExchangeSyncService {
         );
         var updates = session.computeFirestoreUpdatesForSegments();
         transaction.update(docRef, updates);
-        debugPrint('[KeyExchangeSyncService] ✅ Transaction update queued');
+        _log.i('KeyExchange', '✅ Transaction update queued');
       } else {
-        debugPrint('[KeyExchangeSyncService] ℹ️  Participant already scanned this segment - no update needed');
+        _log.i('KeyExchange', 'ℹ️  Participant already scanned this segment - no update needed');
       }
     });
-    
-    debugPrint('[KeyExchangeSyncService] ══════════════════════════════════');
+
+    _log.d('KeyExchange', '════════════════════════════════════════');
   }
 
   /// Marque la session comme terminée
   Future<void> completeSession(String sessionId) async {
     await _sessionsRef.doc(sessionId).update({
       'status': KeyExchangeStatus.completed.name,
-      'updatedAt': DateTime.now().toIso8601String(),
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
     });
   }
 
   /// Met à jour le conversationId de la session
   Future<void> setConversationId(String sessionId, String conversationId) async {
-    debugPrint('[KeyExchangeSyncService] setConversationId: sessionId=$sessionId, conversationId=$conversationId');
+    _log.d('KeyExchange', 'setConversationId: sessionId=$sessionId, conversationId=$conversationId');
     await _sessionsRef.doc(sessionId).update({
       'conversationId': conversationId,
-      'updatedAt': DateTime.now().toIso8601String(),
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
     });
   }
 
   /// Met à jour le nombre total de segments (utilisé lors d'une terminaison anticipée)
   Future<void> updateTotalSegments(String sessionId, int totalSegments, int totalKeyBits) async {
-    debugPrint('[KeyExchangeSyncService] updateTotalSegments: sessionId=$sessionId, totalSegments=$totalSegments, totalKeyBits=$totalKeyBits');
+    _log.d('KeyExchange', 'updateTotalSegments: sessionId=$sessionId, totalSegments=$totalSegments, totalKeyBits=$totalKeyBits');
     await _sessionsRef.doc(sessionId).update({
       'totalSegments': totalSegments,
       'totalKeyBits': totalKeyBits,
-      'updatedAt': DateTime.now().toIso8601String(),
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
     });
   }
 
@@ -127,7 +129,7 @@ class KeyExchangeSyncService {
   Future<void> cancelSession(String sessionId) async {
     await _sessionsRef.doc(sessionId).update({
       'status': KeyExchangeStatus.cancelled.name,
-      'updatedAt': DateTime.now().toIso8601String(),
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
     });
   }
 
@@ -140,18 +142,18 @@ class KeyExchangeSyncService {
   Future<void> cleanupOldSessions(String userId) async {
     try {
       final oneHourAgo = DateTime.now().subtract(const Duration(hours: 1));
-      
+
       // Trouver les sessions créées ou mises à jour il y a plus d'une heure
       // On filtre aussi par participant car les règles de sécurité ne permettent
       // de lire/supprimer que ses propres sessions.
       final snapshot = await _sessionsRef
           .where('participants', arrayContains: userId)
-          .where('createdAt', isLessThan: oneHourAgo.toIso8601String())
+          .where('createdAt', isLessThan: Timestamp.fromDate(oneHourAgo))
           .get();
-      
+
       final batch = _firestore.batch();
       int count = 0;
-      
+
       for (final doc in snapshot.docs) {
         batch.delete(doc.reference);
         count++;
@@ -161,14 +163,14 @@ class KeyExchangeSyncService {
           count = 0;
         }
       }
-      
+
       if (count > 0) {
         await batch.commit();
       }
-      
-      debugPrint('[KeyExchangeSyncService] Cleaned up $count old sessions');
+
+      _log.i('KeyExchange', 'Cleaned up $count old sessions');
     } catch (e) {
-      debugPrint('[KeyExchangeSyncService] Error cleaning up sessions: $e');
+      _log.e('KeyExchange', 'Error cleaning up sessions: $e');
     }
   }
 
