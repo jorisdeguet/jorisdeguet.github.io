@@ -1538,6 +1538,8 @@ class _MessageBubbleState extends State<_MessageBubble> {
   final AppLogger _log = AppLogger();
   String? _decryptedText;
   Uint8List? _decryptedBinary;
+  bool _isPseudoMessage = false;
+  String? _pseudoName;
 
   @override
   void initState() {
@@ -1560,6 +1562,8 @@ class _MessageBubbleState extends State<_MessageBubble> {
             final pseudo = PseudoExchangeMessage.fromJson(text);
             if (pseudo != null) {
               widget.onPseudoReceived?.call(pseudo.oderId, pseudo.pseudo);
+              _isPseudoMessage = true;
+              _pseudoName = pseudo.pseudo;
             }
           }
 
@@ -1621,8 +1625,17 @@ class _MessageBubbleState extends State<_MessageBubble> {
                 borderRadius: BorderRadius.circular(16),
               ),
               child: widget.message.contentType == MessageContentType.text
-                  ? SelectableText(_decryptedText ?? (widget.message.isEncrypted ? '🔒 [chiffré]' : String.fromCharCodes(widget.message.ciphertext)),
-                      style: TextStyle(color: widget.isMine ? Colors.white : Colors.black87))
+                  ? (_isPseudoMessage
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                            const SizedBox(width: 6),
+                            Text(' ${_pseudoName ?? ''}', style: TextStyle(color: widget.isMine ? Colors.white : Colors.black87, fontWeight: FontWeight.w600)),
+                          ],
+                        )
+                      : SelectableText(_decryptedText ?? (widget.message.isEncrypted ? '🔒 [chiffré]' : String.fromCharCodes(widget.message.ciphertext)),
+                          style: TextStyle(color: widget.isMine ? Colors.white : Colors.black87)))
                   : (_decryptedBinary != null
                       ? ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.memory(_decryptedBinary!, width: 180, fit: BoxFit.cover))
                       : (widget.message.isEncrypted ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator()) : const SizedBox())),
@@ -1657,6 +1670,37 @@ class _MessageBubbleNew extends StatelessWidget {
     // If the message is stored locally (decrypted), present it directly.
     if (message.isLocal) {
       if (message.contentType == MessageContentType.text) {
+        // If the local text is a pseudo exchange message, show a concise UI
+        if (message.textContent != null && PseudoExchangeMessage.isPseudoExchange(message.textContent!)) {
+          final pseudo = PseudoExchangeMessage.fromJson(message.textContent!);
+          final pseudoName = pseudo?.pseudo ?? '';
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+            child: Row(
+              mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+              children: [
+                if (!isMine) CircleAvatar(radius: 14, child: Text((senderName ?? '').substring(0,1))),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isMine ? Theme.of(context).colorScheme.primaryContainer : Colors.grey[200],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                      const SizedBox(width: 6),
+                      Text(' $pseudoName', style: TextStyle(color: isMine ? Theme.of(context).colorScheme.onPrimaryContainer : Colors.black87, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
           child: Row(
