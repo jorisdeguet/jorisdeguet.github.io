@@ -5,30 +5,65 @@ Ces messages sont chiffrés avec une clé partagée avant.
 
 **On partage une clé avant, on communique secrètement après.**
 
-## Principe de fonctionnement
+L'app sûre qui te force à voir des gens IRL.
 
-1. **Identification par téléphone** : Ton numéro de téléphone est ton unique identifiant (pas de compte, pas de mot de passe)
-2. **Échange de clé en personne** : Tu génères une clé aléatoire et la partages via QR code (en présence physique)
-3. **Chiffrement One-Time Pad** : Les messages sont chiffrés avec la clé partagée (chiffrement parfait, mathématiquement inviolable)
-4. **Clé à usage unique** : Chaque bit de clé n'est utilisé qu'une seule fois, puis détruit
+## La clé c'est la clé
+
+Une conversation à 2 à 3 ou à 100 c'est une clé.
+
+Une conversation avec du texte des fichiers etc, c'est une clé.
+
+Quand tu rencontres les gens, tu partages de kilo-octets ou des méga-octets de clé.
+
+Ensuite à chaque message, une partie de la clé est consommée pour le protéger pour toujours.
+
+Une conversation = une clé.
+
+## Itinéraire d'un message crypté
+
+1. J'écris mon message, "Yo" c'est 2 octets
+2. Pour l'envoyer, je onetimepad le message avec les 2 prochains octets de la clé
+3. Le message chiffré est posé sur le serveur (on utilise Firebase)
+4. Un ami se connecte et collecte le message qu'il n'a pas encore sur son téléphone
+5. Il utilise les 2 octets de la clé pour déchiffrer le message
+6. Le message "Yo" apparaît sur son téléphone
+7. Quand tout le monde a lu le message, le message est supprimé du serveur
+8. Les 2 octets de clé ne seront jamais réutilisés et donc détruits
+
+## Local versus le cloud
+
+Le but est de n'avoir rien d'important sur le cloud.
+- les messages sont effacés le plus tôt possible
+- les index et tailles des clés de chacun pour détecter un départ ou une arrivée
+- uniquement des identifiants aléatoires des participants, pas de courriels, pas de numéro de téléphone, pas de pseudos 
+
+| Local (téléphone)            | Cloud (Firebase)                                             |
+|------------------------------|--------------------------------------------------------------|
+| Messages décryptés           | Messages chiffrés, le temps que tout le monde les récupèrent |
+| Pseudos                      | identifiants aléatoires                                      |
+| Clés de chiffrement binaires | Un objet conversation, les tailles des clés de chacun        |
+
+## Open source
+
+C'est un projet pour s'amuser avec un algorithme de chiffrement différent.
+- notre but est de partager ce projet
+- de valider sa sécurité
+- de faire réviser le code par des experts, si ça les tente
+
+Le repo est ici: 
 
 ## Architecture
 
 ### Services
 
 #### 1. AuthService
-Authentification Firebase par numéro de téléphone.
-- Envoi de code OTP par SMS
-- Vérification du code et connexion
-- Auto-vérification sur Android
-- Aucun mot de passe, aucune donnée personnelle stockée
+Authentification Firebase anonyme.
 
 #### 2. RandomKeyGeneratorService
 Génération de clés aléatoires avec source d'entropie caméra.
 - Utilise les variations RGB entre pixels comme source d'entropie
 - XOR avec CSPRNG pour renforcer l'aléatoire
 - Tests statistiques intégrés (Chi², fréquence, runs)
-- Capacité QR code: ~23200 bits max, 8192 bits recommandé
 
 #### 3. KeyExchangeService
 Échange local de clé via QR code.
