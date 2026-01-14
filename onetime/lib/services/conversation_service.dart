@@ -1,11 +1,9 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 
-import '../config/app_config.dart';
-import '../models/conversation.dart';
-import '../models/encrypted_message.dart';
+import '../model_remote/conversation.dart';
+import '../model_remote/encrypted_message.dart';
 import 'app_logger.dart';
 
 /// Service de gestion des conversations sur Firebase.

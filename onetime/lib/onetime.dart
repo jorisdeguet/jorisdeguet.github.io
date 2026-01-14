@@ -11,12 +11,10 @@
 library;
 
 // Models
-export 'models/shared_key.dart';
+export 'model_local/shared_key.dart';
 export 'models/key_segment.dart';
-export 'models/encrypted_message.dart';
-export 'models/user_profile.dart';
-export 'models/conversation.dart';
-export 'models/kex_session.dart';
+export 'model_remote/conversation.dart';
+export 'model_remote/kex_session.dart';
 
 // Services
 export 'services/random_key_generator_service.dart';
@@ -26,7 +24,6 @@ export 'services/key_storage_service.dart';
 export 'services/crypto_service.dart';
 export 'services/firebase_message_service.dart';
 export 'services/auth_service.dart';
-export 'services/user_service.dart';
 export 'services/compression_service.dart';
 export 'services/format_service.dart';
 export 'services/conversation_service.dart';

@@ -7,7 +7,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/shared_key.dart';
+import '../model_local/shared_key.dart';
 import 'app_logger.dart';
 
 /// Service pour stocker et récupérer les clés partagées localement.

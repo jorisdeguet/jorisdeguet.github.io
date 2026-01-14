@@ -4,8 +4,9 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/encrypted_message.dart';
+import '../model_remote/encrypted_message.dart';
 import 'app_logger.dart';
+import 'dart:async';
 
 /// Représente un message déchiffré stocké localement
 class DecryptedMessageData {
@@ -21,9 +22,11 @@ class DecryptedMessageData {
   final Uint8List? binaryContent;
   final String? fileName;
   final String? mimeType;
-  
   final bool isCompressed;
-  final bool deleteAfterRead;
+  // Métadonnées liées à la clé utilisée pour ce message
+  final String? keyId;
+  final int? keySegmentStart;
+  final int? keySegmentEnd;
 
   DecryptedMessageData({
     required this.id,
@@ -35,12 +38,14 @@ class DecryptedMessageData {
     this.fileName,
     this.mimeType,
     this.isCompressed = false,
-    this.deleteAfterRead = false,
+    this.keyId,
+    this.keySegmentStart,
+    this.keySegmentEnd,
   });
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
+      "id": id,
       'senderId': senderId,
       'createdAt': createdAt.toIso8601String(),
       'contentType': contentType.name,
@@ -49,7 +54,9 @@ class DecryptedMessageData {
       'fileName': fileName,
       'mimeType': mimeType,
       'isCompressed': isCompressed,
-      'deleteAfterRead': deleteAfterRead,
+      'keyId': keyId,
+      'keySegmentStart': keySegmentStart,
+      'keySegmentEnd': keySegmentEnd,
     };
   }
 
@@ -69,15 +76,48 @@ class DecryptedMessageData {
       fileName: json['fileName'] as String?,
       mimeType: json['mimeType'] as String?,
       isCompressed: json['isCompressed'] as bool? ?? false,
-      deleteAfterRead: json['deleteAfterRead'] as bool? ?? false,
+      keyId: json['keyId'] as String?,
+      keySegmentStart: json['keySegmentStart'] as int?,
+      keySegmentEnd: json['keySegmentEnd'] as int?,
     );
   }
 }
 
 /// Service pour stocker localement les messages déchiffrés
 class MessageStorageService {
+  static final MessageStorageService _instance = MessageStorageService._internal();
+  factory MessageStorageService() => _instance;
+  MessageStorageService._internal();
+
   static const String _messagePrefix = 'decrypted_msg_';
   final _log = AppLogger();
+
+  // Stream controllers par conversation pour notifier l'UI
+  final Map<String, StreamController<List<DecryptedMessageData>>> _controllers = {};
+
+  Stream<List<DecryptedMessageData>> watchConversationMessages(String conversationId) {
+    // Créer le controller si nécessaire
+    if (!_controllers.containsKey(conversationId)) {
+      _log.d('MessageStorage', 'Creating stream controller for conversation $conversationId');
+      _controllers[conversationId] = StreamController<List<DecryptedMessageData>>.broadcast(onListen: () async {
+        // Emission initiale
+        final msgs = await getConversationMessages(conversationId);
+        if (!_controllers[conversationId]!.isClosed) _controllers[conversationId]!.add(msgs);
+      });
+    }
+    _log.d('MessageStorage', 'watchConversationMessages subscribed for $conversationId');
+    return _controllers[conversationId]!.stream;
+  }
+
+  Future<void> _emitConversationMessages(String conversationId) async {
+    if (_controllers.containsKey(conversationId) && !_controllers[conversationId]!.isClosed) {
+      _log.d('MessageStorage', 'Emitting messages for conversation $conversationId');
+      final msgs = await getConversationMessages(conversationId);
+      try {
+        _controllers[conversationId]!.add(msgs);
+      } catch (_) {}
+    }
+  }
 
   /// Sauvegarde un message déchiffré localement
   Future<void> saveDecryptedMessage({
@@ -89,12 +129,25 @@ class MessageStorageService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final key = '$_messagePrefix${conversationId}_${message.id}';
-      
+
+      // Idempotence: si le message existe déjà, on skip
+      final existing = prefs.getString(key);
+      if (existing != null) {
+        _log.d('MessageStorage', 'Message ${message.id} already present locally — skipping save');
+        // still ensure the message id is registered in the list and emit
+        await _addMessageIdToConversation(conversationId, message.id);
+        await _emitConversationMessages(conversationId);
+        return;
+      }
+
       await prefs.setString(key, jsonEncode(message.toJson()));
       
       // Maintenir une liste des IDs de messages pour cette conversation
       await _addMessageIdToConversation(conversationId, message.id);
       
+      // Notify listeners
+      await _emitConversationMessages(conversationId);
+
       _log.i('MessageStorage', 'Message saved successfully');
     } catch (e) {
       _log.e('MessageStorage', 'Error saving message: $e');
@@ -180,7 +233,10 @@ class MessageStorageService {
       
       await prefs.remove(key);
       await _removeMessageIdFromConversation(conversationId, messageId);
-      
+
+      // Notify listeners
+      await _emitConversationMessages(conversationId);
+
       _log.i('MessageStorage', 'Message deleted successfully');
     } catch (e) {
       _log.e('MessageStorage', 'Error deleting message: $e');
@@ -204,6 +260,9 @@ class MessageStorageService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('${_messagePrefix}list_$conversationId');
       
+      // Notify listeners
+      await _emitConversationMessages(conversationId);
+
       _log.i('MessageStorage', 'All messages deleted');
     } catch (e) {
       _log.e('MessageStorage', 'Error deleting conversation messages: $e');

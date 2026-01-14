@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
-import '../models/kex_session.dart';
+import '../model_remote/kex_session.dart';
 import 'app_logger.dart';
 
 /// Service pour synchroniser les sessions d'échange de clé via Firestore.

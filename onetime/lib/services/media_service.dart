@@ -5,7 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image/image.dart' as img;
 
-import '../models/encrypted_message.dart';
+import '../model_remote/encrypted_message.dart';
 
 import 'format_service.dart';
 import 'app_logger.dart';

@@ -7,9 +7,10 @@ import '../services/conversation_pseudo_service.dart';
 import '../services/message_storage_service.dart';
 import '../services/unread_message_service.dart';
 import '../services/pseudo_storage_service.dart';
-import '../models/conversation.dart';
-import '../models/encrypted_message.dart';
+import '../model_remote/conversation.dart';
+import '../model_remote/encrypted_message.dart';
 import '../services/key_exchange_sync_service.dart';
+import '../services/background_message_service.dart';
 import 'profile_screen.dart';
 import 'new_conversation_screen.dart';
 import 'conversation_detail_screen.dart';
@@ -148,10 +149,42 @@ class _ConversationsListScreenState extends State<ConversationsListScreen> {
   late ConversationService _conversationService;
   Stream<List<Conversation>>? _conversationsStream;
 
+  BackgroundMessageService? _bgService;
+
   @override
   void initState() {
     super.initState();
     _initService();
+
+    // Start background service only when we have a valid userId
+    if (widget.userId.isNotEmpty) {
+      _bgService = BackgroundMessageService(localUserId: widget.userId);
+      _bgService?.startWatchingUserConversations();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ConversationsListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // If userId changed, recreate or stop the background service accordingly
+    if (oldWidget.userId != widget.userId) {
+      _bgService?.stopWatchingUserConversations();
+      _bgService?.stopAll();
+      if (widget.userId.isNotEmpty) {
+        _bgService = BackgroundMessageService(localUserId: widget.userId);
+        _bgService?.startWatchingUserConversations();
+      } else {
+        _bgService = null;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _bgService?.stopWatchingUserConversations();
+    _bgService?.stopAll();
+    super.dispose();
   }
 
   void _initService() {

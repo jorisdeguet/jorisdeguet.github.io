@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/auth_service.dart';
 import '../services/conversation_service.dart';
 import '../services/app_logger.dart';
+import '../services/service_locator.dart';
 import 'key_exchange_screen.dart';
 
 /// Écran de création d'une nouvelle conversation.
@@ -62,6 +63,17 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
         _conversationId = conversation.id;
         _isCreating = false;
       });
+
+      // Initialize background service and start listening to this conversation
+      try {
+        BackgroundServiceLocator.init(localUserId: _currentUserId);
+        BackgroundServiceLocator.instance.startForConversation(conversation.id);
+        BackgroundServiceLocator.instance.rescanConversation(conversation.id).catchError((e) {
+          _log.e('NewConversation', 'Background rescan failed: $e');
+        });
+      } catch (e) {
+        _log.e('NewConversation', 'Could not init background service: $e');
+      }
     } catch (e) {
       setState(() {
         _errorMessage = 'Erreur: $e';

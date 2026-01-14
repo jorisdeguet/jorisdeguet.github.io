@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'services/auth_service.dart';
 import 'services/key_pre_generation_service.dart';
 import 'services/pseudo_storage_service.dart';
+import 'services/background_message_service.dart';
+import 'model_remote/conversation.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'l10n/app_localizations.dart';
@@ -115,7 +117,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void initState() {
     super.initState();
     _checkAuth();
-    // Écouter les changements d'état d'authentification (ex: suppression de compte)
+    // Écouter les changements d'état d'auth
     _authSubscription = FirebaseAuth.instance.authStateChanges().listen((_) => _checkAuth());
   }
 
@@ -131,10 +133,11 @@ class _AuthWrapperState extends State<AuthWrapper> {
     
     if (mounted) {
       setState(() {
-        // On considère connecté seulement si Auth Firebase OK ET Pseudo défini
         _isSignedIn = isSignedIn && myPseudo != null && myPseudo.isNotEmpty;
         _isLoading = false;
       });
+
+      // Note: BackgroundMessageService lifecycle moved to ConversationsListScreen
     }
   }
 

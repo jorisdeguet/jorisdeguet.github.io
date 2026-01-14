@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../config/app_config.dart';
-import '../models/conversation.dart';
-import '../models/encrypted_message.dart';
-import '../models/shared_key.dart';
+import '../model_remote/conversation.dart';
+import '../model_remote/encrypted_message.dart';
+import '../model_local/shared_key.dart';
 import '../services/conversation_service.dart';
 import '../services/auth_service.dart';
 import '../services/crypto_service.dart';
@@ -42,7 +42,6 @@ class _DisplayMessage {
   final EncryptedMessage? firestoreMessage;
   
   final bool isCompressed;
-  final bool deleteAfterRead;
   
   /// True si le message est chargé localement (déchiffré)
   final bool isLocal;
@@ -58,7 +57,6 @@ class _DisplayMessage {
     this.mimeType,
     this.firestoreMessage,
     this.isCompressed = false,
-    this.deleteAfterRead = false,
     this.isLocal = false,
   });
 
@@ -74,23 +72,7 @@ class _DisplayMessage {
       fileName: local.fileName,
       mimeType: local.mimeType,
       isCompressed: local.isCompressed,
-      deleteAfterRead: local.deleteAfterRead,
       isLocal: true,
-    );
-  }
-
-  /// Crée depuis un message Firestore (à traiter)
-  factory _DisplayMessage.fromFirestore(EncryptedMessage firestore) {
-    return _DisplayMessage(
-      id: firestore.id,
-      senderId: firestore.senderId,
-      createdAt: firestore.createdAt,
-      contentType: firestore.contentType,
-      fileName: firestore.fileName,
-      mimeType: firestore.mimeType,
-      firestoreMessage: firestore,
-      isCompressed: firestore.isCompressed,
-      isLocal: false,
     );
   }
 }
@@ -300,168 +282,16 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     }
   }
 
-  /// Process a new message from Firestore: decrypt, store locally, mark as transferred
-  Future<void> _processNewMessage(EncryptedMessage message) async {
-    // Skip if it's our own message (already in local storage from send)
-    if (message.senderId == _currentUserId) {
-      return;
-    }
-
-    // Skip if already being processed
-    if (_processingMessages.contains(message.id)) {
-      return;
-    }
-
-    // Check if already processed
-    final existing = await _messageStorage.getDecryptedMessage(
-      conversationId: widget.conversation.id,
-      messageId: message.id,
-    );
-    if (existing != null) {
-      return; // Already processed
-    }
-
-    // Mark as being processed
-    _processingMessages.add(message.id);
-
-    try {
-      _log.d('ConversationDetail', 'Processing new message ${message.id}');
-
-      // Decrypt the message
-      if (message.contentType == MessageContentType.text) {
-        try {
-          final cryptoService = CryptoService(localPeerId: _currentUserId);
-          final decrypted = cryptoService.decrypt(
-            encryptedMessage: message,
-            sharedKey: _sharedKey!,
-            markAsUsed: true,
-          );
-
-          // Save decrypted message locally
-          await _messageStorage.saveDecryptedMessage(
-            conversationId: widget.conversation.id,
-            message: DecryptedMessageData(
-              id: message.id,
-              senderId: message.senderId,
-              createdAt: message.createdAt,
-              contentType: message.contentType,
-              textContent: decrypted,
-              isCompressed: message.isCompressed,
-            ),
-          );
-
-          // Check if this is a pseudo exchange message and notify
-          if (PseudoExchangeMessage.isPseudoExchange(decrypted)) {
-            final pseudoMsg = PseudoExchangeMessage.fromJson(decrypted);
-            if (pseudoMsg != null && message.senderId != _currentUserId) {
-              _onPseudoReceived(pseudoMsg.oderId, pseudoMsg.pseudo);
-            }
-          }
-
-          // Mark key as used
-          _onKeyUsed();
-
-          // Mark as transferred on Firestore
-          await _conversationService.markMessageAsTransferred(
-            conversationId: widget.conversation.id,
-            messageId: message.id,
-            allParticipants: widget.conversation.peerIds,
-          );
-
-          _log.i('ConversationDetail', 'Text message processed and saved locally');
-        } catch (e) {
-          _log.e('ConversationDetail', 'Error processing text message: $e');
-          rethrow;
-        }
-      } else {
-        // Binary message (image/file)
-        try {
-          final cryptoService = CryptoService(localPeerId: _currentUserId);
-          final decrypted = cryptoService.decryptBinary(
-            encryptedMessage: message,
-            sharedKey: _sharedKey!,
-            markAsUsed: true,
-          );
-
-          // Save decrypted binary locally
-          await _messageStorage.saveDecryptedMessage(
-            conversationId: widget.conversation.id,
-            message: DecryptedMessageData(
-              id: message.id,
-              senderId: message.senderId,
-              createdAt: message.createdAt,
-              contentType: message.contentType,
-              binaryContent: decrypted,
-              fileName: message.fileName,
-              mimeType: message.mimeType,
-              isCompressed: message.isCompressed,
-            ),
-          );
-
-          // Mark key as used
-          _onKeyUsed();
-
-          // Mark as transferred on Firestore
-          await _conversationService.markMessageAsTransferred(
-            conversationId: widget.conversation.id,
-            messageId: message.id,
-            allParticipants: widget.conversation.peerIds,
-          );
-
-          _log.i('ConversationDetail', 'Binary message processed and saved locally');
-        } catch (e) {
-          _log.e('ConversationDetail', 'Error processing binary message: $e');
-          rethrow;
-        }
-      }
-    } finally {
-      // Remove from processing set
-      _processingMessages.remove(message.id);
-    }
-  }
-
   /// Combine local decrypted messages with Firestore messages
   Stream<List<_DisplayMessage>> _getCombinedMessagesStream() async* {
-    await for (final firestoreMessages in _conversationService.watchMessages(widget.conversation.id)) {
-      // Process new Firestore messages (wait for them to complete)
-      final processedIds = <String>{};
-      
-      for (final msg in firestoreMessages) {
-        if (msg.senderId != _currentUserId && _sharedKey != null) {
-          // Process the message (AWAIT it now)
-          try {
-            await _processNewMessage(msg);
-            processedIds.add(msg.id);
-          } catch (e) {
-            _log.e('ConversationDetail', 'Error processing message in stream: $e');
-          }
-        }
-      }
-
-      // Load local messages
-      final localMessages = await _messageStorage.getConversationMessages(widget.conversation.id);
-      
-      // Create a set of local message IDs for quick lookup
-      final localIds = localMessages.map((m) => m.id).toSet();
-      
-      // Combine: local messages + Firestore messages not yet in local storage
+    // Now the UI only listens to local decrypted messages which are produced
+    // by the BackgroundMessageService. This decouples decryption from UI.
+    await for (final localMessages in _messageStorage.watchConversationMessages(widget.conversation.id)) {
       final combined = <_DisplayMessage>[];
-      
-      // Add all local messages
       for (final local in localMessages) {
         combined.add(_DisplayMessage.fromLocal(local));
       }
-      
-      // Add Firestore messages that are not in local storage and not being processed
-      for (final firestore in firestoreMessages) {
-        if (!localIds.contains(firestore.id) && !processedIds.contains(firestore.id)) {
-          combined.add(_DisplayMessage.fromFirestore(firestore));
-        }
-      }
-      
-      // Sort by timestamp
       combined.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      
       yield combined;
     }
   }

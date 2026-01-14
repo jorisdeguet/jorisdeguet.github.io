@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../config/app_config.dart';
-import '../models/encrypted_message.dart';
-import '../models/shared_key.dart';
+import '../model_remote/encrypted_message.dart';
+import '../model_local/shared_key.dart';
 import '../services/media_service.dart';
 import '../services/crypto_service.dart';
 import '../services/key_storage_service.dart';

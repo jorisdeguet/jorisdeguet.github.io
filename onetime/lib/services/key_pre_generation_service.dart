@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../services/random_key_generator_service.dart';
 import '../services/key_exchange_service.dart';
-import '../models/kex_session.dart';
+import '../model_remote/kex_session.dart';
 import 'app_logger.dart';
 
 /// Service responsable de la pré-génération des données de clé

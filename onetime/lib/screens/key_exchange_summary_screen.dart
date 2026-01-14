@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../models/kex_session.dart';
-import '../models/shared_key.dart';
-import '../models/conversation.dart';
+import '../model_remote/kex_session.dart';
+import '../model_local/shared_key.dart';
+import '../model_remote/conversation.dart';
 import 'conversation_detail_screen.dart';
 import '../services/app_logger.dart';
 
@@ -34,6 +34,9 @@ class KeyExchangeSummaryScreen extends StatelessWidget {
     _log.d('KeyExchangeSummary', '═══════════════════════════════════════════════════');
     _log.d('KeyExchangeSummary', summary);
     _log.d('KeyExchangeSummary', '═══════════════════════════════════════════════════');
+
+    // if you are here, the key exchange is complete
+    // add this conversation to the ones watched by the background service
 
     return Scaffold(
       appBar: AppBar(

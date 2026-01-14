@@ -1,4 +1,4 @@
-import '../models/shared_key.dart';
+import '../model_local/shared_key.dart';
 import 'format_service.dart';
 
 /// Service pour calculer les statistiques de clé disponible

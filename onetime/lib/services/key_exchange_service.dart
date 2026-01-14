@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import '../models/shared_key.dart';
+import '../model_local/shared_key.dart';
 import 'random_key_generator_service.dart';
 
 /// Service pour l'échange local de clés entre appareils via QR code.

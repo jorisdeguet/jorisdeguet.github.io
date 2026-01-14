@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
-import '../models/shared_key.dart';
+import '../model_local/shared_key.dart';
 import 'key_storage_service.dart';
 import 'message_storage_service.dart';
 import 'conversation_pseudo_service.dart';

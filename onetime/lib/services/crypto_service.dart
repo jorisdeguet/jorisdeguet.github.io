@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 import 'dart:convert';
 
-import '../models/shared_key.dart';
-import '../models/encrypted_message.dart';
+import '../model_local/shared_key.dart';
+import '../model_remote/encrypted_message.dart';
 import '../models/key_segment.dart';
 import 'compression_service.dart';
 

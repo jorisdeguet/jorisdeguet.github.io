@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../models/conversation.dart';
-import '../models/shared_key.dart';
+import '../model_remote/conversation.dart';
+import '../model_local/shared_key.dart';
 import '../services/conversation_service.dart';
 import '../services/key_storage_service.dart';
 import '../services/conversation_pseudo_service.dart';

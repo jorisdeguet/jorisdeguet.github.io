@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import '../models/encrypted_message.dart';
+import '../model_remote/encrypted_message.dart';
 import '../models/key_segment.dart';
-import '../models/shared_key.dart';
+import '../model_local/shared_key.dart';
 import 'crypto_service.dart';
 
 /// Service de messagerie via Firebase pour One-Time Pad.
