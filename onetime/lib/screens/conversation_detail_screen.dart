@@ -124,6 +124,9 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   bool _isLoading = false;
   SharedKey? _sharedKey;
   bool _hasSentPseudo = false;
+  /// Track whether we previously had a key for this conversation.
+  /// Used to detect the transition "no key -> key available".
+  bool _hadKey = false;
   bool _showScrollToBottom = false;
 
   // Cache des pseudos pour affichage
@@ -140,10 +143,16 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     final userId = _authService.currentUserId ?? '';
     _conversationService = ConversationService(localUserId: userId);
     _cryptoService = CryptoService(localPeerId: userId);
-    _loadSharedKey();
+    // Load display names immediately (UI-friendly)
     _loadDisplayNames();
-    _checkIfPseudoSent();
-    
+
+    // First determine if we already sent our pseudo locally, then load the key.
+    // This ordering avoids racing: we want to know whether to auto-send the pseudo
+    // when a key becomes available.
+    _checkIfPseudoSent().whenComplete(() {
+      _loadSharedKey();
+    });
+
     // Listen for pseudo updates
     _pseudoSubscription = _convPseudoService.pseudoUpdates.listen((conversationId) {
       if (conversationId == widget.conversation.id) {
@@ -459,10 +468,14 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
   Future<void> _loadSharedKey() async {
     _log.d('ConversationDetail', 'Loading shared key for ${widget.conversation.id}');
+    // remember whether we had a key before loading (used to detect transition)
+    final prevHadKey = _hadKey || _sharedKey != null;
+
     final key = await _keyStorageService.getKey(widget.conversation.id);
     if (mounted) {
       setState(() {
         _sharedKey = key;
+        _hadKey = key != null;
       });
       _log.i('ConversationDetail', 'Shared key loaded: ${key != null ? "${key.lengthInBits} bits" : "NOT FOUND"}');
 
@@ -471,6 +484,25 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
         _updateKeyDebugInfo();
       }
       
+      // If we just transitioned from no-key to having a key, optionally auto-send pseudo
+      if (!prevHadKey && key != null && AppConfig.autoSendPseudoOnKeyAvailable) {
+        _log.d('ConversationDetail', 'Detected new key availability. Evaluating auto-send pseudo...');
+        // Only auto-send if user hasn't already sent their pseudo and we're not already busy
+        if (!_hasSentPseudo && !_isLoading) {
+          // Defer a bit to let UI stabilize
+          Future.microtask(() async {
+            try {
+              _log.d('ConversationDetail', 'Auto-sending pseudo (key became available)');
+              await _sendMyPseudo();
+            } catch (e) {
+              _log.e('ConversationDetail', 'Auto-send pseudo failed: $e');
+            }
+          });
+        } else {
+          _log.d('ConversationDetail', 'Auto-send skipped (hasSent=$_hasSentPseudo, isLoading=$_isLoading)');
+        }
+      }
+
       // Si pas de clé, naviguer directement vers l'écran d'échange
       if (key == null && !widget.conversation.hasKey) {
         _log.d('ConversationDetail', 'No shared key found, navigating to key exchange');
@@ -1661,7 +1693,7 @@ class _MessageBubbleNew extends StatelessWidget {
             mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
             children: [
               if (!isMine)
-                CircleAvatar(radius: 14, child: Text(senderName?.substring(0,1) ?? '')),
+                CircleAvatar(radius: 14, child: Text((senderName ?? '').substring(0, 1))),
               const SizedBox(width: 8),
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
@@ -1672,7 +1704,7 @@ class _MessageBubbleNew extends StatelessWidget {
         );
       }
 
-      // Fallback simple view
+      // Fallback simple view for other local messages
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
         child: Text(message.textContent ?? ''),
@@ -1686,12 +1718,8 @@ class _MessageBubbleNew extends StatelessWidget {
       isMine: isMine,
       senderName: senderName,
       sharedKey: sharedKey,
-      onPseudoReceived: (id, pseudo) {
-        // propagate as appropriate (may be handled by parent)
-      },
-      onKeyUsed: () {
-        // parent will save key state via ConversationDetailScreen._onKeyUsed callback
-      },
+      onPseudoReceived: (id, pseudo) {},
+      onKeyUsed: () {},
     );
   }
 }

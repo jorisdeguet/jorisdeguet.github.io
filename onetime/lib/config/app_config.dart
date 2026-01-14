@@ -4,6 +4,12 @@ class AppConfig {
   /// Si false, les messages pseudo ne seront pas envoyés automatiquement
   static const bool pseudoExchangeStartConversation = false;
 
+  /// When true, when a shared key becomes available for a conversation and
+  /// the current user hasn't yet sent their pseudo, the app will automatically
+  /// send the pseudo message (uses existing `_sendMyPseudo()` logic).
+  /// This is helpful for a smooth UX after an initial key exchange.
+  static const bool autoSendPseudoOnKeyAvailable = true;
+
   /// Active/désactive les logs de debug étendus pour le chiffrement
   static const bool verboseCryptoLogs = true;
 
