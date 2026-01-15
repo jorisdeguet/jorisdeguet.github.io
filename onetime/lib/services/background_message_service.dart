@@ -111,6 +111,13 @@ class BackgroundMessageService {
     await _subscriptions[conversationId]?.cancel();
     _subscriptions.remove(conversationId);
     _processing.remove(conversationId);
+    // Close message storage controller to free resources for this conv
+    try {
+      await _messageStorage.closeController(conversationId);
+      _log.d('BackgroundMessage', 'Closed MessageStorage controller for $conversationId');
+    } catch (e) {
+      _log.e('BackgroundMessage', 'Error closing MessageStorage controller for $conversationId: $e');
+    }
   }
 
   /// Stop all listeners
@@ -121,6 +128,15 @@ class BackgroundMessageService {
     }
     _subscriptions.clear();
     _processing.clear();
+    // Close all controllers in message storage to avoid leaks
+    try {
+      for (final convId in _activeConversations) {
+        await _messageStorage.closeController(convId);
+      }
+      _log.d('BackgroundMessage', 'Closed MessageStorage controllers for all active conversations');
+    } catch (e) {
+      _log.e('BackgroundMessage', 'Error closing message storage controllers: $e');
+    }
   }
 
   Future<void> _processMessage(String conversationId, EncryptedMessage msg) async {

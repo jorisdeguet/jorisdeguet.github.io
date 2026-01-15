@@ -96,17 +96,45 @@ class MessageStorageService {
   final Map<String, StreamController<List<DecryptedMessageData>>> _controllers = {};
 
   Stream<List<DecryptedMessageData>> watchConversationMessages(String conversationId) {
-    // Créer le controller si nécessaire
+    // Ensure internal controller exists (used to broadcast updates)
     if (!_controllers.containsKey(conversationId)) {
       _log.d('MessageStorage', 'Creating stream controller for conversation $conversationId');
-      _controllers[conversationId] = StreamController<List<DecryptedMessageData>>.broadcast(onListen: () async {
-        // Emission initiale
-        final msgs = await getConversationMessages(conversationId);
-        if (!_controllers[conversationId]!.isClosed) _controllers[conversationId]!.add(msgs);
-      });
+      _controllers[conversationId] = StreamController<List<DecryptedMessageData>>.broadcast();
     }
-    _log.d('MessageStorage', 'watchConversationMessages subscribed for $conversationId');
-    return _controllers[conversationId]!.stream;
+
+    _log.d('MessageStorage', 'watchConversationMessages subscribed (wrapper) for $conversationId');
+
+    // Return a per-subscriber stream that first emits the current stored messages
+    // and then forwards updates from the shared broadcast controller. Using
+    // Stream.multi ensures each subscriber receives the initial snapshot even
+    // if other subscribers are already present.
+    return Stream.multi((subscriber) async {
+      // Emit initial snapshot
+      try {
+        final initial = await getConversationMessages(conversationId);
+        subscriber.add(initial);
+      } catch (e) {
+        _log.e('MessageStorage', 'Error emitting initial messages: $e');
+      }
+
+      // Forward subsequent updates
+      final sub = _controllers[conversationId]!.stream.listen((msgs) {
+        try {
+          subscriber.add(msgs);
+        } catch (e) {
+          // ignore add errors when subscriber is closed
+        }
+      }, onError: (e) {
+        try {
+          subscriber.addError(e);
+        } catch (_) {}
+      });
+
+      // Cancel forwarding when subscriber cancels
+      subscriber.onCancel = () async {
+        await sub.cancel();
+      };
+    });
   }
 
   Future<void> _emitConversationMessages(String conversationId) async {
@@ -263,6 +291,15 @@ class MessageStorageService {
       // Notify listeners
       await _emitConversationMessages(conversationId);
 
+      // Close and remove any controller to avoid leaks for deleted conversations
+      if (_controllers.containsKey(conversationId)) {
+        try {
+          await _controllers[conversationId]!.close();
+        } catch (_) {}
+        _controllers.remove(conversationId);
+        _log.d('MessageStorage', 'Controller closed for deleted conversation $conversationId');
+      }
+
       _log.i('MessageStorage', 'All messages deleted');
     } catch (e) {
       _log.e('MessageStorage', 'Error deleting conversation messages: $e');
@@ -296,5 +333,18 @@ class MessageStorageService {
     final prefs = await SharedPreferences.getInstance();
     final key = '${_messagePrefix}list_$conversationId';
     return prefs.getStringList(key) ?? [];
+  }
+
+  /// Close and remove the controller for a conversation (safe to call multiple times)
+  Future<void> closeController(String conversationId) async {
+    if (_controllers.containsKey(conversationId)) {
+      _log.d('MessageStorage', 'Closing controller for $conversationId');
+      try {
+        await _controllers[conversationId]!.close();
+      } catch (e) {
+        _log.e('MessageStorage', 'Error closing controller for $conversationId: $e');
+      }
+      _controllers.remove(conversationId);
+    }
   }
 }

@@ -286,15 +286,23 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   Stream<List<_DisplayMessage>> _getCombinedMessagesStream() async* {
     // Now the UI only listens to local decrypted messages which are produced
     // by the BackgroundMessageService. This decouples decryption from UI.
-    await for (final localMessages in _messageStorage.watchConversationMessages(widget.conversation.id)) {
-      final combined = <_DisplayMessage>[];
-      for (final local in localMessages) {
-        combined.add(_DisplayMessage.fromLocal(local));
+    try {
+      // Rely on MessageStorageService.watchConversationMessages to emit an
+      // initial snapshot per-subscriber. Convert each emitted list into
+      // _DisplayMessage and yield it.
+      await for (final localMessages in _messageStorage.watchConversationMessages(widget.conversation.id)) {
+        final combined = <_DisplayMessage>[];
+        for (final local in localMessages) {
+          combined.add(_DisplayMessage.fromLocal(local));
+        }
+        combined.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        yield combined;
       }
-      combined.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      yield combined;
+    } catch (e) {
+      _log.e('ConversationDetail', 'ERROR in _getCombinedMessagesStream: $e');
+      yield [];
     }
-  }
+   }
 
   Future<void> _loadSharedKey() async {
     _log.d('ConversationDetail', 'Loading shared key for ${widget.conversation.id}');
