@@ -19,205 +19,32 @@ class KeyStorageService {
   final _log = AppLogger();
 
   /// Sauvegarde une clé partagée pour une conversation
-  /// kexContributions: optional list of { 'kexId': string, 'startBit': int, 'endBit': int }
-  Future<void> saveKey(String conversationId, SharedKey key, {String? lastKexId, List<Map<String, dynamic>>? kexContributions}) async {
-     _log.i('KeyStorage', 'saveKey: conversationId=$conversationId, keyLength=${key.lengthInBits} bits, lastKexId=$lastKexId, contributions=${kexContributions?.length ?? 0}');
+  Future<void> saveKey(String conversationId, SharedKey key, {String? lastKexId}) async {
+     _log.i('KeyStorage', 'saveKey: conversationId=$conversationId, keyLength=${key.lengthInBits} bits, lastKexId=$lastKexId');
 
      try {
-       // Prepare values to write (we will compute effective lastKexId after reading existing meta)
-       final keyData = base64Encode(key.keyData);
-       final nextAvailable = key.nextAvailableByte;
-
-       // Reopen prefs and re-check to avoid redundant write after pending save
        final prefs = await SharedPreferences.getInstance();
-       final existingKeyData = prefs.getString('$_keyPrefix$conversationId');
-       final existingMeta = prefs.getString('${_keyPrefix}meta_$conversationId');
 
-       if (existingKeyData == keyData && existingMeta != null) {
-         bool peersEqual = false;
-         bool sameKex = false;
-         bool contributionsEqual = false;
-         try {
-           final Map<String, dynamic> existingMetaJson = jsonDecode(existingMeta) as Map<String, dynamic>;
+       // Sérialiser la clé complète avec son historique
+       final keyJson = key.toJson();
 
-           final existingLastKex = existingMetaJson['lastKexId'] as String?;
-           sameKex = (existingLastKex == lastKexId);
-
-           final existingPeerIds = (existingMetaJson['peerIds'] as List?)?.map((e) => e.toString()).toList() ?? [];
-           final newPeerIds = List<String>.from(key.peerIds);
-           existingPeerIds.sort();
-           newPeerIds.sort();
-           peersEqual = listEquals(existingPeerIds, newPeerIds);
-
-           final existingContrib = existingMetaJson['kexContributions'] as List?;
-           if (existingContrib == null && kexContributions == null) {
-             contributionsEqual = true;
-           } else if (existingContrib != null && kexContributions != null) {
-             List<Map<String, dynamic>> a = existingContrib.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-             List<Map<String, dynamic>> b = kexContributions.map((e) => Map<String, dynamic>.from(e)).toList();
-             a.sort((x, y) => (x['kexId'] as String).compareTo(y['kexId'] as String));
-             b.sort((x, y) => (x['kexId'] as String).compareTo(y['kexId'] as String));
-             contributionsEqual = const DeepCollectionEquality().equals(a, b);
-           }
-
-           final existingNextAvail = existingMetaJson['nextAvailableByte'] as int? ?? key.startOffset;
-
-           if (peersEqual && sameKex && contributionsEqual && existingNextAvail == nextAvailable) {
-             _log.i('KeyStorage', 'saveKey: SKIPPED (no changes to key bytes/peers/nextAvailableByte and same lastKexId and contributions)');
-             return;
-           }
-         } catch (_) {
-           // ignore and proceed to save
-         }
-       }
-
-       // Determine effective lastKexId: prefer provided lastKexId, otherwise preserve existing value
-       String? effectiveLastKex;
+       // Ajouter lastKexId si fourni
        if (lastKexId != null) {
-         effectiveLastKex = lastKexId;
-       } else if (existingMeta != null) {
-         try {
-           final Map<String, dynamic> existingMetaJson = jsonDecode(existingMeta) as Map<String, dynamic>;
-           effectiveLastKex = existingMetaJson['lastKexId'] as String?;
-         } catch (_) {
-           effectiveLastKex = null;
+         keyJson['lastKexId'] = lastKexId;
+       } else {
+         // Préserver le lastKexId existant si présent
+         final existingMeta = prefs.getString('${_keyPrefix}meta_$conversationId');
+         if (existingMeta != null) {
+           try {
+             final existingJson = jsonDecode(existingMeta) as Map<String, dynamic>;
+             keyJson['lastKexId'] = existingJson['lastKexId'];
+           } catch (_) {}
          }
        }
 
-       // Determine effective contributions: merge existing contributions with provided ones
-       List<Map<String, dynamic>>? effectiveContrib;
-       if (kexContributions != null && kexContributions.isNotEmpty) {
-         effectiveContrib = kexContributions.map((e) => Map<String, dynamic>.from(e)).toList();
-       } else if (existingMeta != null) {
-         try {
-           final Map<String, dynamic> existingMetaJson = jsonDecode(existingMeta) as Map<String, dynamic>;
-           final existingContrib = existingMetaJson['kexContributions'] as List?;
-           if (existingContrib != null) {
-             effectiveContrib = existingContrib.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-           }
-         } catch (_) {
-           effectiveContrib = null;
-         }
-       }
-
-       final prefsInner = await SharedPreferences.getInstance();
-
-       // If there's an existing key and the new keyData begins with the existing bytes,
-       // treat this as an extension and merge metadata instead of blindly overwriting.
-       if (existingKeyData != null) {
-         try {
-           final existingBytes = base64Decode(existingKeyData);
-           final newBytes = base64Decode(keyData);
-
-           _log.d('KeyStorage', 'Extension check: existing=${existingBytes.length} bytes, new=${newBytes.length} bytes');
-
-           bool isExtension = newBytes.length > existingBytes.length;
-           bool prefixMatches = false;
-           if (isExtension) {
-             prefixMatches = true;
-             for (int i = 0; i < existingBytes.length; i++) {
-               if (existingBytes[i] != newBytes[i]) {
-                 prefixMatches = false;
-                 break;
-               }
-             }
-             _log.d('KeyStorage', 'Extension prefixMatches=$prefixMatches for ${existingBytes.length} bytes');
-             isExtension = prefixMatches;
-           } else {
-             _log.d('KeyStorage', 'Extension check: new is not longer than existing (not an extension)');
-           }
-
-           if (isExtension) {
-             _log.i('KeyStorage', 'Detected key extension; merging metadata');
-
-             final existingMetaJson = existingMeta != null ? jsonDecode(existingMeta) as Map<String, dynamic> : null;
-             final existingPeerIds = existingMetaJson != null
-                 ? (existingMetaJson['peerIds'] as List?)?.map((e) => e.toString()).toList() ?? []
-                 : [];
-             final combinedPeers = {...existingPeerIds, ...key.peerIds}.toList()..sort();
-
-             // Preserve createdAt from existing meta when extending
-             String createdAtStr = key.createdAt.toIso8601String();
-             if (existingMetaJson != null && existingMetaJson['createdAt'] != null) {
-               createdAtStr = existingMetaJson['createdAt'] as String;
-             }
-
-             // Preserve nextAvailableByte from existing metadata if present, otherwise use key.nextAvailableByte
-             final mergedNextAvailable = existingMetaJson != null
-                 ? (existingMetaJson['nextAvailableByte'] as int? ?? key.nextAvailableByte)
-                 : key.nextAvailableByte;
-
-             // Merge kexContributions: keep existing and expand with provided
-             final Map<String, Map<String, dynamic>> contribById = {};
-             if (existingMetaJson != null && existingMetaJson['kexContributions'] != null) {
-               for (final e in (existingMetaJson['kexContributions'] as List)) {
-                 final m = Map<String, dynamic>.from(e as Map);
-                 int sByte = m['startByte'] as int? ?? 0;
-                 int eByte = m['endByte'] as int? ?? 0;
-                 contribById[m['kexId'] as String] = {
-                   'kexId': m['kexId'],
-                   'startByte': sByte,
-                   'endByte': eByte,
-                 };
-               }
-             }
-             if (effectiveContrib != null) {
-               for (final e in effectiveContrib) {
-                 final id = e['kexId'] as String;
-                 int s = e['startByte'] as int? ?? 0;
-                 int ed = e['endByte'] as int? ?? 0;
-
-                 if (contribById.containsKey(id)) {
-                   contribById[id]!['startByte'] = min(contribById[id]!['startByte'] as int, s);
-                   contribById[id]!['endByte'] = max(contribById[id]!['endByte'] as int, ed);
-                 } else {
-                   contribById[id] = {
-                     'kexId': id,
-                     'startByte': s,
-                     'endByte': ed,
-                   };
-                 }
-               }
-             }
-
-             final mergedContrib = contribById.values.toList();
-
-             final metadataMap = {
-               'id': key.id,
-               'peerIds': combinedPeers,
-               'createdAt': createdAtStr,
-               'startOffset': key.startOffset,
-               'lastKexId': effectiveLastKex,
-               'kexContributions': mergedContrib,
-               'nextAvailableByte': mergedNextAvailable,
-             };
-
-             final metadata = jsonEncode(metadataMap);
-             await prefsInner.setString('$_keyPrefix$conversationId', keyData);
-             await prefsInner.setString('${_keyPrefix}meta_$conversationId', metadata);
-
-             _log.i('KeyStorage', 'saveKey: SUCCESS (merged extension)');
-             return;
-           }
-         } catch (_) {
-           // Fall back to default behavior below
-         }
-       }
-
-       // Default behavior: overwrite
-       await prefsInner.setString('$_keyPrefix$conversationId', keyData);
-       final metadataMap = {
-         'id': key.id,
-         'peerIds': key.peerIds,
-         'createdAt': key.createdAt.toIso8601String(),
-         'startOffset': key.startOffset,
-         'lastKexId': effectiveLastKex,
-         'kexContributions': effectiveContrib,
-         'nextAvailableByte': nextAvailable,
-       };
-       final metadata = jsonEncode(metadataMap);
-       await prefsInner.setString('${_keyPrefix}meta_$conversationId', metadata);
-
+       // Sauvegarder les données de la clé
+       await prefs.setString('$_keyPrefix$conversationId', base64Encode(key.keyData));
+       await prefs.setString('${_keyPrefix}meta_$conversationId', jsonEncode(keyJson));
 
        _log.i('KeyStorage', 'saveKey: SUCCESS');
      } catch (e) {
@@ -250,16 +77,13 @@ class KeyStorageService {
        final keyData = base64Decode(keyDataStr);
        final metadata = jsonDecode(metadataStr) as Map<String, dynamic>;
 
-      // Read kexContributions if present
-      List<KexContribution>? kexContribs;
-      final rawContrib = metadata['kexContributions'] as List?;
-      if (rawContrib != null) {
-        kexContribs = rawContrib
-            .map((e) => KexContribution.fromJson(Map<String, dynamic>.from(e as Map)))
-            .toList();
-      }
+       // Charger l'historique si présent
+       KeyHistory? history;
+       if (metadata['history'] != null) {
+         history = KeyHistory.fromJson(metadata['history'] as Map<String, dynamic>);
+       }
 
-      final nextAvail = metadata['nextAvailableByte'] as int? ?? (metadata['startOffset'] as int? ?? 0);
+       final nextAvail = metadata['nextAvailableByte'] as int? ?? (metadata['startOffset'] as int? ?? 0);
 
        final key = SharedKey(
          id: metadata['id'] as String,
@@ -267,7 +91,7 @@ class KeyStorageService {
          peerIds: List<String>.from(metadata['peerIds'] as List),
          createdAt: DateTime.parse(metadata['createdAt'] as String),
          startOffset: metadata['startOffset'] as int? ?? 0,
-         kexContributions: kexContribs,
+         history: history,
          nextAvailableByte: nextAvail,
        );
 

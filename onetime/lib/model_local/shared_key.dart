@@ -2,26 +2,11 @@ import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:math';
 
-/// Contribution d'une session KEX à une clé partagée
-class KexContribution {
-  final String kexId;
-  final int startByte;
-  final int endByte;
+import 'key_interval.dart';
+import 'key_history.dart';
 
-  KexContribution({required this.kexId, required this.startByte, required this.endByte});
-
-  Map<String, dynamic> toJson() => {
-        'kexId': kexId,
-        'startByte': startByte,
-        'endByte': endByte,
-      };
-
-  factory KexContribution.fromJson(Map<String, dynamic> json) => KexContribution(
-        kexId: json['kexId'] as String,
-        startByte: json['startByte'] as int,
-        endByte: json['endByte'] as int,
-      );
-}
+export 'key_interval.dart';
+export 'key_history.dart';
 
 /// Représente une clé partagée entre plusieurs pairs pour le chiffrement One-Time Pad.
 ///
@@ -49,18 +34,19 @@ class SharedKey {
   /// Indique combien d'octets ont été tronqués au début de la clé.
   final int startOffset;
 
-  final List<KexContribution>? kexContributions;
+  /// Historique des opérations sur la clé (extensions et consommations)
+  final KeyHistory history;
 
   SharedKey({
     required this.id,
     required this.keyData,
     required this.peerIds,
-    // Uint8List? usedBitmap, // legacy: removed
     DateTime? createdAt,
     this.startOffset = 0,
-    this.kexContributions,
+    KeyHistory? history,
     int? nextAvailableByte,
   })  : _nextAvailableByte = nextAvailableByte ?? startOffset,
+        history = history ?? KeyHistory(conversationId: id),
         createdAt = createdAt ?? DateTime.now() {
     // S'assurer que les peers sont triés
     peerIds.sort();
@@ -74,6 +60,22 @@ class SharedKey {
 
   /// Public getter for next available byte index
   int get nextAvailableByte => _nextAvailableByte;
+
+  /// Retourne l'intervalle actuel de la clé sous forme de KeyInterval.
+  /// startIndex = nextAvailableByte (premier octet disponible)
+  /// endIndex = startOffset + keyData.length (fin de la clé)
+  KeyInterval get interval => KeyInterval(
+    conversationId: id,
+    startIndex: _nextAvailableByte,
+    endIndex: startOffset + keyData.length,
+  );
+
+  /// Retourne l'intervalle total de la clé (depuis startOffset jusqu'à la fin)
+  KeyInterval get totalInterval => KeyInterval(
+    conversationId: id,
+    startIndex: startOffset,
+    endIndex: startOffset + keyData.length,
+  );
 
   /// Longueur totale logique de la clé en octets (incluant l'offset)
   int get lengthInBytes => startOffset + keyData.length;
@@ -197,6 +199,27 @@ class SharedKey {
     markBytesAsUsed(startByte, startByte + lengthBytes);
   }
 
+  /// Consomme un segment de clé spécifié par un KeyInterval.
+  /// Équivalent à consumeBytes(segment.startIndex, segment.length).
+  void consume(KeyInterval segment) {
+    consumeBytes(segment.startIndex, segment.length);
+  }
+
+  /// Alloue et consomme un segment de la taille demandée.
+  /// Retourne le KeyInterval du segment alloué, ou null si pas assez d'espace.
+  KeyInterval? allocateAndConsume(int bytesNeeded) {
+    final seg = findAvailableSegmentByBytes('', bytesNeeded);
+    if (seg == null) return null;
+
+    final interval = KeyInterval(
+      conversationId: id,
+      startIndex: seg.startByte,
+      endIndex: seg.startByte + seg.lengthBytes,
+    );
+    consume(interval);
+    return interval;
+  }
+
   /// Compte les octets disponibles dans toute la clé (allocation linéaire)
   int countAvailableBytes(String peerId) {
     final firstFree = max(startOffset, _nextAvailableByte);
@@ -209,22 +232,36 @@ class SharedKey {
   }
 
   /// Ajoute des octets à la fin de la clé (pour l'agrandissement)
-  SharedKey extend(Uint8List additionalKeyData) {
+  /// [kexId] - ID de la session d'échange pour l'historique (optionnel)
+  SharedKey extend(Uint8List additionalKeyData, {String? kexId}) {
     if (additionalKeyData.isEmpty) return this;
 
     final newKeyData = Uint8List(keyData.length + additionalKeyData.length);
     newKeyData.setRange(0, keyData.length, keyData);
     newKeyData.setRange(keyData.length, newKeyData.length, additionalKeyData);
 
-    // nextAvailableByte stays the same (relative to original keyData),
-    // no bytes are implicitly consumed in the newly appended area.
+    // Create extended segment for history
+    final extSegment = KeyInterval(
+      conversationId: id,
+      startIndex: startOffset + keyData.length,
+      endIndex: startOffset + newKeyData.length,
+    );
+
+    // Copy history and record extension
+    final newHistory = history.copy();
+    newHistory.recordExtension(
+      segment: extSegment,
+      reason: kexId != null ? 'kex id=$kexId' : 'extend',
+      kexId: kexId,
+    );
+
     return SharedKey(
       id: id,
       keyData: newKeyData,
       peerIds: List.from(peerIds),
       createdAt: createdAt,
       startOffset: startOffset,
-      kexContributions: kexContributions == null ? null : List.from(kexContributions!),
+      history: newHistory,
       nextAvailableByte: _nextAvailableByte,
     );
   }
@@ -241,6 +278,7 @@ class SharedKey {
         peerIds: List.from(peerIds),
         createdAt: createdAt,
         startOffset: newStartOffset,
+        history: history.copy(),
         nextAvailableByte: newStartOffset,
       );
     }
@@ -259,8 +297,8 @@ class SharedKey {
       peerIds: List.from(peerIds),
       createdAt: createdAt,
       startOffset: actualNewOffset,
-      kexContributions: kexContributions == null ? null : List.from(kexContributions!),
-      nextAvailableByte: actualNewOffset + newNextAvailable, // store absolute index relative to original semantics
+      history: history.copy(),
+      nextAvailableByte: actualNewOffset + newNextAvailable,
     );
   }
 
@@ -284,7 +322,7 @@ class SharedKey {
       peerIds: List.from(peerIds),
       createdAt: createdAt,
       startOffset: 0,
-      kexContributions: kexContributions == null ? null : List.from(kexContributions!),
+      history: history.copy(),
       nextAvailableByte: 0,
     );
   }
@@ -295,32 +333,34 @@ class SharedKey {
       'id': id,
       'keyData': base64Encode(keyData),
       'peerIds': peerIds,
-      // Emit the new compact field (no legacy usedBitmap)
       'nextAvailableByte': _nextAvailableByte,
       'createdAt': createdAt.toIso8601String(),
       'startOffset': startOffset,
-      'kexContributions': kexContributions?.map((c) => c.toJson()).toList(),
+      'history': history.toJson(),
     };
   }
 
   /// Désérialise une clé depuis le stockage local
   factory SharedKey.fromJson(Map<String, dynamic> json) {
-    final kexList = (json['kexContributions'] as List?)
-        ?.map((e) => KexContribution.fromJson(Map<String, dynamic>.from(e as Map)))
-        .toList();
-
     final keyData = base64Decode(json['keyData'] as String);
     final startOffset = json['startOffset'] as int? ?? 0;
+    final id = json['id'] as String;
+
+    // Charger l'historique si présent
+    KeyHistory? history;
+    if (json['history'] != null) {
+      history = KeyHistory.fromJson(json['history'] as Map<String, dynamic>);
+    }
 
     int? nextAvail = json['nextAvailableByte'] as int? ?? startOffset;
 
     return SharedKey(
-      id: json['id'] as String,
+      id: id,
       keyData: Uint8List.fromList(keyData),
       peerIds: List<String>.from(json['peerIds'] as List),
       createdAt: DateTime.parse(json['createdAt'] as String),
       startOffset: startOffset,
-      kexContributions: kexList,
+      history: history,
       nextAvailableByte: nextAvail,
     );
   }

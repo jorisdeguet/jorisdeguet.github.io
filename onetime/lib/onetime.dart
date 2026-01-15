@@ -22,7 +22,6 @@ export 'services/key_exchange_service.dart';
 export 'services/key_exchange_sync_service.dart';
 export 'services/key_storage_service.dart';
 export 'services/crypto_service.dart';
-export 'services/firebase_message_service.dart';
 export 'services/auth_service.dart';
 export 'services/compression_service.dart';
 export 'services/format_service.dart';

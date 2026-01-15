@@ -462,16 +462,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
       // Sauvegarder la clé localement avec le même conversationId
       _log.d('KeyExchange', 'Reader: Saving shared key locally for conversation ${conversation.id}');
-      final readerContrib = _firestoreSession != null
-        ? [
-            {
-              'kexId': _firestoreSession!.id,
-              'startByte': (_firestoreSession!.startIndex * KeyExchangeService.segmentSizeBytes),
-              'endByte': min(finalKey.lengthInBytes, _firestoreSession!.endIndex * KeyExchangeService.segmentSizeBytes)
-            }
-          ]
-        : null;
-      await _keyStorageService.saveKey(conversation.id, finalKey, lastKexId: _firestoreSession?.id, kexContributions: readerContrib);
+      await _keyStorageService.saveKey(conversation.id, finalKey, lastKexId: _firestoreSession?.id);
       _log.i('KeyExchange', 'Reader: Shared key saved successfully');
 
       // Update Firestore keyDebugInfo immediately with the new key size
@@ -925,16 +916,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
       // Sauvegarder la clé localement
       _log.d('KeyExchange', 'Saving shared key locally for conversation $conversationId');
-      final sourceContrib = _firestoreSession != null
-        ? [
-            {
-              'kexId': _firestoreSession!.id,
-              'startByte': (_firestoreSession!.startIndex * KeyExchangeService.segmentSizeBytes),
-              'endByte': min(finalKey.lengthInBytes, _firestoreSession!.endIndex * KeyExchangeService.segmentSizeBytes)
-            }
-          ]
-        : null;
-      await _keyStorageService.saveKey(conversationId, finalKey, lastKexId: _firestoreSession?.id, kexContributions: sourceContrib);
+      await _keyStorageService.saveKey(conversationId, finalKey, lastKexId: _firestoreSession?.id);
       _log.i('KeyExchange', 'Shared key saved successfully');
 
       // Update Firestore keyDebugInfo immediately with the new key size

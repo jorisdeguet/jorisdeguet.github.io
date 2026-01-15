@@ -89,6 +89,7 @@ class CryptoService {
       startByte: startByte,
       lengthBytes: lengthBytes,
       usedByPeerId: localPeerId,
+      conversationId: sharedKey.id,
     );
 
     return (message: encryptedMessage, usedSegment: usedSegment);
