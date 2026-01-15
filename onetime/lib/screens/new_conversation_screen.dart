@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:get_it/get_it.dart';
 
 import '../services/auth_service.dart';
 import '../services/conversation_service.dart';
 import '../services/app_logger.dart';
-import '../services/service_locator.dart';
+import '../services/background_message_service.dart';
 import 'key_exchange_screen.dart';
 
 /// Écran de création d'une nouvelle conversation.
@@ -66,9 +67,15 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
 
       // Initialize background service and start listening to this conversation
       try {
-        BackgroundServiceLocator.init(localUserId: _currentUserId);
-        BackgroundServiceLocator.instance.startForConversation(conversation.id);
-        BackgroundServiceLocator.instance.rescanConversation(conversation.id).catchError((e) {
+        final getIt = GetIt.instance;
+        if (!getIt.isRegistered<BackgroundMessageService>()) {
+          final svc = BackgroundMessageService(localUserId: _currentUserId);
+          getIt.registerSingleton<BackgroundMessageService>(svc);
+          svc.startWatchingUserConversations();
+        }
+        final svc = getIt.get<BackgroundMessageService>();
+        svc.startForConversation(conversation.id);
+        svc.rescanConversation(conversation.id).catchError((e) {
           _log.e('NewConversation', 'Background rescan failed: $e');
         });
       } catch (e) {
@@ -293,4 +300,3 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
     );
   }
 }
-

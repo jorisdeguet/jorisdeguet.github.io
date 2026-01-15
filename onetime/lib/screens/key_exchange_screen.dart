@@ -19,7 +19,6 @@ import '../services/crypto_service.dart';
 import '../services/qr_segment_cache_service.dart';
 import '../services/key_pre_generation_service.dart';
 import '../services/app_logger.dart';
-import '../services/service_locator.dart';
 import 'key_exchange_summary_screen.dart';
 
 /// Écran d'échange de clé via QR codes.
@@ -480,17 +479,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       // await _sync_service.deleteSession(_firestore_session!.id);
       _log.d('KeyExchange', 'Reader: Key exchange completed (session cleanup by source)');
 
-      // Ensure background service is initialized and attempt a rescan so the
-      // reader gets recent messages decrypted immediately. Do not block UI.
-      try {
-        BackgroundServiceLocator.init(localUserId: _currentUserId);
-        BackgroundServiceLocator.instance.rescanConversation(conversation.id).catchError((e) {
-          _log.e('KeyExchange', 'Background rescan failed: $e');
-        });
-      } catch (e) {
-        _log.e('KeyExchange', 'Could not initialize background service: $e');
-      }
-
       if (mounted) {
         // Navigate to summary screen
         Navigator.pushReplacement(
@@ -943,18 +931,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
       // Envoyer le message pseudo chiffré
       await _sendPseudoMessage(conversationId, finalKey);
-
-      // Initialize background service and ensure we start listening to this conversation
-      try {
-        BackgroundServiceLocator.init(localUserId: _currentUserId);
-        // Start listening immediately and trigger a rescan in background
-        BackgroundServiceLocator.instance.startForConversation(conversationId);
-        BackgroundServiceLocator.instance.rescanConversation(conversationId).catchError((e) {
-          _log.e('KeyExchange', 'Background rescan failed (source): $e');
-        });
-      } catch (e) {
-        _log.e('KeyExchange', 'Could not initialize background service (source): $e');
-      }
 
       // Supprimer la session d'échange de Firestore (nettoyage par la source)
       if (_firestoreSession != null) {
@@ -1659,6 +1635,14 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     }
   }
 }
+
+
+
+
+
+
+
+
 
 
 

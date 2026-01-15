@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:get_it/get_it.dart';
 
 import '../services/auth_service.dart';
 import '../services/conversation_service.dart';
@@ -149,7 +150,6 @@ class _ConversationsListScreenState extends State<ConversationsListScreen> {
   late ConversationService _conversationService;
   Stream<List<Conversation>>? _conversationsStream;
 
-  BackgroundMessageService? _bgService;
 
   @override
   void initState() {
@@ -158,34 +158,87 @@ class _ConversationsListScreenState extends State<ConversationsListScreen> {
 
     // Start background service only when we have a valid userId
     if (widget.userId.isNotEmpty) {
-      _bgService = BackgroundMessageService(localUserId: widget.userId);
-      _bgService?.startWatchingUserConversations();
-    }
-  }
+      try {
+        final getIt = GetIt.instance;
+        if (!getIt.isRegistered<BackgroundMessageService>()) {
+          final svc = BackgroundMessageService(localUserId: widget.userId);
+          getIt.registerSingleton<BackgroundMessageService>(svc);
+          svc.startWatchingUserConversations();
+        }
 
-  @override
-  void didUpdateWidget(covariant ConversationsListScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
+        final svc = GetIt.instance.get<BackgroundMessageService>();
 
-    // If userId changed, recreate or stop the background service accordingly
-    if (oldWidget.userId != widget.userId) {
-      _bgService?.stopWatchingUserConversations();
-      _bgService?.stopAll();
-      if (widget.userId.isNotEmpty) {
-        _bgService = BackgroundMessageService(localUserId: widget.userId);
-        _bgService?.startWatchingUserConversations();
-      } else {
-        _bgService = null;
+        // One-shot: fetch current conversations and ask the background service
+        // to rescan them so any pending messages are processed immediately.
+        _conversationService = ConversationService(localUserId: widget.userId);
+        _conversationService.watchUserConversations().first.then((convs) {
+          for (final c in convs) {
+            svc.startForConversation(c.id);
+          }
+        }).catchError((_) {});
+      } catch (e) {
+        // Do not crash UI if background init fails
       }
     }
   }
 
-  @override
-  void dispose() {
-    _bgService?.stopWatchingUserConversations();
-    _bgService?.stopAll();
-    super.dispose();
-  }
+  // @override
+  // void didUpdateWidget(covariant ConversationsListScreen oldWidget) {
+  //   super.didUpdateWidget(oldWidget);
+  //
+  //   // If userId changed, recreate or stop the background service accordingly
+  //   if (oldWidget.userId != widget.userId) {
+  //     // If we registered a singleton, stop it on disposal of widget tree
+  //     try {
+  //       final getIt = GetIt.instance;
+  //       if (getIt.isRegistered<BackgroundMessageService>()) {
+  //         final svc = getIt.get<BackgroundMessageService>();
+  //         svc.stopWatchingUserConversations();
+  //         svc.stopAll();
+  //         getIt.unregister<BackgroundMessageService>();
+  //       }
+  //     } catch (_) {}
+  //
+  //     if (widget.userId.isNotEmpty) {
+  //       try {
+  //         final getIt = GetIt.instance;
+  //         if (!getIt.isRegistered<BackgroundMessageService>()) {
+  //           final svc = BackgroundMessageService(localUserId: widget.userId);
+  //           getIt.registerSingleton<BackgroundMessageService>(svc);
+  //           svc.startWatchingUserConversations();
+  //         }
+  //
+  //         final svc = GetIt.instance.get<BackgroundMessageService>();
+  //
+  //         // One-shot: fetch current conversations and ask the background service
+  //         // to rescan them so any pending messages are processed immediately.
+  //         _conversationService = ConversationService(localUserId: widget.userId);
+  //         _conversationService.watchUserConversations().first.then((convs) {
+  //           for (final c in convs) {
+  //             svc.startForConversation(c.id);
+  //           }
+  //         }).catchError((_) {});
+  //       } catch (e) {
+  //         // Do not crash UI if background init fails
+  //       }
+  //     }
+  //   }
+  // }
+
+  // @override
+  // void dispose() {
+  //   // If we registered a singleton, stop it on disposal of widget tree
+  //   try {
+  //     final getIt = GetIt.instance;
+  //     if (getIt.isRegistered<BackgroundMessageService>()) {
+  //       final svc = getIt.get<BackgroundMessageService>();
+  //       svc.stopWatchingUserConversations();
+  //       svc.stopAll();
+  //       getIt.unregister<BackgroundMessageService>();
+  //     }
+  //   } catch (_) {}
+  //   super.dispose();
+  // }
 
   void _initService() {
     _conversationService = ConversationService(localUserId: widget.userId);

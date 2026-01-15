@@ -89,25 +89,6 @@ class KeySegmentLock {
   /// Vérifie si le lock est expiré
   bool get isExpired => DateTime.now().isAfter(expiresAt);
 
-  /// Sérialise le lock pour transmission
-  Map<String, dynamic> toJson() {
-    return {
-      'lockId': lockId,
-      'segment': segment.toJson(),
-      'expiresAt': expiresAt.toIso8601String(),
-      'status': status.name,
-    };
-  }
-
-  /// Désérialise un lock
-  factory KeySegmentLock.fromJson(Map<String, dynamic> json) {
-    return KeySegmentLock(
-      lockId: json['lockId'] as String,
-      segment: KeySegment.fromJson(json['segment'] as Map<String, dynamic>),
-      expiresAt: DateTime.parse(json['expiresAt'] as String),
-      status: KeySegmentLockStatus.values.byName(json['status'] as String),
-    );
-  }
 }
 
 /// Statut d'un lock sur un segment de clé
