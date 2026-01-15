@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import '../model_local/shared_key.dart';
 import '../model_remote/encrypted_message.dart';
-import '../models/key_segment.dart';
 import 'compression_service.dart';
 
 /// Service de chiffrement/déchiffrement One-Time Pad.
@@ -29,8 +28,8 @@ class CryptoService {
   /// [deleteAfterRead] - Mode ultra-secure, suppression après lecture
   /// [compress] - Compresser le message avant chiffrement (défaut: true)
   /// 
-  /// Retourne le message chiffré et le segment utilisé pour mise à jour
-  ({EncryptedMessage message, KeySegment usedSegment}) encrypt({
+  /// Retourne le message chiffré et l'intervalle utilisé pour mise à jour
+  ({EncryptedMessage message, KeyInterval usedSegment}) encrypt({
     required String plaintext,
     required SharedKey sharedKey,
     bool deleteAfterRead = false,
@@ -83,13 +82,11 @@ class CryptoService {
       contentType: MessageContentType.text,
     );
 
-    // Créer le segment utilisé pour tracking
-    final usedSegment = KeySegment(
-      keyId: sharedKey.id,
-      startByte: startByte,
-      lengthBytes: lengthBytes,
-      usedByPeerId: localPeerId,
+    // Créer l'intervalle utilisé pour tracking
+    final usedSegment = KeyInterval(
       conversationId: sharedKey.id,
+      startIndex: startByte,
+      endIndex: startByte + lengthBytes,
     );
 
     return (message: encryptedMessage, usedSegment: usedSegment);
@@ -104,8 +101,8 @@ class CryptoService {
   /// [mimeType] - Type MIME du fichier
   /// [deleteAfterRead] - Mode ultra-secure, suppression après lecture
   ///
-  /// Retourne le message chiffré et le segment utilisé pour mise à jour
-  ({EncryptedMessage message, KeySegment usedSegment}) encryptBinary({
+  /// Retourne le message chiffré et l'intervalle utilisé pour mise à jour
+  ({EncryptedMessage message, KeyInterval usedSegment}) encryptBinary({
     required Uint8List data,
     required SharedKey sharedKey,
     required MessageContentType contentType,
@@ -147,12 +144,11 @@ class CryptoService {
       mimeType: mimeType,
     );
     
-    // Créer le segment utilisé pour tracking
-    final usedSegment = KeySegment(
-      keyId: sharedKey.id,
-      startByte: startByte,
-      lengthBytes: lengthBytes,
-      usedByPeerId: localPeerId,
+    // Créer l'intervalle utilisé pour tracking
+    final usedSegment = KeyInterval(
+      conversationId: sharedKey.id,
+      startIndex: startByte,
+      endIndex: startByte + lengthBytes,
     );
     
     return (message: encryptedMessage, usedSegment: usedSegment);
@@ -191,7 +187,7 @@ class CryptoService {
   /// Chiffre un long message qui peut nécessiter plusieurs segments.
   /// 
   /// Utile quand un seul segment contigu n'est pas disponible.
-  ({EncryptedMessage message, List<KeySegment> usedSegments}) encryptLong({
+  ({EncryptedMessage message, List<KeyInterval> usedSegments}) encryptLong({
     required String plaintext,
     required SharedKey sharedKey,
     bool deleteAfterRead = false,
@@ -226,11 +222,10 @@ class CryptoService {
     final startByte = seg.startByte;
     final lengthBytes = seg.lengthBytes;
 
-    final usedSegments = <KeySegment>[KeySegment(
-      keyId: sharedKey.id,
-      startByte: startByte,
-      lengthBytes: lengthBytes,
-      usedByPeerId: localPeerId,
+    final usedSegments = <KeyInterval>[KeyInterval(
+      conversationId: sharedKey.id,
+      startIndex: startByte,
+      endIndex: startByte + lengthBytes,
     )];
 
     final encryptedMessage = EncryptedMessage(
@@ -354,7 +349,7 @@ class InsufficientKeyException implements Exception {
 /// Résultat d'une tentative de réservation de segment
 class SegmentReservationResult {
   final bool success;
-  final KeySegment? segment;
+  final KeyInterval? segment;
   final String? errorMessage;
 
   SegmentReservationResult.success(this.segment) 
