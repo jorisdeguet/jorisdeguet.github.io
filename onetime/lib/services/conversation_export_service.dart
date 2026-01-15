@@ -34,11 +34,8 @@ class ConversationExportService {
       final pseudos = await _pseudoService.getPseudos(conversationId);
       _log.d('ExportService', 'Found ${pseudos.length} pseudos');
 
-      // Calculate used bytes by checking used byte map
-      int usedBytes = 0;
-      for (int b = sharedKey.startOffset; b < sharedKey.keyData.length; b++) {
-        if (sharedKey.usedBitmap[b] != 0) usedBytes++;
-      }
+      // Calculate used bytes by checking nextAvailableByte
+      final usedBytes = sharedKey.nextAvailableByte - sharedKey.startOffset;
 
       return ConversationExportData(
         conversationId: conversationId,

@@ -1257,20 +1257,12 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
   Future<void> _truncateKey() async {
     if (_sharedKey == null) return;
-    
-    // Calculer l'offset sûr (fin des octets entièrement utilisés au début)
-    final usedBitmap = _sharedKey!.usedBitmap;
-    int bytesToRemove = 0;
-    
-    // Compter les octets consécutifs à 0xFF au début
-    for (int i = 0; i < usedBitmap.length; i++) {
-      if (usedBitmap[i] == 0xFF) {
-        bytesToRemove++;
-      } else {
-        break;
-      }
-    }
-    
+
+    // Calculate number of leading fully-used bytes using nextAvailableByte
+    final nextAvail = _sharedKey!.nextAvailableByte;
+    final currentOffset = _sharedKey!.startOffset;
+    final bytesToRemove = (nextAvail - currentOffset).clamp(0, _sharedKey!.keyData.length);
+
     if (bytesToRemove == 0) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1279,20 +1271,19 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       }
       return;
     }
-    
-    final currentOffset = _sharedKey!.startOffset;
-    final newOffset = currentOffset + (bytesToRemove * 8);
-    
+
+    final newOffset = currentOffset + bytesToRemove;
+
     try {
       final truncatedKey = _sharedKey!.truncate(newOffset);
       await _keyStorageService.saveKey(widget.conversation.id, truncatedKey);
-      
+
       setState(() {
         _sharedKey = truncatedKey;
       });
-      
+
       await _updateKeyDebugInfo();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${bytesToRemove} octets de clé nettoyés.')),

@@ -26,10 +26,8 @@ class KexContribution {
 /// Représente une clé partagée entre plusieurs pairs pour le chiffrement One-Time Pad.
 ///
 /// L'allocation est linéaire : tous les pairs partagent l'espace entier de la clé.
-/// Cette implémentation force l'alignement sur octet et utilise un bitmap par octet
-/// (chaque octet est marqué 0 = libre, 1 = utilisé). Les anciennes API bit-level
-/// sont exposées en tant que wrappers pour compatibilité mais l'allocation se fait
-/// en octets.
+/// Cette implémentation force l'alignement sur octet et utilise un simple index
+/// `_nextAvailableByte` qui indique le premier octet libre (allocation linéaire).
 class SharedKey {
   /// Identifiant unique de la clé partagée
   final String id;
@@ -40,8 +38,9 @@ class SharedKey {
   /// Liste des IDs des pairs partageant cette clé (triés par ordre croissante)
   final List<String> peerIds;
 
-  /// Bitmap par octet indiquant si l'octet est utilisé (1) ou libre (0)
-  Uint8List _usedByteMap;
+  /// Index du premier octet libre (relatif à `keyData`, 0-based).
+  /// Tous les octets < _nextAvailableByte sont considérés comme consommés.
+  int _nextAvailableByte;
 
   /// Date de création de la clé
   final DateTime createdAt;
@@ -56,25 +55,25 @@ class SharedKey {
     required this.id,
     required this.keyData,
     required this.peerIds,
-    Uint8List? usedBitmap,
+    // Uint8List? usedBitmap, // legacy: removed
     DateTime? createdAt,
     this.startOffset = 0,
     this.kexContributions,
-  })  : _usedByteMap = usedBitmap ?? Uint8List(keyData.length),
+    int? nextAvailableByte,
+  })  : _nextAvailableByte = nextAvailableByte ?? startOffset,
         createdAt = createdAt ?? DateTime.now() {
     // S'assurer que les peers sont triés
     peerIds.sort();
 
-    // Ensure the used map has the expected size matching keyData.
-    if (_usedByteMap.length != keyData.length) {
-      final resized = Uint8List(keyData.length);
-      final copyLen = min(_usedByteMap.length, keyData.length);
-      if (copyLen > 0) {
-        resized.setRange(0, copyLen, _usedByteMap.sublist(0, copyLen));
-      }
-      _usedByteMap = resized;
-    }
+    // Normaliser _nextAvailableByte
+    final int maxIndex = keyData.length;
+
+    // Ensure within bounds
+    _nextAvailableByte = _nextAvailableByte.clamp(startOffset, startOffset + maxIndex);
   }
+
+  /// Public getter for next available byte index
+  int get nextAvailableByte => _nextAvailableByte;
 
   /// Longueur totale logique de la clé en octets (incluant l'offset)
   int get lengthInBytes => startOffset + keyData.length;
@@ -86,16 +85,18 @@ class SharedKey {
   int get peerCount => peerIds.length;
 
   void _checkByteIndex(int byteIndex) {
-    if (byteIndex < 0 || byteIndex >= _usedByteMap.length) {
-      throw StateError('Byte index out of range: $byteIndex (map length=${_usedByteMap.length})');
+    if (byteIndex < 0 || byteIndex >= keyData.length) {
+      throw StateError('Byte index out of range: $byteIndex (keyData length=${keyData.length})');
     }
   }
 
   /// Vérifie si un octet est déjà utilisé
   bool isByteUsed(int byteIndex) {
-    if (byteIndex < startOffset) return true; // considéré comme utilisé si tronqué
+    // If requested index is logically before the available data region, consider used
+    if (byteIndex < startOffset) return true;
     _checkByteIndex(byteIndex);
-    return _usedByteMap[byteIndex] != 0;
+    // Compare against nextAvailableByte (which is absolute relative to keyData)
+    return byteIndex < _nextAvailableByte;
   }
 
   /// Wrapper compatibilité : vérifie si un bit est utilisé en regardant l'octet contenant le bit.
@@ -105,12 +106,14 @@ class SharedKey {
   }
 
   /// Marque un intervalle d'octets comme utilisé (endByte exclusive)
+  /// En mode allocation linéaire, on avance simplement `_nextAvailableByte`.
   void markBytesAsUsed(int startByte, int endByte) {
     if (endByte <= startByte) return;
-    final s = startByte < startOffset ? startOffset : startByte;
-    for (int b = s; b < endByte && b < _usedByteMap.length; b++) {
-      _usedByteMap[b] = 0xFF;
-    }
+    final e = min(endByte, startOffset + keyData.length);
+    // Advance nextAvailableByte to cover the newly used end
+    _nextAvailableByte = max(_nextAvailableByte, e);
+    // Clamp
+    _nextAvailableByte = _nextAvailableByte.clamp(startOffset, startOffset + keyData.length);
   }
 
   /// Wrapper compatibilité : marque des bits comme utilisés en arrondissant aux octets couvrants
@@ -132,25 +135,14 @@ class SharedKey {
     return (startBit: startBit, endBit: endBit);
   }
 
-  /// Trouve le prochain segment disponible en octets (requiert octets contigus libres)
+  /// Trouve le prochain segment disponible en octets (allocation linéaire simplifiée)
   /// Retourne tuple (startByte, lengthBytes) ou null si pas assez d'octets.
   ({int startByte, int lengthBytes})? findAvailableSegmentByBytes(String peerId, int bytesNeeded) {
     if (bytesNeeded <= 0) return null;
-    final firstByteIndex = startOffset; // startOffset is in bytes now
-    int consecutive = 0;
-    int startByte = firstByteIndex;
-
-    for (int b = firstByteIndex; b < keyData.length; b++) {
-      final isByteFree = _usedByteMap[b] == 0;
-      if (isByteFree) {
-        if (consecutive == 0) startByte = b;
-        consecutive++;
-        if (consecutive >= bytesNeeded) {
-          return (startByte: startByte, lengthBytes: bytesNeeded);
-        }
-      } else {
-        consecutive = 0;
-      }
+    final firstFree = max(startOffset, _nextAvailableByte);
+    final available = keyData.length - (firstFree - startOffset);
+    if (available >= bytesNeeded) {
+      return (startByte: firstFree, lengthBytes: bytesNeeded);
     }
     return null;
   }
@@ -207,11 +199,8 @@ class SharedKey {
 
   /// Compte les octets disponibles dans toute la clé (allocation linéaire)
   int countAvailableBytes(String peerId) {
-    int count = 0;
-    for (int b = startOffset; b < keyData.length; b++) {
-      if (_usedByteMap[b] == 0) count++;
-    }
-    return count;
+    final firstFree = max(startOffset, _nextAvailableByte);
+    return keyData.length - (firstFree - startOffset);
   }
 
   /// Compte les bits disponibles (compat)
@@ -227,16 +216,16 @@ class SharedKey {
     newKeyData.setRange(0, keyData.length, keyData);
     newKeyData.setRange(keyData.length, newKeyData.length, additionalKeyData);
 
-    final newUsedMap = Uint8List(newKeyData.length);
-    newUsedMap.setRange(0, _usedByteMap.length, _usedByteMap);
-
+    // nextAvailableByte stays the same (relative to original keyData),
+    // no bytes are implicitly consumed in the newly appended area.
     return SharedKey(
       id: id,
       keyData: newKeyData,
       peerIds: List.from(peerIds),
-      usedBitmap: newUsedMap,
       createdAt: createdAt,
       startOffset: startOffset,
+      kexContributions: kexContributions == null ? null : List.from(kexContributions!),
+      nextAvailableByte: _nextAvailableByte,
     );
   }
 
@@ -252,6 +241,7 @@ class SharedKey {
         peerIds: List.from(peerIds),
         createdAt: createdAt,
         startOffset: newStartOffset,
+        nextAvailableByte: newStartOffset,
       );
     }
 
@@ -259,15 +249,18 @@ class SharedKey {
     final actualNewOffset = startOffset + bytesToRemove;
 
     final newKeyData = keyData.sublist(bytesToRemove);
-    final newUsedMap = _usedByteMap.sublist(bytesToRemove);
+
+    // Adjust nextAvailableByte relative to removed bytes
+    int newNextAvailable = (_nextAvailableByte - bytesToRemove).clamp(0, newKeyData.length);
 
     return SharedKey(
       id: id,
       keyData: newKeyData,
       peerIds: List.from(peerIds),
-      usedBitmap: newUsedMap,
       createdAt: createdAt,
       startOffset: actualNewOffset,
+      kexContributions: kexContributions == null ? null : List.from(kexContributions!),
+      nextAvailableByte: actualNewOffset + newNextAvailable, // store absolute index relative to original semantics
     );
   }
 
@@ -275,7 +268,7 @@ class SharedKey {
   SharedKey compact() {
     final availableBytes = <int>[];
     for (int b = startOffset; b < keyData.length; b++) {
-      if (_usedByteMap[b] == 0) availableBytes.add(b - startOffset);
+      if (b >= _nextAvailableByte) availableBytes.add(b - startOffset);
     }
 
     final newBytesNeeded = availableBytes.length;
@@ -291,6 +284,8 @@ class SharedKey {
       peerIds: List.from(peerIds),
       createdAt: createdAt,
       startOffset: 0,
+      kexContributions: kexContributions == null ? null : List.from(kexContributions!),
+      nextAvailableByte: 0,
     );
   }
 
@@ -300,7 +295,8 @@ class SharedKey {
       'id': id,
       'keyData': base64Encode(keyData),
       'peerIds': peerIds,
-      'usedBitmap': base64Encode(_usedByteMap),
+      // Emit the new compact field (no legacy usedBitmap)
+      'nextAvailableByte': _nextAvailableByte,
       'createdAt': createdAt.toIso8601String(),
       'startOffset': startOffset,
       'kexContributions': kexContributions?.map((c) => c.toJson()).toList(),
@@ -313,17 +309,19 @@ class SharedKey {
         ?.map((e) => KexContribution.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
 
+    final keyData = base64Decode(json['keyData'] as String);
+    final startOffset = json['startOffset'] as int? ?? 0;
+
+    int? nextAvail = json['nextAvailableByte'] as int? ?? startOffset;
+
     return SharedKey(
       id: json['id'] as String,
-      keyData: base64Decode(json['keyData'] as String),
+      keyData: Uint8List.fromList(keyData),
       peerIds: List<String>.from(json['peerIds'] as List),
-      usedBitmap: base64Decode(json['usedBitmap'] as String),
       createdAt: DateTime.parse(json['createdAt'] as String),
-      startOffset: json['startOffset'] as int? ?? 0,
+      startOffset: startOffset,
       kexContributions: kexList,
+      nextAvailableByte: nextAvail,
     );
   }
-
-  /// Getter pour le bitmap d'utilisation (lecture seule)
-  Uint8List get usedBitmap => Uint8List.fromList(_usedByteMap);
 }
