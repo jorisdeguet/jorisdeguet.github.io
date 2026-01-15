@@ -1048,10 +1048,10 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _buildKeyGenButton('8 KB', 8192 * 8),
-              _buildKeyGenButton('32 KB', 32768 * 8),
-              _buildKeyGenButton('128 KB', 131072 * 8),
-              _buildKeyGenButton('512 KB', 524288 * 8),
+              _buildKeyGenButton('8 KB', 8192 ),
+              _buildKeyGenButton('32 KB', 32768 ),
+              _buildKeyGenButton('128 KB', 131072 ),
+              _buildKeyGenButton('512 KB', 524288 ),
             ],
           ),
           
