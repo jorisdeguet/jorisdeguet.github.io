@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/key_exchange_service.dart';
 
 /// Modèle représentant une session d'échange de clé dans Firestore.
@@ -186,13 +185,14 @@ class KexSessionModel {
       'participants': segmentsNormalized.keys.toList(),
       'status': status.name,
       'totalSegments': segmentsNormalized[sourceId]?.length ?? 0,
-      'totalKeyBits': (segmentsNormalized[sourceId]?.length ?? 0) * KeyExchangeService.segmentSizeBits,
-      'startIndex': startIndex,
-      'endIndex': endIndex,
-      // store dates as ISO strings for readability and cross-platform parsing
-      'createdAt': createdAt.toIso8601String(),
-      'updatedAt': DateTime.now().toIso8601String(),
-    };
+      // store total key size in bytes for clarity
+      'totalKeyBytes': (segmentsNormalized[sourceId]?.length ?? 0) * KeyExchangeService.segmentSizeBytes,
+       'startIndex': startIndex,
+       'endIndex': endIndex,
+       // store dates as ISO strings for readability and cross-platform parsing
+       'createdAt': createdAt.toIso8601String(),
+       'updatedAt': DateTime.now().toIso8601String(),
+     };
   }
 
   /// Désérialise depuis Firestore

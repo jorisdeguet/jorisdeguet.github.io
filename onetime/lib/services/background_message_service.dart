@@ -152,6 +152,12 @@ class BackgroundMessageService {
     try {
       final crypto = CryptoService(localPeerId: localUserId);
 
+      // Compute key segment start/end in bytes (if present)
+      final int? keySegmentStartByte = msg.keySegment?.startByte;
+      final int? keySegmentEndByte = msg.keySegment != null
+          ? (msg.keySegment!.startByte + msg.keySegment!.lengthBytes - 1)
+          : null;
+
       if (msg.contentType == MessageContentType.text) {
         final decrypted = crypto.decrypt(encryptedMessage: msg, sharedKey: key, markAsUsed: true);
 
@@ -166,8 +172,8 @@ class BackgroundMessageService {
             textContent: decrypted,
             isCompressed: msg.isCompressed,
             keyId: msg.keyId,
-            keySegmentStart: msg.keySegment?.startBit,
-            keySegmentEnd: msg.keySegment?.endBit,
+            keySegmentStart: keySegmentStartByte,
+            keySegmentEnd: keySegmentEndByte,
           ),
         );
       } else {
@@ -184,8 +190,8 @@ class BackgroundMessageService {
             mimeType: msg.mimeType,
             isCompressed: msg.isCompressed,
             keyId: msg.keyId,
-            keySegmentStart: msg.keySegment?.startBit,
-            keySegmentEnd: msg.keySegment?.endBit,
+            keySegmentStart: keySegmentStartByte,
+            keySegmentEnd: keySegmentEndByte,
           ),
         );
       }

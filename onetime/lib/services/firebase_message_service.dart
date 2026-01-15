@@ -33,8 +33,8 @@ abstract class FirebaseMessageService {
   /// Expire automatiquement après [timeout].
   Future<KeySegmentLock?> acquireLock({
     required String keyId,
-    required int startBit,
-    required int endBit,
+    required int startByte,
+    required int lengthBytes,
     Duration timeout = const Duration(seconds: 30),
   });
 
@@ -44,8 +44,8 @@ abstract class FirebaseMessageService {
   /// Vérifie si un segment est actuellement locké.
   Future<bool> isSegmentLocked({
     required String keyId,
-    required int startBit,
-    required int endBit,
+    required int startByte,
+    required int lengthBytes,
   });
 
   /// Écoute les changements de locks pour une clé.
@@ -160,25 +160,28 @@ class SecureMessageService {
     required SharedKey sharedKey,
     bool ultraSecure = false,
   }) async {
-    final bitsNeeded = cryptoService.calculateBitsNeeded(plaintext);
-    
-    // Trouver un segment disponible
-    final segment = sharedKey.findAvailableSegment(localPeerId, bitsNeeded);
-    if (segment == null) {
+    final bytesNeeded = cryptoService.calculateBytesNeeded(plaintext);
+
+    // Trouver un segment disponible en octets
+    final seg = sharedKey.findAvailableSegmentByBytes(localPeerId, bytesNeeded);
+    if (seg == null) {
       throw InsufficientKeyException('No available key segment');
     }
-    
+
+    final startByte = seg.startByte;
+    final lengthBytes = seg.lengthBytes;
+
     // Acquérir un lock
     final lock = await firebaseService.acquireLock(
       keyId: sharedKey.id,
-      startBit: segment.startBit,
-      endBit: segment.endBit,
+      startByte: startByte,
+      lengthBytes: lengthBytes,
     );
-    
+
     if (lock == null) {
       throw Exception('Could not acquire lock on key segment');
     }
-    
+
     try {
       // Chiffrer et envoyer
       final result = cryptoService.encrypt(
@@ -186,15 +189,15 @@ class SecureMessageService {
         sharedKey: sharedKey,
         deleteAfterRead: ultraSecure,
       );
-      
+
       await firebaseService.sendMessage(
         message: result.message,
         conversationId: sharedKey.id,
       );
-      
+
       // Enregistrer le segment utilisé
       await firebaseService.recordUsedSegment(result.usedSegment);
-      
+
       return result.message;
     } finally {
       // Toujours libérer le lock

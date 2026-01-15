@@ -23,7 +23,7 @@ class KeyExchangeSyncService {
   Future<KexSessionModel> createSession({
     required String sourceId,
     required List<String> participants,
-    required int totalKeyBits,
+    required int totalKeyBytes,
     required int totalSegments,
     String? conversationId,
   }) async {
@@ -116,11 +116,11 @@ class KeyExchangeSyncService {
   }
 
   /// Met à jour le nombre total de segments (utilisé lors d'une terminaison anticipée)
-  Future<void> updateTotalSegments(String sessionId, int totalSegments, int totalKeyBits) async {
-    _log.d('KeyExchange', 'updateTotalSegments: sessionId=$sessionId, totalSegments=$totalSegments, totalKeyBits=$totalKeyBits');
+  Future<void> updateTotalSegments(String sessionId, int totalSegments, int totalKeyBytes) async {
+    _log.d('KeyExchange', 'updateTotalSegments: sessionId=$sessionId, totalSegments=$totalSegments, totalKeyBytes=$totalKeyBytes');
     await _sessionsRef.doc(sessionId).update({
       'totalSegments': totalSegments,
-      'totalKeyBits': totalKeyBits,
+      'totalKeyBytes': totalKeyBytes,
       'updatedAt': Timestamp.fromDate(DateTime.now()),
     });
   }

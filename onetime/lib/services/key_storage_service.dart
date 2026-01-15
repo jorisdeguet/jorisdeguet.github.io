@@ -138,20 +138,49 @@ class KeyStorageService {
           if (isExtension) {
             _log.i('KeyStorage', 'Detected key extension; merging metadata and used bitmap');
 
-            // Merge usedBitmap: prefer existing used bits for the prefix
-            Uint8List mergedUsed;
-            try {
-              final existingUsedStr = existingUsed;
-              Uint8List existingUsedBytes;
-              if (existingUsedStr != null && existingUsedStr.isNotEmpty) {
-                // Try base64 first
-                try {
-                  existingUsedBytes = base64Decode(existingUsedStr);
-                } catch (_) {
-                  // Legacy format: ranges "start-end;start-end"
-                  final bitmapSize = (existingBytes.length * 8 + 7) ~/ 8;
-                  existingUsedBytes = Uint8List(bitmapSize);
-                  final ranges = existingUsedStr.split(';');
+            // Helper: parse an existing stored used map (could be byte-map or bit-map)
+            Uint8List _parseUsedToByteMap(String? stored, int expectedKeyBytesLength) {
+              if (stored == null || stored.isEmpty) return Uint8List(expectedKeyBytesLength);
+
+              try {
+                final decoded = base64Decode(stored);
+                // If decoded length equals expectedKeyBytesLength, assume it's already a byte-map
+                if (decoded.length == expectedKeyBytesLength) {
+                  return Uint8List.fromList(decoded);
+                }
+
+                // If decoded length equals bit-bitmap size (bits/8), convert bit-bitmap to byte-map
+                final expectedBitBitmapSize = ((expectedKeyBytesLength * 8) + 7) ~/ 8;
+                if (decoded.length == expectedBitBitmapSize) {
+                  final byteMap = Uint8List(expectedKeyBytesLength);
+                  for (int bit = 0; bit < expectedKeyBytesLength * 8; bit++) {
+                    final byteIdx = bit ~/ 8;
+                    final bitOff = bit % 8;
+                    if (byteIdx < decoded.length) {
+                      if ((decoded[byteIdx] & (1 << bitOff)) != 0) {
+                        // mark the corresponding key byte as used
+                        final keyByteIndex = bit ~/ 8;
+                        if (keyByteIndex < byteMap.length) byteMap[keyByteIndex] = 0xFF;
+                      }
+                    }
+                  }
+                  return byteMap;
+                }
+
+                // Otherwise: if decoded is shorter than expectedKeyBytesLength, expand prefix and fill rest with 0
+                if (decoded.length < expectedKeyBytesLength) {
+                  final res = Uint8List(expectedKeyBytesLength);
+                  res.setRange(0, decoded.length, decoded);
+                  return res;
+                }
+
+                // Fallback: return decoded truncated/extended to expected length
+                return Uint8List.fromList(decoded.sublist(0, min(decoded.length, expectedKeyBytesLength)));
+              } catch (_) {
+                // Possibly legacy "ranges" format (start-end;start-end)
+                final res = Uint8List(expectedKeyBytesLength);
+                if (stored.isNotEmpty) {
+                  final ranges = stored.split(';');
                   for (final range in ranges) {
                     if (range.isEmpty) continue;
                     final parts = range.split('-');
@@ -160,29 +189,43 @@ class KeyStorageService {
                     final e = int.tryParse(parts[1]);
                     if (s == null || e == null) continue;
                     for (int bit = s; bit <= e; bit++) {
-                      final byteIndex = bit ~/ 8;
-                      final bitOffset = bit % 8;
-                      if (byteIndex < existingUsedBytes.length) {
-                        existingUsedBytes[byteIndex] |= (1 << bitOffset);
-                      }
+                      final keyByteIndex = bit ~/ 8;
+                      if (keyByteIndex < res.length) res[keyByteIndex] = 0xFF;
                     }
                   }
                 }
+                return res;
+              }
+            }
 
-                final newUsedBytes = base64Decode(usedBitmapBase64);
-                final mergedSize = max(existingUsedBytes.length, newUsedBytes.length);
-                mergedUsed = Uint8List(mergedSize);
-                // copy existing first
-                mergedUsed.setRange(0, existingUsedBytes.length, existingUsedBytes);
-                // OR in the rest from newUsedBytes
-                for (int i = 0; i < newUsedBytes.length; i++) {
-                  if (i < mergedUsed.length) mergedUsed[i] |= newUsedBytes[i];
-                }
-              } else {
-                mergedUsed = base64Decode(usedBitmapBase64);
+            // Merge usedByte maps: prefer existing prefix and OR with new
+            Uint8List mergedUsed;
+            try {
+              final existingUsedStr = existingUsed;
+              final newUsedBytes = base64Decode(usedBitmapBase64);
+
+              // Determine target length = newBytes.length
+              final targetLength = newBytes.length;
+
+              final existingMap = _parseUsedToByteMap(existingUsedStr, existingBytes.length);
+              final newMap = _parseUsedToByteMap(base64Encode(newUsedBytes), targetLength);
+
+              mergedUsed = Uint8List(targetLength);
+              // copy existing prefix
+              final copyLen = min(existingMap.length, mergedUsed.length);
+              if (copyLen > 0) mergedUsed.setRange(0, copyLen, existingMap.sublist(0, copyLen));
+              // OR-in newMap
+              for (int i = 0; i < newMap.length && i < mergedUsed.length; i++) {
+                mergedUsed[i] |= newMap[i];
               }
             } catch (_) {
               mergedUsed = base64Decode(usedBitmapBase64);
+              // ensure length matches new key
+              if (mergedUsed.length < newBytes.length) {
+                final grown = Uint8List(newBytes.length);
+                grown.setRange(0, mergedUsed.length, mergedUsed);
+                mergedUsed = grown;
+              }
             }
 
             // Merge peerIds (union)
@@ -192,29 +235,54 @@ class KeyStorageService {
                 : [];
             final combinedPeers = {...existingPeerIds, ...key.peerIds}.toList()..sort();
 
-            // Merge kexContributions: by kexId keep min start and max end
+            // Merge kexContributions: support both legacy startBit/endBit and new startByte/endByte
             final Map<String, Map<String, dynamic>> contribById = {};
             if (existingMetaJson != null && existingMetaJson['kexContributions'] != null) {
               for (final e in (existingMetaJson['kexContributions'] as List)) {
                 final m = Map<String, dynamic>.from(e as Map);
+                int sByte = 0;
+                int eByte = 0;
+                if (m.containsKey('startByte')) {
+                  sByte = m['startByte'] as int;
+                } else if (m.containsKey('startBit')) {
+                  sByte = (m['startBit'] as int) ~/ 8;
+                }
+                if (m.containsKey('endByte')) {
+                  eByte = m['endByte'] as int;
+                } else if (m.containsKey('endBit')) {
+                  eByte = ((m['endBit'] as int) + 7) ~/ 8;
+                }
                 contribById[m['kexId'] as String] = {
                   'kexId': m['kexId'],
-                  'startBit': m['startBit'],
-                  'endBit': m['endBit'],
+                  'startByte': sByte,
+                  'endByte': eByte,
                 };
               }
             }
             if (effectiveContrib != null) {
               for (final e in effectiveContrib) {
                 final id = e['kexId'] as String;
+                int s = 0;
+                int ed = 0;
+                if (e.containsKey('startByte')) {
+                  s = e['startByte'] as int;
+                } else if (e.containsKey('startBit')) {
+                  s = (e['startBit'] as int) ~/ 8;
+                }
+                if (e.containsKey('endByte')) {
+                  ed = e['endByte'] as int;
+                } else if (e.containsKey('endBit')) {
+                  ed = ((e['endBit'] as int) + 7) ~/ 8;
+                }
+
                 if (contribById.containsKey(id)) {
-                  contribById[id]!['startBit'] = min(contribById[id]!['startBit'] as int, e['startBit'] as int);
-                  contribById[id]!['endBit'] = max(contribById[id]!['endBit'] as int, e['endBit'] as int);
+                  contribById[id]!['startByte'] = min(contribById[id]!['startByte'] as int, s);
+                  contribById[id]!['endByte'] = max(contribById[id]!['endByte'] as int, ed);
                 } else {
                   contribById[id] = {
                     'kexId': id,
-                    'startBit': e['startBit'],
-                    'endBit': e['endBit'],
+                    'startByte': s,
+                    'endByte': ed,
                   };
                 }
               }
@@ -361,28 +429,31 @@ class KeyStorageService {
     }
   }
 
-  /// Met à jour les bits utilisés pour une clé
-  Future<void> updateUsedBits(String conversationId, int startBit, int endBit) async {
-    _log.i('KeyStorage', 'updateUsedBits: $conversationId, $startBit-$endBit');
+  /// Met à jour les octets utilisés pour une clé (startByte inclus, endByte exclusive)
+  Future<void> updateUsedBytes(String conversationId, int startByte, int endByte) async {
+    _log.i('KeyStorage', 'updateUsedBytes: $conversationId, $startByte-$endByte');
 
     try {
-      // Charger la clé existante
       final key = await getKey(conversationId);
       if (key == null) {
-        _log.w('KeyStorage', 'updateUsedBits: Key not found');
+        _log.w('KeyStorage', 'updateUsedBytes: Key not found');
         return;
       }
 
-      // Marquer les bits comme utilisés
-      key.markBitsAsUsed(startBit, endBit);
+      key.markBytesAsUsed(startByte, endByte);
 
-      // Sauvegarder la clé mise à jour avec le nouveau bitmap
       await saveKey(conversationId, key);
-      
-      _log.i('KeyStorage', 'updateUsedBits: SUCCESS');
+      _log.i('KeyStorage', 'updateUsedBytes: SUCCESS');
     } catch (e) {
-      _log.e('KeyStorage', 'updateUsedBits ERROR: $e');
+      _log.e('KeyStorage', 'updateUsedBytes ERROR: $e');
     }
+  }
+
+  /// Wrapper de compatibilité: Met à jour les bits utilisés (converti en octets)
+  Future<void> updateUsedBits(String conversationId, int startBit, int endBit) async {
+    final startByte = (startBit / 8).floor();
+    final endByte = ((endBit + 7) / 8).floor();
+    return updateUsedBytes(conversationId, startByte, endByte);
   }
 
   /// Supprime une clé

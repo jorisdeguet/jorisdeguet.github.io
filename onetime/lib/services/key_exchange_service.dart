@@ -7,29 +7,29 @@ import 'random_key_generator_service.dart';
 /// Service pour l'échange local de clés entre appareils via QR code.
 /// 
 /// Protocole d'échange:
-/// 1. Un appareil (source) génère et affiche les bits de clé en QR codes
+/// 1. Un appareil (source) génère et affiche les octets de clé en QR codes
 /// 2. Les autres appareils (lecteurs) scannent les QR codes
 /// 3. Les lecteurs confirment via réseau (Bluetooth/WiFi/Cloud) les indices lus
-/// 4. Les bits de clé ne transitent jamais sur le réseau
+/// 4. Les octets de clé ne transitent jamais sur le réseau
 class KeyExchangeService {
   final RandomKeyGeneratorService _keyGenerator;
   
-  /// Taille d'un segment de clé en bits pour un QR code
-  static const int segmentSizeBits = 8192; // 1024 octets
-  
-  /// Taille maximale d'un QR code en bits
-  static const int maxQrCodeBits = 23200;
+  /// Taille d'un segment de clé en octets pour un QR code
+  static const int segmentSizeBytes = 1024; // 8192 bits
+
+  /// Taille maximale d'un QR code en caractères (approx)
+  static const int maxQrCodeChars = 23200;
 
   KeyExchangeService(this._keyGenerator);
 
   /// Crée une nouvelle session d'échange de clé (côté source).
   /// 
-  /// [totalBits] - Taille totale de la clé à partager
+  /// [totalBytes] - Taille totale de la clé à partager (en octets)
   /// [peerIds] - Liste des IDs des pairs qui recevront la clé
   /// [sessionId] - ID de session optionnel (si non fourni, un ID est généré)
   /// [preGeneratedSegments] - Segments déjà générés à inclure
   KexSessionSource createSourceSession({
-    required int totalBits,
+    required int totalBytes,
     required List<String> peerIds,
     required String sourceId,
     String? sessionId,
@@ -43,7 +43,7 @@ class KeyExchangeService {
       role: KeyExchangeRole.source,
       peerIds: allPeers,
       localPeerId: sourceId,
-      totalBits: totalBits,
+      totalBytes: totalBytes,
     );
 
     // Injecter les segments pré-générés si disponibles
@@ -57,8 +57,8 @@ class KeyExchangeService {
           final updatedSegment = KeySegmentQrData(
             sessionId: session.sessionId,
             segmentIndex: segment.segmentIndex,
-            startBit: segment.startBit,
-            endBit: segment.endBit,
+            startByte: segment.startByte,
+            endByte: segment.endByte,
             keyData: segment.keyData,
           );
           // On injecte directement dans la session sans régénérer
@@ -74,7 +74,7 @@ class KeyExchangeService {
 
   /// Injecte un segment manuellement dans la session (usage interne pour pré-génération)
   void _injectSegmentIntoSession(KexSessionReader session, KeySegmentQrData segment) {
-    session.addSegmentData(segment.startBit, segment.keyData);
+    session.addSegmentData(segment.startByte, segment.keyData);
   }
 
   /// Crée une session d'échange de clé (côté lecteur).
@@ -95,13 +95,12 @@ class KeyExchangeService {
   }
 
   /// Génère le prochain segment de clé à afficher (côté source).
-  /// Accepte maintenant KexSessionReader pour simplifier les appels; vérifie que c'est une source.
   KeySegmentQrData generateNextSegment(KexSessionReader session) {
     if (session.role != KeyExchangeRole.source) {
       throw StateError('Only source can generate segments');
     }
 
-    // Cast sécurisé vers KexSessionSource pour accéder à totalBits
+    // Cast sécurisé vers KexSessionSource pour accéder à totalBytes
     if (session is! KexSessionSource) {
       throw StateError('Session must be KexSessionSource to generate segments');
     }
@@ -109,25 +108,25 @@ class KeyExchangeService {
 
     // Capturer l'index AVANT de modifier la session
     final segmentIndex = session.currentSegmentIndex;
-    final startBit = segmentIndex * segmentSizeBits;
-    final endBit = min(startBit + segmentSizeBits, src.totalBits);
+    final startByte = segmentIndex * segmentSizeBytes;
+    final endByte = (startByte + segmentSizeBytes) < src.totalBytes ? (startByte + segmentSizeBytes) : src.totalBytes;
 
-    if (startBit >= src.totalBits) {
+    if (startByte >= src.totalBytes) {
       throw StateError('All segments have been generated');
     }
     
-    // Générer les bits aléatoires pour ce segment
-    final segmentBits = endBit - startBit;
-    final keyData = _keyGenerator.generateKey(segmentBits);
-    
+    // Générer les octets aléatoires pour ce segment
+    final segmentBytes = endByte - startByte;
+    final keyData = _keyGenerator.generateKey(segmentBytes * 8); // generator expects bits
+
     // Stocker le segment dans la session (ceci incrémente currentSegmentIndex)
-    session.addSegmentData(startBit, keyData);
-    
+    session.addSegmentData(startByte, keyData);
+
     return KeySegmentQrData(
       sessionId: session.sessionId,
       segmentIndex: segmentIndex, // Utiliser l'index capturé avant l'incrémentation
-      startBit: startBit,
-      endBit: endBit,
+      startByte: startByte,
+      endByte: endByte,
       keyData: keyData,
     );
   }
@@ -143,12 +142,12 @@ class KeyExchangeService {
       throw StateError('Only readers record segments');
     }
     
-    session.addSegmentData(segment.startBit, segment.keyData);
+    session.addSegmentData(segment.startByte, segment.keyData);
     session.markSegmentAsRead(segment.segmentIndex);
   }
 
   /// Génère la confirmation d'un segment lu.
-  /// Contient SEULEMENT l'index, jamais les bits de clé.
+  /// Contient SEULEMENT l'index, jamais les octets de clé.
   KeySegmentConfirmation createReadConfirmation(
     KexSessionReader session,
     int segmentIndex,
@@ -250,8 +249,8 @@ class KexSessionReader {
   /// Accède aux données d'un segment par son index (pour le mode torrent)
   Uint8List? getSegmentData(int segmentIndex) => _segmentData[segmentIndex];
 
-  void addSegmentData(int startBit, Uint8List data) {
-    final segmentIndex = startBit ~/ KeyExchangeService.segmentSizeBits;
+  void addSegmentData(int startByte, Uint8List data) {
+    final segmentIndex = startByte ~/ KeyExchangeService.segmentSizeBytes;
     _segmentData[segmentIndex] = data;
     if (role == KeyExchangeRole.source) {
       _currentSegmentIndex = segmentIndex + 1;
@@ -316,14 +315,14 @@ class KexSessionReader {
 
 /// Session côté source avec informations supplémentaires
 class KexSessionSource extends KexSessionReader {
-  final int totalBits;
+  final int totalBytes;
 
   KexSessionSource({
     required String sessionId,
     required KeyExchangeRole role,
     required List<String> peerIds,
     required String localPeerId,
-    required this.totalBits,
+    required this.totalBytes,
   }) : super(
           sessionId: sessionId,
           role: role,
@@ -331,8 +330,8 @@ class KexSessionSource extends KexSessionReader {
           localPeerId: localPeerId,
         );
 
-  int get totalSegments => (totalBits + KeyExchangeService.segmentSizeBits - 1) ~/
-                           KeyExchangeService.segmentSizeBits;
+  int get totalSegments => (totalBytes + KeyExchangeService.segmentSizeBytes - 1) ~/
+                           KeyExchangeService.segmentSizeBytes;
 
   /// Vérifie si l'échange est complet
   bool get isComplete {
@@ -350,25 +349,26 @@ class KexSessionSource extends KexSessionReader {
 class KeySegmentQrData {
   final String sessionId;
   final int segmentIndex;
-  final int startBit;
-  final int endBit;
+  final int startByte;
+  final int endByte;
   final Uint8List keyData;
 
   KeySegmentQrData({
     required this.sessionId,
     required this.segmentIndex,
-    required this.startBit,
-    required this.endBit,
+    required this.startByte,
+    required this.endByte,
     required this.keyData,
-  });
+  }){
+  }
 
   /// Convertit en chaîne pour QR code
   String toQrString() {
     final json = {
       's': sessionId,
       'i': segmentIndex,
-      'a': startBit,
-      'b': endBit,
+      'a': startByte,
+      'b': endByte,
       'k': base64Encode(keyData),
     };
     return jsonEncode(json);
@@ -380,8 +380,8 @@ class KeySegmentQrData {
     return KeySegmentQrData(
       sessionId: json['s'] as String,
       segmentIndex: json['i'] as int,
-      startBit: json['a'] as int,
-      endBit: json['b'] as int,
+      startByte: json['a'] as int,
+      endByte: json['b'] as int,
       keyData: base64Decode(json['k'] as String),
     );
   }
@@ -402,9 +402,10 @@ class KeySegmentConfirmation {
     required this.peerId,
     required this.segmentIndex,
     required this.timestamp,
-  });
+  }) {
+  }
 
-  /// Sérialise pour envoi réseau (NE CONTIENT PAS les bits de clé)
+  /// Sérialise pour envoi réseau (NE CONTIENT PAS les octets de clé)
   Map<String, dynamic> toJson() {
     return {
       'sessionId': sessionId,

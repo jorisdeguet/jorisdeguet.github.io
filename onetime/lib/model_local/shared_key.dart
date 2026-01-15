@@ -5,45 +5,49 @@ import 'dart:math';
 /// Contribution d'une session KEX à une clé partagée
 class KexContribution {
   final String kexId;
-  final int startBit;
-  final int endBit;
+  final int startByte;
+  final int endByte;
 
-  KexContribution({required this.kexId, required this.startBit, required this.endBit});
+  KexContribution({required this.kexId, required this.startByte, required this.endByte});
 
   Map<String, dynamic> toJson() => {
         'kexId': kexId,
-        'startBit': startBit,
-        'endBit': endBit,
+        'startByte': startByte,
+        'endByte': endByte,
       };
 
   factory KexContribution.fromJson(Map<String, dynamic> json) => KexContribution(
         kexId: json['kexId'] as String,
-        startBit: json['startBit'] as int,
-        endBit: json['endBit'] as int,
+        startByte: json['startByte'] as int,
+        endByte: json['endByte'] as int,
       );
 }
 
 /// Représente une clé partagée entre plusieurs pairs pour le chiffrement One-Time Pad.
-/// 
+///
 /// L'allocation est linéaire : tous les pairs partagent l'espace entier de la clé.
+/// Cette implémentation force l'alignement sur octet et utilise un bitmap par octet
+/// (chaque octet est marqué 0 = libre, 1 = utilisé). Les anciennes API bit-level
+/// sont exposées en tant que wrappers pour compatibilité mais l'allocation se fait
+/// en octets.
 class SharedKey {
   /// Identifiant unique de la clé partagée
   final String id;
-  
+
   /// Les données binaires de la clé
   final Uint8List keyData;
-  
+
   /// Liste des IDs des pairs partageant cette clé (triés par ordre croissante)
   final List<String> peerIds;
-  
-  /// Bitmap des bits déjà utilisés (1 = utilisé, 0 = disponible)
-  Uint8List _usedBitmap;
-  
+
+  /// Bitmap par octet indiquant si l'octet est utilisé (1) ou libre (0)
+  Uint8List _usedByteMap;
+
   /// Date de création de la clé
   final DateTime createdAt;
-  
-  /// Offset de départ de la clé (en bits)
-  /// Indique combien de bits ont été tronqués au début de la clé.
+
+  /// Offset de départ de la clé (en octets)
+  /// Indique combien d'octets ont été tronqués au début de la clé.
   final int startOffset;
 
   final List<KexContribution>? kexContributions;
@@ -56,185 +60,191 @@ class SharedKey {
     DateTime? createdAt,
     this.startOffset = 0,
     this.kexContributions,
-  }) : _usedBitmap = usedBitmap ?? Uint8List((keyData.length * 8 + 7) ~/ 8),
-       createdAt = createdAt ?? DateTime.now() {
+  })  : _usedByteMap = usedBitmap ?? Uint8List(keyData.length),
+        createdAt = createdAt ?? DateTime.now() {
     // S'assurer que les peers sont triés
     peerIds.sort();
 
-    // Ensure the used bitmap has the expected size matching keyData.
-    final expectedBitmapSize = (keyData.length * 8 + 7) ~/ 8;
-    if (_usedBitmap.length != expectedBitmapSize) {
-      final resized = Uint8List(expectedBitmapSize);
-      // copy existing bytes up to the min length
-      final copyLen = min(_usedBitmap.length, expectedBitmapSize);
+    // Ensure the used map has the expected size matching keyData.
+    if (_usedByteMap.length != keyData.length) {
+      final resized = Uint8List(keyData.length);
+      final copyLen = min(_usedByteMap.length, keyData.length);
       if (copyLen > 0) {
-        resized.setRange(0, copyLen, _usedBitmap.sublist(0, copyLen));
+        resized.setRange(0, copyLen, _usedByteMap.sublist(0, copyLen));
       }
-      _usedBitmap = resized;
+      _usedByteMap = resized;
     }
   }
 
-  /// Longueur totale logique de la clé en bits (incluant l'offset)
-  int get lengthInBits => startOffset + (keyData.length * 8);
-  
-  /// Longueur de la clé en octets
-  int get lengthInBytes => keyData.length;
-  
+  /// Longueur totale logique de la clé en octets (incluant l'offset)
+  int get lengthInBytes => startOffset + keyData.length;
+
+  /// Longueur totale logique en bits (compatibilité)
+  int get lengthInBits => lengthInBytes * 8;
+
   /// Nombre de pairs partageant cette clé
   int get peerCount => peerIds.length;
 
-  // Helper to check bitmap index access and throw descriptive error if invalid
-  void _checkBitmapIndex(int byteIndex, int bitIndex) {
-    if (byteIndex < 0 || byteIndex >= _usedBitmap.length) {
-      throw StateError('Bitmap access out of range: byteIndex=$byteIndex, bitIndex=$bitIndex, bitmapLength=${_usedBitmap.length}, keyBytes=${keyData.length}, startOffset=$startOffset');
-    }
-    if (byteIndex >= keyData.length) {
-      throw StateError('Key data access out of range: byteIndex=$byteIndex, keyBytes=${keyData.length}, startOffset=$startOffset');
+  void _checkByteIndex(int byteIndex) {
+    if (byteIndex < 0 || byteIndex >= _usedByteMap.length) {
+      throw StateError('Byte index out of range: $byteIndex (map length=${_usedByteMap.length})');
     }
   }
 
-  /// Vérifie si un bit est déjà utilisé
+  /// Vérifie si un octet est déjà utilisé
+  bool isByteUsed(int byteIndex) {
+    if (byteIndex < startOffset) return true; // considéré comme utilisé si tronqué
+    _checkByteIndex(byteIndex);
+    return _usedByteMap[byteIndex] != 0;
+  }
+
+  /// Wrapper compatibilité : vérifie si un bit est utilisé en regardant l'octet contenant le bit.
   bool isBitUsed(int bitIndex) {
-    if (bitIndex < startOffset || bitIndex >= lengthInBits) {
-      if (bitIndex < startOffset) return true; // Considéré comme utilisé si tronqué
-      throw RangeError('Bit index $bitIndex out of range [0, $lengthInBits[');
-    }
-    
-    final relativeIndex = bitIndex - startOffset;
-    final byteIndex = relativeIndex ~/ 8;
-    final bitOffset = relativeIndex % 8;
-    _checkBitmapIndex(byteIndex, bitIndex);
-    return (_usedBitmap[byteIndex] & (1 << bitOffset)) != 0;
+    final byteIndex = bitIndex ~/ 8;
+    return isByteUsed(byteIndex);
   }
 
-  /// Marque un segment de bits comme utilisé
+  /// Marque un intervalle d'octets comme utilisé (endByte exclusive)
+  void markBytesAsUsed(int startByte, int endByte) {
+    if (endByte <= startByte) return;
+    final s = startByte < startOffset ? startOffset : startByte;
+    for (int b = s; b < endByte && b < _usedByteMap.length; b++) {
+      _usedByteMap[b] = 0xFF;
+    }
+  }
+
+  /// Wrapper compatibilité : marque des bits comme utilisés en arrondissant aux octets couvrants
   void markBitsAsUsed(int startBit, int endBit) {
-    for (int i = startBit; i < endBit; i++) {
-      if (i < startOffset) continue; // Ignorer si tronqué
-      
-      final relativeIndex = i - startOffset;
-      final byteIndex = relativeIndex ~/ 8;
-      final bitOffset = relativeIndex % 8;
-      _checkBitmapIndex(byteIndex, i);
-      _usedBitmap[byteIndex] |= (1 << bitOffset);
-    }
+    final startByte = (startBit / 8).floor();
+    final endByte = ((endBit + 7) / 8).floor(); // exclusive
+    markBytesAsUsed(startByte, endByte);
   }
 
-  /// Trouve le prochain segment disponible de la taille demandée dans le segment du peer
-  /// En mode linéaire, on cherche dans toute la clé, mais on ne peut pas utiliser
-  /// les bits déjà marqués comme utilisés par d'autres (ou par nous-même).
+  /// Trouve le prochain segment disponible de la taille demandée en bits (compat)
+  /// Cette implémentation force une allocation alignée sur octet.
   ({int startBit, int endBit})? findAvailableSegment(String peerId, int bitsNeeded) {
-    // Allocation linéaire : on cherche depuis le début de la clé (après l'offset)
-    
-    int consecutiveAvailable = 0;
-    int segmentStart = 0;
-    
-    // On commence à chercher après l'offset
-    for (int i = startOffset; i < lengthInBits; i++) {
-      // isBitUsed gère l'offset en interne, mais ici on itère sur les indices absolus
-      // Pour optimiser, on pourrait accéder directement au bitmap
-      
-      final relativeIndex = i - startOffset;
-      final byteIndex = relativeIndex ~/ 8;
-      final bitOffset = relativeIndex % 8;
-      // If bitmap is unexpectedly short, treat as used to avoid returning invalid segments
-      if (byteIndex >= _usedBitmap.length) {
-        consecutiveAvailable = 0;
-        continue;
-      }
-      final isUsed = (_usedBitmap[byteIndex] & (1 << bitOffset)) != 0;
+    if (bitsNeeded <= 0) return null;
+    final bytesNeeded = ((bitsNeeded + 7) ~/ 8);
+    final res = findAvailableSegmentByBytes(peerId, bytesNeeded);
+    if (res == null) return null;
+    final startBit = res.startByte * 8;
+    final endBit = (res.startByte + res.lengthBytes) * 8;
+    return (startBit: startBit, endBit: endBit);
+  }
 
-      if (!isUsed) {
-        if (consecutiveAvailable == 0) {
-          segmentStart = i;
-        }
-        consecutiveAvailable++;
-        if (consecutiveAvailable >= bitsNeeded) {
-          return (startBit: segmentStart, endBit: segmentStart + bitsNeeded);
+  /// Trouve le prochain segment disponible en octets (requiert octets contigus libres)
+  /// Retourne tuple (startByte, lengthBytes) ou null si pas assez d'octets.
+  ({int startByte, int lengthBytes})? findAvailableSegmentByBytes(String peerId, int bytesNeeded) {
+    if (bytesNeeded <= 0) return null;
+    final firstByteIndex = startOffset; // startOffset is in bytes now
+    int consecutive = 0;
+    int startByte = firstByteIndex;
+
+    for (int b = firstByteIndex; b < keyData.length; b++) {
+      final isByteFree = _usedByteMap[b] == 0;
+      if (isByteFree) {
+        if (consecutive == 0) startByte = b;
+        consecutive++;
+        if (consecutive >= bytesNeeded) {
+          return (startByte: startByte, lengthBytes: bytesNeeded);
         }
       } else {
-        consecutiveAvailable = 0;
+        consecutive = 0;
       }
     }
-    
-    return null; // Pas assez de bits disponibles
+    return null;
   }
 
-  /// Extrait les bits de la clé pour un segment donné
+  /// Extrait des octets contigus depuis la clé locale.
+  /// [startByte] est l'index d'octet relatif au keyData (0-based)
+  Uint8List extractKeyBytes(int startByte, int lengthBytes) {
+    if (startByte < 0 || lengthBytes <= 0) throw RangeError('Invalid byte range');
+    if (startByte < startOffset) {
+      throw StateError('Cannot extract bytes from truncated part of key');
+    }
+    final endByte = startByte + lengthBytes;
+    if (endByte > keyData.length) {
+      throw RangeError('Requested bytes exceed key length');
+    }
+    return Uint8List.fromList(keyData.sublist(startByte, endByte));
+  }
+
+  /// Wrapper compatibilité bit -> octet: extrait des bits (peut être non aligned)
   Uint8List extractKeyBits(int startBit, int endBit) {
+    if (endBit <= startBit) return Uint8List(0);
+    final startByte = startBit ~/ 8;
+    final endByte = ((endBit + 7) ~/ 8);
+    final bytes = extractKeyBytes(startByte, endByte - startByte);
+
+    // If startBit is byte-aligned and length is multiple of 8, return directly
+    if (startBit % 8 == 0 && ((endBit - startBit) % 8) == 0) {
+      return bytes;
+    }
+
+    // Otherwise, we need to shift bits to pack the bit-range starting at bit 0
     final bitsNeeded = endBit - startBit;
-    final bytesNeeded = (bitsNeeded + 7) ~/ 8;
-    final result = Uint8List(bytesNeeded);
-    
+    final outBytes = Uint8List((bitsNeeded + 7) ~/ 8);
     for (int i = 0; i < bitsNeeded; i++) {
       final sourceBitIndex = startBit + i;
-      
-      if (sourceBitIndex < startOffset) {
-        throw StateError('Cannot extract bits from truncated part of key');
-      }
-      
-      final relativeIndex = sourceBitIndex - startOffset;
-      final sourceByteIndex = relativeIndex ~/ 8;
-      final sourceBitOffset = relativeIndex % 8;
-      
-      final targetByteIndex = i ~/ 8;
-      final targetBitOffset = i % 8;
-      
-      _checkBitmapIndex(sourceByteIndex, sourceBitIndex);
-      if ((keyData[sourceByteIndex] & (1 << sourceBitOffset)) != 0) {
-        result[targetByteIndex] |= (1 << targetBitOffset);
+      final rel = sourceBitIndex - (startByte * 8);
+      final srcByte = bytes[rel ~/ 8];
+      final srcBitOff = rel % 8;
+      final bit = (srcByte >> srcBitOff) & 1;
+      if (bit == 1) {
+        final tgtByteIndex = i ~/ 8;
+        final tgtBitOff = i % 8;
+        outBytes[tgtByteIndex] |= (1 << tgtBitOff);
       }
     }
-    
-    return result;
+    return outBytes;
   }
 
-  /// Compte les bits disponibles dans toute la clé (allocation linéaire)
-  int countAvailableBits(String peerId) {
+  /// Marque des octets comme consommés (tous les bits des octets sont marqués utilisés)
+  void consumeBytes(int startByte, int lengthBytes) {
+    if (lengthBytes <= 0) return;
+    markBytesAsUsed(startByte, startByte + lengthBytes);
+  }
+
+  /// Compte les octets disponibles dans toute la clé (allocation linéaire)
+  int countAvailableBytes(String peerId) {
     int count = 0;
-    // On compte seulement dans la partie non tronquée
-    for (int i = startOffset; i < lengthInBits; i++) {
-      final relativeIndex = i - startOffset;
-      final byteIndex = relativeIndex ~/ 8;
-      final bitOffset = relativeIndex % 8;
-      if (byteIndex >= _usedBitmap.length) continue; // defensive
-      if ((_usedBitmap[byteIndex] & (1 << bitOffset)) == 0) {
-        count++;
-      }
+    for (int b = startOffset; b < keyData.length; b++) {
+      if (_usedByteMap[b] == 0) count++;
     }
     return count;
   }
 
-  /// Ajoute des bits à la fin de la clé (pour l'agrandissement)
-  /// Allocation linéaire : on ajoute simplement à la fin
+  /// Compte les bits disponibles (compat)
+  int countAvailableBits(String peerId) {
+    return countAvailableBytes(peerId) * 8;
+  }
+
+  /// Ajoute des octets à la fin de la clé (pour l'agrandissement)
   SharedKey extend(Uint8List additionalKeyData) {
     if (additionalKeyData.isEmpty) return this;
 
     final newKeyData = Uint8List(keyData.length + additionalKeyData.length);
     newKeyData.setRange(0, keyData.length, keyData);
     newKeyData.setRange(keyData.length, newKeyData.length, additionalKeyData);
-    
-    // Étendre le bitmap d'utilisation
-    final newBitmapSize = (newKeyData.length * 8 + 7) ~/ 8;
-    final newUsedBitmap = Uint8List(newBitmapSize);
-    newUsedBitmap.setRange(0, _usedBitmap.length, _usedBitmap);
-    // Les nouveaux bits sont à 0 par défaut (disponibles)
-    
+
+    final newUsedMap = Uint8List(newKeyData.length);
+    newUsedMap.setRange(0, _usedByteMap.length, _usedByteMap);
+
     return SharedKey(
       id: id,
       keyData: newKeyData,
       peerIds: List.from(peerIds),
-      usedBitmap: newUsedBitmap,
+      usedBitmap: newUsedMap,
       createdAt: createdAt,
       startOffset: startOffset,
     );
   }
 
   /// Tronque le début de la clé jusqu'à l'index donné (exclus)
-  /// [newStartOffset] doit être > startOffset et < lengthInBits
+  /// [newStartOffset] doit être > startOffset et < lengthInBytes
   SharedKey truncate(int newStartOffset) {
     if (newStartOffset <= startOffset) return this;
-    if (newStartOffset >= lengthInBits) {
+    if (newStartOffset >= lengthInBytes) {
       // Tout supprimer
       return SharedKey(
         id: id,
@@ -245,66 +255,41 @@ class SharedKey {
       );
     }
 
-    final bitsToRemove = newStartOffset - startOffset;
-    final bytesToRemove = bitsToRemove ~/ 8; // On tronque par octet complet
-    final actualNewOffset = startOffset + (bytesToRemove * 8);
-    
-    // On ne garde que les octets complets restants
+    final bytesToRemove = newStartOffset - startOffset;
+    final actualNewOffset = startOffset + bytesToRemove;
+
     final newKeyData = keyData.sublist(bytesToRemove);
-    final newUsedBitmap = _usedBitmap.sublist(bytesToRemove);
-    
+    final newUsedMap = _usedByteMap.sublist(bytesToRemove);
+
     return SharedKey(
       id: id,
       keyData: newKeyData,
       peerIds: List.from(peerIds),
-      usedBitmap: newUsedBitmap,
+      usedBitmap: newUsedMap,
       createdAt: createdAt,
       startOffset: actualNewOffset,
     );
   }
 
-  /// Compacte la clé en supprimant les bits utilisés et réindexant
-  /// NOTE: Avec l'offset, compact() change de sémantique ou devient obsolète.
-  /// Pour l'instant on le garde tel quel mais il recrée une nouvelle clé sans offset.
+  /// Compacte la clé en supprimant les octets utilisés et réindexant
   SharedKey compact() {
-    // Trouver tous les bits non utilisés
-    final availableBits = <int>[];
-    for (int i = startOffset; i < lengthInBits; i++) {
-      // Accès optimisé via indices relatifs
-      final relativeIndex = i - startOffset;
-      final byteIndex = relativeIndex ~/ 8;
-      final bitOffset = relativeIndex % 8;
-      
-      if (byteIndex >= _usedBitmap.length) continue;
-      if ((_usedBitmap[byteIndex] & (1 << bitOffset)) == 0) {
-        availableBits.add(i);
-      }
+    final availableBytes = <int>[];
+    for (int b = startOffset; b < keyData.length; b++) {
+      if (_usedByteMap[b] == 0) availableBytes.add(b - startOffset);
     }
-    
-    // Créer une nouvelle clé avec seulement les bits disponibles
-    final newBytesNeeded = (availableBits.length + 7) ~/ 8;
+
+    final newBytesNeeded = availableBytes.length;
     final newKeyData = Uint8List(newBytesNeeded);
-    
-    for (int i = 0; i < availableBits.length; i++) {
-      final sourceBitIndex = availableBits[i];
-      final relativeIndex = sourceBitIndex - startOffset;
-      final sourceByteIndex = relativeIndex ~/ 8;
-      final sourceBitOffset = relativeIndex % 8;
-      
-      final targetByteIndex = i ~/ 8;
-      final targetBitOffset = i % 8;
-      
-      if ((keyData[sourceByteIndex] & (1 << sourceBitOffset)) != 0) {
-        newKeyData[targetByteIndex] |= (1 << targetBitOffset);
-      }
+    for (int i = 0; i < availableBytes.length; i++) {
+      final srcIndex = availableBytes[i] + startOffset;
+      newKeyData[i] = keyData[srcIndex];
     }
-    
+
     return SharedKey(
       id: id,
       keyData: newKeyData,
       peerIds: List.from(peerIds),
       createdAt: createdAt,
-      // Une clé compactée repart de 0 (nouvelle clé logique)
       startOffset: 0,
     );
   }
@@ -315,7 +300,7 @@ class SharedKey {
       'id': id,
       'keyData': base64Encode(keyData),
       'peerIds': peerIds,
-      'usedBitmap': base64Encode(_usedBitmap),
+      'usedBitmap': base64Encode(_usedByteMap),
       'createdAt': createdAt.toIso8601String(),
       'startOffset': startOffset,
       'kexContributions': kexContributions?.map((c) => c.toJson()).toList(),
@@ -340,5 +325,5 @@ class SharedKey {
   }
 
   /// Getter pour le bitmap d'utilisation (lecture seule)
-  Uint8List get usedBitmap => Uint8List.fromList(_usedBitmap);
+  Uint8List get usedBitmap => Uint8List.fromList(_usedByteMap);
 }

@@ -34,8 +34,8 @@ class EncryptedMessage {
   /// ID de l'expéditeur
   final String senderId;
   
-  /// Segment unique de clé utilisé (startBit inclusive, endBit exclusive)
-  final ({int startBit, int endBit})? keySegment;
+  /// Segment unique de clé utilisé (startByte inclusive, lengthBytes length)
+  final ({int startByte, int lengthBytes})? keySegment;
 
   /// Données chiffrées (XOR du message avec la clé)
   final Uint8List ciphertext;
@@ -82,16 +82,16 @@ class EncryptedMessage {
   /// Indique si le message est chiffré (a des segments de clé)
   bool get isEncrypted => keySegment != null;
 
-  /// Index du premier bit utilisé (du premier segment), ou 0 si non chiffré
-  int get startBit => keySegment != null ? keySegment!.startBit : 0;
+  /// Index du premier octet utilisé (du premier segment), ou 0 si non chiffré
+  int get startByte => keySegment != null ? keySegment!.startByte : 0;
 
-  /// Index du dernier bit utilisé (du dernier segment), ou 0 si non chiffré
-  int get endBit => keySegment != null ? keySegment!.endBit : 0;
+  /// Index du dernier octet utilisé (exclusif), ou 0 si non chiffré
+  int get endByte => keySegment != null ? keySegment!.startByte + keySegment!.lengthBytes : 0;
 
-  /// Longueur totale des segments utilisés en bits
-  int get totalBitsUsed {
+  /// Longueur totale des segments utilisés en octets
+  int get totalBytesUsed {
     if (keySegment == null) return 0;
-    return keySegment!.endBit - keySegment!.startBit;
+    return keySegment!.lengthBytes;
   }
 
   /// Vérifie si tous les participants ont transféré le message
@@ -125,7 +125,7 @@ class EncryptedMessage {
       'keyId': keyId,
       'senderId': senderId,
       // store single key segment as object for simplicity
-      'keySegment': keySegment != null ? {'startBit': keySegment!.startBit, 'endBit': keySegment!.endBit} : null,
+      'keySegment': keySegment != null ? {'startByte': keySegment!.startByte, 'lengthBytes': keySegment!.lengthBytes} : null,
       'ciphertext': base64Encode(ciphertext),
       'createdAt': createdAt.toIso8601String(),
       'readBy': readBy,
@@ -141,9 +141,9 @@ class EncryptedMessage {
   factory EncryptedMessage.fromJson(Map<String, dynamic> json) {
     // Support new single-segment format. If absent, leave as null.
     final segRaw = json['keySegment'] as Map<String, dynamic>?;
-    ({int startBit, int endBit})? parsedSeg;
+    ({int startByte, int lengthBytes})? parsedSeg;
     if (segRaw != null) {
-      parsedSeg = (startBit: segRaw['startBit'] as int, endBit: segRaw['endBit'] as int);
+      parsedSeg = (startByte: segRaw['startByte'] as int, lengthBytes: segRaw['lengthBytes'] as int);
     } else {
       parsedSeg = null;
     }

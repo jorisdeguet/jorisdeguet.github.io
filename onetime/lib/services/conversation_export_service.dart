@@ -34,20 +34,18 @@ class ConversationExportService {
       final pseudos = await _pseudoService.getPseudos(conversationId);
       _log.d('ExportService', 'Found ${pseudos.length} pseudos');
 
-      // Calculate used bits by counting set bits in the bitmap
-      int usedBits = 0;
-      for (int i = sharedKey.startOffset; i < sharedKey.lengthInBits; i++) {
-        if (sharedKey.isBitUsed(i)) {
-          usedBits++;
-        }
+      // Calculate used bytes by checking used byte map
+      int usedBytes = 0;
+      for (int b = sharedKey.startOffset; b < sharedKey.keyData.length; b++) {
+        if (sharedKey.usedBitmap[b] != 0) usedBytes++;
       }
 
       return ConversationExportData(
         conversationId: conversationId,
         peerIds: sharedKey.peerIds,
         sharedKeyData: sharedKey.keyData,
-        usedKeyBits: usedBits,
-        totalKeyBits: sharedKey.lengthInBits,
+        usedKeyBytes: usedBytes,
+        totalKeyBytes: sharedKey.lengthInBytes,
         localMessages: messages.map((m) => m.toJson()).toList(),
         pseudos: pseudos,
         exportedAt: DateTime.now(),
@@ -101,9 +99,10 @@ class ConversationExportService {
         peerIds: exportData.peerIds,
       );
 
-      // Marquer les bits utilisés
-      if (exportData.usedKeyBits > 0) {
-        sharedKey.markBitsAsUsed(0, exportData.usedKeyBits);
+      // Marquer les octets utilisés (support legacy bits value)
+      if (exportData.usedKeyBytes > 0) {
+        final usedBytes = exportData.usedKeyBytes + 7;
+        sharedKey.markBytesAsUsed(0, usedBytes);
       }
 
       // Sauvegarder la clé
@@ -191,8 +190,8 @@ class ConversationExportData {
   final String conversationId;
   final List<String> peerIds;
   final Uint8List sharedKeyData;
-  final int usedKeyBits;
-  final int totalKeyBits;
+  final int usedKeyBytes;
+  final int totalKeyBytes;
   final List<Map<String, dynamic>> localMessages;
   final Map<String, String> pseudos;
   final DateTime exportedAt;
@@ -201,8 +200,8 @@ class ConversationExportData {
     required this.conversationId,
     required this.peerIds,
     required this.sharedKeyData,
-    required this.usedKeyBits,
-    required this.totalKeyBits,
+    required this.usedKeyBytes,
+    required this.totalKeyBytes,
     required this.localMessages,
     required this.pseudos,
     required this.exportedAt,
@@ -213,8 +212,8 @@ class ConversationExportData {
       'conversationId': conversationId,
       'peerIds': peerIds,
       'sharedKeyData': base64Encode(sharedKeyData),
-      'usedKeyBits': usedKeyBits,
-      'totalKeyBits': totalKeyBits,
+      'usedKeyBytes': usedKeyBytes,
+      'totalKeyBytes': totalKeyBytes,
       'localMessages': localMessages,
       'pseudos': pseudos,
       'exportedAt': exportedAt.toIso8601String(),
@@ -227,8 +226,8 @@ class ConversationExportData {
       conversationId: json['conversationId'] as String,
       peerIds: List<String>.from(json['peerIds'] as List),
       sharedKeyData: base64Decode(json['sharedKeyData'] as String),
-      usedKeyBits: json['usedKeyBits'] as int,
-      totalKeyBits: json['totalKeyBits'] as int,
+      usedKeyBytes: json['usedKeyBytes'] as int,
+      totalKeyBytes: json['totalKeyBytes'] as int,
       localMessages: List<Map<String, dynamic>>.from(
         (json['localMessages'] as List).map((m) => m as Map<String, dynamic>),
       ),

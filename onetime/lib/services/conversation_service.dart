@@ -27,7 +27,7 @@ class ConversationService {
   /// Crée une nouvelle conversation (en état "joining")
   Future<Conversation> createConversation({
     required List<String> peerIds,
-    int totalKeyBits = 0,
+    int totalKeyBytes = 0,
     ConversationState state = ConversationState.joining,
   }) async {
     _log.d('Conversation', 'createConversation: peerIds=$peerIds, state=$state');
@@ -41,7 +41,7 @@ class ConversationService {
       id: conversationId,
       peerIds: allPeers,
       state: state,
-      totalKeyBits: totalKeyBits,
+      totalKeyBytes: totalKeyBytes,
     );
 
     await _conversationsRef.doc(conversationId).set(conversation.toFirestore());
@@ -64,11 +64,11 @@ class ConversationService {
   }
 
   /// Passe la conversation en mode "ready" (prête à utiliser)
-  Future<void> markConversationReady(String conversationId, int totalKeyBits) async {
-    _log.d('Conversation', 'markConversationReady: $conversationId, totalKeyBits=$totalKeyBits');
+  Future<void> markConversationReady(String conversationId, int totalKeyBytes) async {
+    _log.d('Conversation', 'markConversationReady: $conversationId, totalKeyBytes=$totalKeyBytes');
     await _conversationsRef.doc(conversationId).update({
       'state': ConversationState.ready.name,
-      'totalKeyBits': totalKeyBits,
+      'totalKeyBytes': totalKeyBytes,
     });
   }
 
@@ -113,12 +113,12 @@ class ConversationService {
   /// Met à jour une conversation après envoi de message
   Future<void> updateConversationWithMessage({
     required String conversationId,
-    required int bitsUsed,
+    required int bytesUsed,
   }) async {
     _log.d('Conversation', 'updateConversationWithMessage: conversationId=$conversationId');
     try {
       await _conversationsRef.doc(conversationId).update({
-        'usedKeyBits': FieldValue.increment(bitsUsed),
+        'usedKeyBytes': FieldValue.increment(bytesUsed),
       });
       _log.i('Conversation', 'updateConversationWithMessage: SUCCESS');
     } catch (e, stackTrace) {
@@ -138,22 +138,22 @@ class ConversationService {
   /// Met à jour les bits de clé d'une conversation existante et la marque comme prête
   Future<void> updateConversationKey({
     required String conversationId,
-    required int totalKeyBits,
+    required int totalKeyBytes,
     bool addToExisting = false,
   }) async {
-    _log.d('Conversation', 'updateConversationKey: $conversationId, $totalKeyBits bits, addToExisting=$addToExisting');
+    _log.d('Conversation', 'updateConversationKey: $conversationId, $totalKeyBytes bytes, addToExisting=$addToExisting');
 
     if (addToExisting) {
-      // Ajouter aux bits existants (extension de clé)
+      // Ajouter aux octets existants (extension de clé)
       await _conversationsRef.doc(conversationId).update({
-        'totalKeyBits': FieldValue.increment(totalKeyBits),
+        'totalKeyBytes': FieldValue.increment(totalKeyBytes),
         'state': ConversationState.ready.name,
       });
     } else {
-      // Remplacer les bits (premier échange)
+      // Remplacer la clé (premier échange)
       await _conversationsRef.doc(conversationId).update({
-        'totalKeyBits': totalKeyBits,
-        'usedKeyBits': 0,
+        'totalKeyBytes': totalKeyBytes,
+        'usedKeyBytes': 0,
         'state': ConversationState.ready.name,
       });
     }
@@ -220,11 +220,11 @@ class ConversationService {
       await _messagesRef(conversationId).doc(message.id).set(messageData);
       _log.i('Conversation', 'Message added successfully');
 
-      // Mettre à jour la conversation
+      // Mettre à jour la conversation (octets utilisés)
       _log.d('Conversation', 'Updating conversation...');
       await updateConversationWithMessage(
         conversationId: conversationId,
-        bitsUsed: message.totalBitsUsed,
+        bytesUsed: message.totalBytesUsed,
       );
       _log.i('Conversation', 'Conversation updated successfully');
     } catch (e, stackTrace) {

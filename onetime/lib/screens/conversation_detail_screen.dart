@@ -114,9 +114,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   // Cache des pseudos pour affichage
   Map<String, String> _displayNames = {};
   
-  // Track messages being processed to avoid duplicates
-  final Set<String> _processingMessages = {};
-  
   StreamSubscription<String>? _pseudoSubscription;
 
   @override
@@ -223,33 +220,33 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
   Future<void> _updateKeyDebugInfo() async {
     if (_sharedKey == null) return;
-    
+
     try {
-      final availableBits = _sharedKey!.countAvailableBits(_currentUserId);
+      final availableBytes = _sharedKey!.countAvailableBytes(_currentUserId);
       // Allocation linéaire : on scanne toute la clé
-      final totalBits = _sharedKey!.lengthInBits;
-      
-      // Trouver le premier et dernier index disponible
+      final totalBytes = _sharedKey!.lengthInBytes;
+
+      // Trouver le premier et dernier octet disponible
       int firstAvailable = -1;
       int lastAvailable = -1;
-      
-      for (int i = 0; i < totalBits; i++) {
-        if (!_sharedKey!.isBitUsed(i)) {
+
+      for (int i = 0; i < totalBytes; i++) {
+        if (!_sharedKey!.isByteUsed(i)) {
           if (firstAvailable == -1) firstAvailable = i;
           lastAvailable = i;
         }
       }
-      
+
       // Générer un hash simple pour la détection d'incohérences (first|last|available)
-      final consistencyHash = '$firstAvailable|$lastAvailable|$availableBits';
+      final consistencyHash = '$firstAvailable|$lastAvailable|$availableBytes';
 
       await _conversationService.updateKeyDebugInfo(
         conversationId: widget.conversation.id,
         userId: _currentUserId,
         info: {
-          'availableBits': availableBits,
-          'firstAvailableIndex': firstAvailable,
-          'lastAvailableIndex': lastAvailable,
+          'availableBytes': availableBytes,
+          'firstAvailableByte': firstAvailable,
+          'lastAvailableByte': lastAvailable,
           'consistencyHash': consistencyHash,
           'updatedAt': DateTime.now().toIso8601String(),
         },
@@ -257,28 +254,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       _log.d('ConversationDetail', 'Key debug info updated in Firestore');
     } catch (e) {
       _log.e('ConversationDetail', 'Error updating key debug info: $e');
-    }
-  }
-
-  /// Callback quand des bits de clé sont utilisés (après déchiffrement)
-  void _onKeyUsed() {
-    // Force UI rebuild to update key usage in app bar
-    if (mounted) {
-      setState(() {});
-    }
-
-    // Sauvegarder la clé avec le bitmap mis à jour
-    if (_sharedKey != null) {
-      _log.d('ConversationDetail', '_onKeyUsed called - saving key bitmap');
-      _keyStorageService.saveKey(widget.conversation.id, _sharedKey!).then((_) {
-        _log.i('ConversationDetail', 'Key bitmap saved after message decryption');
-        // Mettre à jour les infos de debug dans Firestore
-        _updateKeyDebugInfo();
-      }).catchError((e) {
-        _log.e('ConversationDetail', 'ERROR saving key bitmap: $e');
-      });
-    } else {
-      _log.w('ConversationDetail', '_onKeyUsed called but _sharedKey is null!');
     }
   }
 
@@ -315,7 +290,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
         _sharedKey = key;
         _hadKey = key != null;
       });
-      _log.i('ConversationDetail', 'Shared key loaded: ${key != null ? "${key.lengthInBits} bits" : "NOT FOUND"}');
+      _log.i('ConversationDetail', 'Shared key loaded: ${key != null ? "${key.lengthInBytes} bytes" : "NOT FOUND"}');
 
       // Update debug info immediately after loading key
       if (key != null) {
@@ -460,10 +435,10 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       );
 
       // Mettre à jour les bits utilisés
-      await _keyStorageService.updateUsedBits(
+      await _keyStorageService.updateUsedBytes(
         widget.conversation.id,
-        result.usedSegment.startBit,
-        result.usedSegment.endBit,
+        result.usedSegment.startByte,
+        result.usedSegment.startByte + result.usedSegment.lengthBytes,
       );
 
       // Recharger la clé
@@ -555,10 +530,10 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       );
 
       // Mettre à jour les bits utilisés dans le stockage local
-      await _keyStorageService.updateUsedBits(
+      await _keyStorageService.updateUsedBytes(
         widget.conversation.id,
-        result.usedSegment.startBit,
-        result.usedSegment.endBit,
+        result.usedSegment.startByte,
+        result.usedSegment.startByte + result.usedSegment.lengthBytes,
       );
 
       // Recharger la clé pour avoir les bits à jour
@@ -567,7 +542,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       // Update debug info after sending message
       await _updateKeyDebugInfo();
 
-      _log.d('ConversationDetail', 'Message encrypted: ${message.totalBitsUsed} bits used');
+      _log.d('ConversationDetail', 'Message encrypted: ${message.totalBytesUsed} bytes used');
 
       _log.d('ConversationDetail', 'Calling conversationService.sendMessage...');
       await _conversationService.sendMessage(
@@ -798,7 +773,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
         _log.d('EncryptBinary', '[Encrypt Binary] Encrypted data length: ${result.message.ciphertext.length} bytes');
         final seg = result.message.keySegment;
         if (seg != null) {
-          _log.d('EncryptBinary', '[Encrypt Binary] Key segment used: ${seg.startBit}-${seg.endBit} (${result.message.totalBitsUsed} bits)');
+          _log.d('EncryptBinary', '[Encrypt Binary] Key segment used: ${seg.startByte}-${seg.startByte + seg.lengthBytes} (${result.message.totalBytesUsed} bytes)');
         } else {
           _log.d('EncryptBinary', '[Encrypt Binary] Key segment used: none');
         }
@@ -811,10 +786,10 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
           : '📎 ${media.fileName}';
 
       // Mettre à jour les bits utilisés dans le stockage local
-      await _keyStorageService.updateUsedBits(
+      await _keyStorageService.updateUsedBytes(
         widget.conversation.id,
-        result.usedSegment.startBit,
-        result.usedSegment.endBit,
+        result.usedSegment.startByte,
+        result.usedSegment.startByte + result.usedSegment.lengthBytes,
       );
 
       // Recharger la clé pour avoir les bits à jour
@@ -826,7 +801,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
         messagePreview: messagePreview,
       );
 
-      _log.i('ConversationDetail', 'Media sent: ${message.totalBitsUsed} bits used');
+      _log.i('ConversationDetail', 'Media sent: ${message.totalBytesUsed} bytes used');
      } catch (e) {
       _log.e('ConversationDetail', 'ERROR sending media: $e');
        if (mounted) {
@@ -895,13 +870,13 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
     if (_sharedKey != null) {
       try {
-        // Compute once to avoid multiple failing accesses
-        final availableBits = _sharedKey!.countAvailableBits(_currentUserId);
-        final totalBits = _sharedKey!.lengthInBits;
+        // Compute once to avoid multiple failing accesses (byte-based)
+        final availableBytes = _sharedKey!.countAvailableBytes(_currentUserId);
+        final totalBytes = _sharedKey!.lengthInBytes;
 
-        if (totalBits > 0) {
-          remainingKeyFormatted = FormatService.formatBytes(availableBits ~/ 8);
-          keyRemainingPercent = (availableBits / totalBits) * 100;
+        if (totalBytes > 0) {
+          remainingKeyFormatted = FormatService.formatBytes(availableBytes);
+          keyRemainingPercent = (availableBytes / totalBytes) * 100;
           displayKeyPercent = keyRemainingPercent;
         } else {
           // Defensive fallback
@@ -1409,7 +1384,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
           if (!widget.isMine && widget.sharedKey != null && widget.message.isEncrypted) {
             final seg = widget.message.keySegment;
             if (seg != null) {
-              widget.sharedKey!.markBitsAsUsed(seg.startBit, seg.endBit);
+              widget.sharedKey!.markBytesAsUsed(seg.startByte, seg.startByte + seg.lengthBytes);
               widget.onKeyUsed?.call();
             }
           }
@@ -1428,7 +1403,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
           if (!widget.isMine && widget.sharedKey != null && widget.message.isEncrypted) {
             final seg = widget.message.keySegment;
             if (seg != null) {
-              widget.sharedKey!.markBitsAsUsed(seg.startBit, seg.endBit);
+              widget.sharedKey!.markBytesAsUsed(seg.startByte, seg.startByte + seg.lengthBytes);
               widget.onKeyUsed?.call();
             }
           }

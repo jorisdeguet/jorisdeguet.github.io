@@ -407,7 +407,7 @@ class _ConversationTileState extends State<_ConversationTile> {
   void didUpdateWidget(_ConversationTile oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.conversation.id != widget.conversation.id || 
-        oldWidget.conversation.usedKeyBits != widget.conversation.usedKeyBits ||
+        oldWidget.conversation.usedKeyBytes != widget.conversation.usedKeyBytes ||
         oldWidget.conversation.state != widget.conversation.state) {
       _loadData();
     }

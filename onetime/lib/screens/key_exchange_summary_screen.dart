@@ -5,6 +5,7 @@ import '../model_local/shared_key.dart';
 import '../model_remote/conversation.dart';
 import 'conversation_detail_screen.dart';
 import '../services/app_logger.dart';
+import '../services/format_service.dart';
 
 /// Screen showing detailed summary of a key exchange
 class KeyExchangeSummaryScreen extends StatelessWidget {
@@ -132,17 +133,19 @@ class KeyExchangeSummaryScreen extends StatelessWidget {
     buffer.writeln('🔑 TAILLE DES CLÉS');
     buffer.writeln('───────────────────────────────────────────────────');
     if (previousKey != null) {
-      buffer.writeln('Clé avant échange:     ${_formatBits(previousKey!.lengthInBits)}');
-      buffer.writeln('Nouvelle clé ajoutée:  ${_formatBits(newKey.lengthInBits - previousKey!.lengthInBits)}');
-      buffer.writeln('Clé totale après:      ${_formatBits(newKey.lengthInBits)}');
+      final prevBytes = previousKey!.lengthInBytes;
+      final addedBytes = newKey.lengthInBytes - prevBytes;
+      buffer.writeln('Clé avant échange:     ${FormatService.formatBytes(prevBytes)}');
+      buffer.writeln('Nouvelle clé ajoutée:  ${FormatService.formatBytes(addedBytes)}');
+      buffer.writeln('Clé totale après:      ${FormatService.formatBytes(newKey.lengthInBytes)}');
     } else {
-      buffer.writeln('Clé avant échange:     0 bits (nouvelle conversation)');
-      buffer.writeln('Nouvelle clé créée:    ${_formatBits(newKey.lengthInBits)}');
+      buffer.writeln('Clé avant échange:     0 B (nouvelle conversation)');
+      buffer.writeln('Nouvelle clé créée:    ${FormatService.formatBytes(newKey.lengthInBytes)}');
     }
     
-    // Calculate actually available bits for current user
-    final availableBits = newKey.countAvailableBits(currentUserId);
-    buffer.writeln('Bits disponibles:      ${_formatBits(availableBits)}');
+    // Calculate actually available bytes for current user
+    final availableBytes = newKey.countAvailableBytes(currentUserId);
+    buffer.writeln('Octets disponibles:     ${FormatService.formatBytes(availableBytes)}');
     buffer.writeln();
     
     // Segment scan status
@@ -194,27 +197,9 @@ class KeyExchangeSummaryScreen extends StatelessWidget {
     return buffer.toString();
   }
 
-  String _formatBits(int bits) {
-    final bytes = bits ~/ 8;
-    if (bytes < 1024) {
-      return '$bytes B ($bits bits)';
-    } else if (bytes < 1024 * 1024) {
-      final kb = (bytes / 1024).toStringAsFixed(2);
-      return '$kb KB ($bits bits)';
-    } else {
-      final mb = (bytes / (1024 * 1024)).toStringAsFixed(2);
-      return '$mb MB ($bits bits)';
-    }
-  }
-
   String _formatDateTime(DateTime dt) {
     return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} '
            '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}';
   }
 
-  String _createProgressBar(int current, int total, int width) {
-    final filled = (current / total * width).round();
-    final empty = width - filled;
-    return '[' + ('█' * filled) + ('░' * empty) + ']';
-  }
 }

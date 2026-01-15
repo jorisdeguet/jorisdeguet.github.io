@@ -6,12 +6,12 @@ class KeySegment {
   /// ID de la clé partagée dont ce segment est extrait
   final String keyId;
   
-  /// Index du premier bit (inclus)
-  final int startBit;
-  
-  /// Index du dernier bit (exclus)
-  final int endBit;
-  
+  /// Index du premier octet (inclus) dans la clé
+  final int startByte;
+
+  /// Nombre d'octets du segment
+  final int lengthBytes;
+
   /// ID du peer qui a utilisé ce segment
   final String usedByPeerId;
   
@@ -20,30 +20,36 @@ class KeySegment {
 
   KeySegment({
     required this.keyId,
-    required this.startBit,
-    required this.endBit,
+    required this.startByte,
+    required this.lengthBytes,
     required this.usedByPeerId,
     DateTime? usedAt,
   }) : usedAt = usedAt ?? DateTime.now();
 
-  /// Longueur du segment en bits
-  int get lengthInBits => endBit - startBit;
-  
-  /// Longueur du segment en octets (arrondi supérieur)
-  int get lengthInBytes => (lengthInBits + 7) ~/ 8;
+  /// Longueur du segment en octets
+  int get lengthInBytes => lengthBytes;
 
-  /// Vérifie si deux segments se chevauchent
+  /// Longueur du segment en bits (arrondi)
+  int get lengthInBits => lengthBytes * 8;
+
+  /// Index du premier bit (inclus)
+  int get startBit => startByte * 8;
+
+  /// Index du dernier bit (exclus)
+  int get endBit => (startByte + lengthBytes) * 8;
+
+  /// Vérifie si deux segments se chevauchent (en octets)
   bool overlapsWith(KeySegment other) {
     if (keyId != other.keyId) return false;
-    return startBit < other.endBit && endBit > other.startBit;
+    return startByte < other.startByte + other.lengthBytes && (startByte + lengthBytes) > other.startByte;
   }
 
   /// Sérialise le segment pour transmission/stockage
   Map<String, dynamic> toJson() {
     return {
       'keyId': keyId,
-      'startBit': startBit,
-      'endBit': endBit,
+      'startByte': startByte,
+      'lengthBytes': lengthBytes,
       'usedByPeerId': usedByPeerId,
       'usedAt': usedAt.toIso8601String(),
     };
@@ -53,15 +59,15 @@ class KeySegment {
   factory KeySegment.fromJson(Map<String, dynamic> json) {
     return KeySegment(
       keyId: json['keyId'] as String,
-      startBit: json['startBit'] as int,
-      endBit: json['endBit'] as int,
+      startByte: json['startByte'] as int,
+      lengthBytes: json['lengthBytes'] as int,
       usedByPeerId: json['usedByPeerId'] as String,
       usedAt: DateTime.parse(json['usedAt'] as String),
     );
   }
 
   @override
-  String toString() => 'KeySegment($keyId: $startBit-$endBit by $usedByPeerId)';
+  String toString() => 'KeySegment($keyId: $startByte + $lengthBytes bytes by $usedByPeerId)';
 }
 
 /// Représente une demande de lock sur un segment de clé.

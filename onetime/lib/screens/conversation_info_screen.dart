@@ -62,18 +62,25 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
     // Calcul de la clé restante basé sur SharedKey si disponible (plus précis)
     // Utiliser l'ID utilisateur courant pour le calcul
     final remainingKeyFormatted = widget.sharedKey != null && _currentUserId.isNotEmpty && widget.sharedKey!.peerIds.contains(_currentUserId)
-        ? FormatService.formatBytes(widget.sharedKey!.countAvailableBits(_currentUserId) ~/ 8)
+        ? FormatService.formatBytes(widget.sharedKey!.countAvailableBytes(_currentUserId))
         : widget.conversation.remainingKeyFormatted;
         
     final totalKeyFormatted = widget.sharedKey != null
         ? FormatService.formatBytes(widget.sharedKey!.lengthInBytes)
-        : FormatService.formatBytes(widget.conversation.totalKeyBits ~/ 8);
+        : FormatService.formatBytes(widget.conversation.totalKeyBytes);
 
     final keyUsagePercent = widget.sharedKey != null && _currentUserId.isNotEmpty
-        ? (1 - (widget.sharedKey!.countAvailableBits(_currentUserId) / widget.sharedKey!.lengthInBits)) * 100
+        ? (1 - (widget.sharedKey!.countAvailableBytes(_currentUserId) / widget.sharedKey!.lengthInBytes)) * 100
         : widget.conversation.keyUsagePercent;
 
     final keyRemainingPercent = 100 - keyUsagePercent;
+
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Infos conversation')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -141,8 +148,8 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
                   if (widget.sharedKey != null && peerId.isNotEmpty) {
                     try {
                       // Check if peer exists in key first to avoid ArgumentError
-                      final availableBits = widget.sharedKey!.countAvailableBits(peerId);
-                      debugInfo = '\n[Local] Clé: $availableBits bits dispos (sur ${widget.sharedKey!.lengthInBits})';
+                      final availableBytes = widget.sharedKey!.countAvailableBytes(peerId);
+                      debugInfo = '\n[Local] Clé: ${FormatService.formatBytes(availableBytes)} dispos (sur ${FormatService.formatBytes(widget.sharedKey!.lengthInBytes)})';
                     } catch (e) {
                       debugInfo = '\n[Local] Erreur lecture clé';
                     }
@@ -151,14 +158,14 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
                   // Add Remote Key Info from Firestore
                   if (widget.conversation.keyDebugInfo.containsKey(peerId)) {
                     final info = widget.conversation.keyDebugInfo[peerId] as Map<String, dynamic>;
-                    final remoteBits = info['availableBits'];
-                    final remoteStart = info['firstAvailableIndex'];
-                    final remoteEnd = info['lastAvailableIndex'];
-                    final lastUpdate = info['updatedAt'] != null 
+                    final remoteBytes = info['availableBytes'];
+                    final remoteStart = info['firstAvailableByte'];
+                    final remoteEnd = info['lastAvailableByte'];
+                    final lastUpdate = info['updatedAt'] != null
                         ? _formatTime(DateTime.parse(info['updatedAt'])) 
                         : '?';
                         
-                    debugInfo += '\n[Remote $lastUpdate] Clé: $remoteBits bits dispos ($remoteStart-$remoteEnd)';
+                    debugInfo += '\n[Remote $lastUpdate] Clé: ${FormatService.formatBytes(remoteBytes ?? 0)} dispos ($remoteStart-$remoteEnd)';
                   }
                   
                   return ListTile(

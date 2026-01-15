@@ -1,9 +1,6 @@
 import 'dart:async';
-import 'dart:typed_data';
-import 'package:flutter/foundation.dart';
 import '../services/random_key_generator_service.dart';
 import '../services/key_exchange_service.dart';
-import '../model_remote/kex_session.dart';
 import 'app_logger.dart';
 
 /// Service responsable de la pré-génération des données de clé
@@ -18,7 +15,7 @@ class KeyPreGenerationService {
   final _log = AppLogger();
 
   // Pool de sessions pré-générées
-  // Clé: taille de la clé en bits (ex: 8192 * 8)
+  // Clé: taille de la clé en octets (ex: 8192)
   final Map<int, _PreGeneratedSession> _preGeneratedPool = {};
   
   bool _isGenerating = false;
@@ -26,8 +23,8 @@ class KeyPreGenerationService {
   // Tailles standards à pré-générer (8KB, 32KB)
   // On ne pré-génère pas les très grandes clés pour économiser la mémoire
   static const List<int> _standardSizes = [
-    8192 * 8,  // 8 KB
-    32768 * 8, // 32 KB
+    8192,  // 8 KB
+    32768, // 32 KB
   ];
 
   // Nombre de segments cibles à avoir prêts (30 segments)
@@ -42,10 +39,10 @@ class KeyPreGenerationService {
 
   /// Récupère une session pré-générée si disponible
   /// Retourne null si aucune session n'est prête
-  _PreGeneratedSession? consumeSession(int totalBits) {
-    if (_preGeneratedPool.containsKey(totalBits)) {
-      final session = _preGeneratedPool.remove(totalBits);
-      _log.i('KeyPreGen', 'Consumed session ${session?.sessionId} for $totalBits bits');
+  _PreGeneratedSession? consumeSession(int totalBytes) {
+    if (_preGeneratedPool.containsKey(totalBytes)) {
+      final session = _preGeneratedPool.remove(totalBytes);
+      _log.i('KeyPreGen', 'Consumed session ${session?.sessionId} for $totalBytes bytes');
 
       // Déclencher le remplissage du pool
       _triggerReplenish();
@@ -69,12 +66,12 @@ class KeyPreGenerationService {
     try {
       for (final size in _standardSizes) {
         if (!_preGeneratedPool.containsKey(size)) {
-          _log.i('KeyPreGen', 'Generating session for $size bits...');
+          _log.i('KeyPreGen', 'Generating session for $size bytes...');
 
           final session = await _generateSession(size);
           _preGeneratedPool[size] = session;
           
-          _log.i('KeyPreGen', 'Session ready for $size bits (${session.preGeneratedSegments.length} segments)');
+          _log.i('KeyPreGen', 'Session ready for $size bytes (${session.preGeneratedSegments.length} segments)');
 
           // Yield to main thread
           await Future.delayed(Duration.zero);
@@ -87,7 +84,7 @@ class KeyPreGenerationService {
     }
   }
 
-  Future<_PreGeneratedSession> _generateSession(int totalBits) async {
+  Future<_PreGeneratedSession> _generateSession(int totalBytes) async {
     final sessionId = 'pre_${DateTime.now().millisecondsSinceEpoch}';
     
     // Créer une session temporaire pour utiliser la logique de génération existante
@@ -97,15 +94,15 @@ class KeyPreGenerationService {
       role: KeyExchangeRole.source,
       peerIds: ['placeholder'],
       localPeerId: 'source_placeholder',
-      totalBits: totalBits,
+      totalBytes: totalBytes,
     );
 
     final segments = <KeySegmentQrData>[];
     
     // Générer les N premiers segments
     for (int i = 0; i < _targetReadySegments; i++) {
-      if (i * KeyExchangeService.segmentSizeBits >= totalBits) break;
-      
+      if (i * KeyExchangeService.segmentSizeBytes >= totalBytes) break;
+
       final segment = _keyExchangeService.generateNextSegment(tempSession);
       segments.add(segment);
       
@@ -115,20 +112,20 @@ class KeyPreGenerationService {
 
     return _PreGeneratedSession(
       sessionId: sessionId,
+      totalBytes: totalBytes,
       preGeneratedSegments: segments,
-      totalBits: totalBits,
     );
   }
 }
 
 class _PreGeneratedSession {
   final String sessionId;
-  final int totalBits;
+  final int totalBytes;
   final List<KeySegmentQrData> preGeneratedSegments;
 
   _PreGeneratedSession({
     required this.sessionId,
-    required this.totalBits,
+    required this.totalBytes,
     required this.preGeneratedSegments,
   });
 }

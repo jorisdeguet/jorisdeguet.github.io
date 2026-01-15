@@ -61,8 +61,8 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   bool _isFinalizing = false;
   String? _errorMessage;
   
-  // Taille de clé à générer (en bits)
-  int _keySizeBits = 8192 * 8; // 8 KB par défaut
+  // Taille de clé à générer (en octets)
+  int _keySizeBytes = 8192; // 8 KB par défaut
 
   // Gestion de la luminosité
   double? _originalBrightness;
@@ -156,11 +156,11 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         compress: true,
       );
 
-      // Mettre à jour les bits utilisés
-      await _keyStorageService.updateUsedBits(
+      // Mettre à jour les octets utilisés
+      await _keyStorageService.updateUsedBytes(
         conversationId,
-        result.usedSegment.startBit,
-        result.usedSegment.endBit,
+        result.usedSegment.startByte,
+        result.usedSegment.startByte + result.usedSegment.lengthBytes,
       );
 
       // Envoyer le message
@@ -190,8 +190,8 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     try {
       // CHECK FOR PRE-GENERATED SESSION
       final preGenService = KeyPreGenerationService();
-      final preGenSession = preGenService.consumeSession(_keySizeBits);
-      
+      final preGenSession = preGenService.consumeSession(_keySizeBytes);
+
       // Utiliser l'ID pré-généré si disponible, sinon en créer un nouveau
       // Note: On utilise un nouvel ID Firestore de toute façon pour garantir l'unicité et le bon format
       // mais on réutilise les données de clé pré-générées
@@ -200,8 +200,8 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       _log.d('KeyExchange', '+${step1.difference(startTime).inMilliseconds}ms - Calculating segments');
 
       // Calculer le nombre de segments
-      final totalSegments = (_keySizeBits + KeyExchangeService.segmentSizeBits - 1) ~/
-                            KeyExchangeService.segmentSizeBits;
+      final totalSegments = (_keySizeBytes + KeyExchangeService.segmentSizeBytes - 1) ~/
+                            KeyExchangeService.segmentSizeBytes;
 
       final step2 = DateTime.now();
       _log.d('KeyExchange', '+${step2.difference(startTime).inMilliseconds}ms - Creating Firestore session');
@@ -210,7 +210,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       _firestoreSession = await _syncService.createSession(
         sourceId: _currentUserId,
         participants: widget.peerIds,
-        totalKeyBits: _keySizeBits,
+        totalKeyBytes: _keySizeBytes,
         totalSegments: totalSegments,
       );
 
@@ -226,7 +226,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       // Créer la session locale avec le MÊME ID que Firestore
       // Et injecter les segments pré-générés si disponibles
       _session = _keyExchangeService.createSourceSession(
-        totalBits: _keySizeBits,
+        totalBytes: _keySizeBytes,
         peerIds: widget.peerIds,
         sourceId: _currentUserId,
         sessionId: _firestoreSession!.id, // Utiliser l'ID Firestore
@@ -437,19 +437,19 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       if (existingKey != null) {
         // KEY EXTENSION: Étendre la clé existante
         _log.d('KeyExchange', 'Reader: Loading existing key for extension...');
-        _log.d('KeyExchange', 'Reader: Existing key: ${existingKey.lengthInBits} bits');
+        _log.d('KeyExchange', 'Reader: Existing key: ${existingKey.lengthInBytes} bytes');
 
         final newKeyData = _keyExchangeService.finalizeExchange(
           _session!,
           force: true,
         );
         
-        _log.d('KeyExchange', 'Reader: New key data: ${newKeyData.lengthInBits} bits');
+        _log.d('KeyExchange', 'Reader: New key data: ${newKeyData.lengthInBytes} bytes');
 
         // Étendre la clé existante
         finalKey = existingKey.extend(newKeyData.keyData);
         
-        _log.d('KeyExchange', 'Reader: Extended key: ${finalKey.lengthInBits} bits');
+        _log.d('KeyExchange', 'Reader: Extended key: ${finalKey.lengthInBytes} bytes');
       } else {
         // NOUVELLE CLÉ
         finalKey = _keyExchangeService.finalizeExchange(
@@ -457,13 +457,19 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           force: true,
         );
         
-        _log.d('KeyExchange', 'Reader: New key: ${finalKey.lengthInBits} bits');
+        _log.d('KeyExchange', 'Reader: New key: ${finalKey.lengthInBytes} bytes');
       }
 
       // Sauvegarder la clé localement avec le même conversationId
       _log.d('KeyExchange', 'Reader: Saving shared key locally for conversation ${conversation.id}');
       final readerContrib = _firestoreSession != null
-        ? [{'kexId': _firestoreSession!.id, 'startBit': (_firestoreSession!.startIndex * KeyExchangeService.segmentSizeBits), 'endBit': min(finalKey.lengthInBits, _firestoreSession!.endIndex * KeyExchangeService.segmentSizeBits)}]
+        ? [
+            {
+              'kexId': _firestoreSession!.id,
+              'startByte': (_firestoreSession!.startIndex * KeyExchangeService.segmentSizeBytes),
+              'endByte': min(finalKey.lengthInBytes, _firestoreSession!.endIndex * KeyExchangeService.segmentSizeBytes)
+            }
+          ]
         : null;
       await _keyStorageService.saveKey(conversation.id, finalKey, lastKexId: _firestoreSession?.id, kexContributions: readerContrib);
       _log.i('KeyExchange', 'Reader: Shared key saved successfully');
@@ -676,9 +682,9 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     if (_session == null) return;
 
     try {
-      // Recréer le QR data pour ce segment
-      final startBit = segmentIndex * KeyExchangeService.segmentSizeBits;
-      final endBit = min(startBit + KeyExchangeService.segmentSizeBits, _session is KexSessionSource ? (_session as KexSessionSource).totalBits : (_firestoreSession?.totalSegments ?? startBit + KeyExchangeService.segmentSizeBits));
+      // Recréer le QR data pour ce segment (octets)
+      final startByte = segmentIndex * KeyExchangeService.segmentSizeBytes;
+      final endByte = min(startByte + KeyExchangeService.segmentSizeBytes, _session is KexSessionSource ? (_session as KexSessionSource).totalBytes : (_firestoreSession?.totalSegments ?? startByte + KeyExchangeService.segmentSizeBytes));
 
       // Récupérer les données du segment depuis la session
       final segmentData = _session!.getSegmentData(segmentIndex);
@@ -696,8 +702,8 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         _currentQrData = KeySegmentQrData(
           sessionId: _session!.sessionId,
           segmentIndex: segmentIndex,
-          startBit: startBit,
-          endBit: endBit,
+          startByte: startByte,
+          endByte: endByte,
           keyData: segmentData,
         );
       });
@@ -852,7 +858,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
         if (existingKey != null) {
           // KEY EXTENSION: La conversation a déjà une clé
-          _log.d('KeyExchange', 'Existing key found: ${existingKey.lengthInBits} bits - extending...');
+          _log.d('KeyExchange', 'Existing key found: ${existingKey.lengthInBytes} bytes - extending...');
 
           // Forcer la finalisation pour obtenir les nouveaux segments
           final newKeyData = _keyExchangeService.finalizeExchange(
@@ -860,12 +866,12 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
             force: true,
           );
 
-          _log.d('KeyExchange', 'New key data: ${newKeyData.lengthInBits} bits');
+          _log.d('KeyExchange', 'New key data: ${newKeyData.lengthInBytes} bytes');
 
           // Étendre la clé existante avec les nouveaux bits
           finalKey = existingKey.extend(newKeyData.keyData);
 
-          _log.d('KeyExchange', 'Extended key: ${finalKey.lengthInBits} bits');
+          _log.d('KeyExchange', 'Extended key: ${finalKey.lengthInBytes} bytes');
         } else {
           // CRÉATION INITIALE: La conversation existe mais sans clé encore
           _log.d('KeyExchange', 'No existing key - creating initial key for conversation');
@@ -877,13 +883,13 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
             force: true,
           );
 
-          _log.d('KeyExchange', 'Initial key created: ${finalKey.lengthInBits} bits');
+          _log.d('KeyExchange', 'Initial key created: ${finalKey.lengthInBytes} bytes');
         }
 
-        // Mettre à jour la conversation avec le nouveau total de bits
+        // Mettre à jour la conversation avec le nouveau total de bytes
         await conversationService.updateConversationKey(
           conversationId: conversationId,
-          totalKeyBits: finalKey.lengthInBits,
+          totalKeyBytes: finalKey.lengthInBytes,
         );
         _log.d('KeyExchange', 'Conversation updated: $conversationId');
       } else {
@@ -896,7 +902,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
         final conversation = await conversationService.createConversation(
           peerIds: _session != null ? _session!.peerIds : widget.peerIds,
-          totalKeyBits: finalKey.lengthInBits,
+          totalKeyBytes: finalKey.lengthInBytes,
         );
         conversationId = conversation.id;
         _log.d('KeyExchange', 'New conversation created: $conversationId');
@@ -920,7 +926,13 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       // Sauvegarder la clé localement
       _log.d('KeyExchange', 'Saving shared key locally for conversation $conversationId');
       final sourceContrib = _firestoreSession != null
-        ? [{'kexId': _firestoreSession!.id, 'startBit': (_firestoreSession!.startIndex * KeyExchangeService.segmentSizeBits), 'endBit': min(finalKey.lengthInBits, _firestoreSession!.endIndex * KeyExchangeService.segmentSizeBits)}]
+        ? [
+            {
+              'kexId': _firestoreSession!.id,
+              'startByte': (_firestoreSession!.startIndex * KeyExchangeService.segmentSizeBytes),
+              'endByte': min(finalKey.lengthInBytes, _firestoreSession!.endIndex * KeyExchangeService.segmentSizeBytes)
+            }
+          ]
         : null;
       await _keyStorageService.saveKey(conversationId, finalKey, lastKexId: _firestoreSession?.id, kexContributions: sourceContrib);
       _log.i('KeyExchange', 'Shared key saved successfully');
@@ -977,10 +989,10 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   }
 
   Widget _buildKeyGenButton(String label, int sizeInBits) {
-    final isSelected = _keySizeBits == sizeInBits;
+    final isSelected = _keySizeBytes == sizeInBits;
     return ElevatedButton(
       onPressed: () {
-        setState(() => _keySizeBits = sizeInBits);
+        setState(() => _keySizeBytes = sizeInBits);
         _startAsSource();
       },
       style: ElevatedButton.styleFrom(
@@ -1334,15 +1346,13 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     final segmentsToInclude = lastCompleteSegment + 1; // +1 because index is 0-based
     _log.d('TERMINATE', '✓ Will include $segmentsToInclude segments (0 to $lastCompleteSegment) in the key');
 
-    // Update the session's total bits to only include complete segments
-    final bitsPerSegment = KeyExchangeService.segmentSizeBits;
-    final adjustedTotalBits = segmentsToInclude * bitsPerSegment;
-    
-    _log.d('TERMINATE', 'Bits adjustment:');
-    _log.d('TERMINATE', '  - Original totalBits: ${(_session is KexSessionSource) ? (_session as KexSessionSource).totalBits : 'unknown'}');
-    _log.d('TERMINATE', '  - Adjusted totalBits: $adjustedTotalBits');
-    _log.d('TERMINATE', '  - Original totalSegments: ${(_session is KexSessionSource) ? (_session as KexSessionSource).totalSegments : 'unknown'}');
-    _log.d('TERMINATE', '  - Adjusted totalSegments: $segmentsToInclude');
+    // Update the session's total bytes to only include complete segments
+    final bytesPerSegment = KeyExchangeService.segmentSizeBytes;
+    final adjustedTotalBytes = segmentsToInclude * bytesPerSegment;
+
+    _log.d('TERMINATE', 'Bytes adjustment:');
+    _log.d('TERMINATE', '  - Original totalBytes: ${(_session is KexSessionSource) ? (_session as KexSessionSource).totalBytes : 'unknown'}');
+    _log.d('TERMINATE', '  - Adjusted totalBytes: $adjustedTotalBytes');
 
     // Update the Firestore session so readers know how many segments to use
     _log.d('TERMINATE', 'Updating Firestore session with adjusted counts...');
@@ -1350,7 +1360,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       await _syncService.updateTotalSegments(
         _firestoreSession!.id,
         segmentsToInclude,
-        adjustedTotalBits,
+        adjustedTotalBytes,
       );
       _log.d('TERMINATE', '✅ Firestore session updated successfully');
     } catch (e) {
@@ -1598,43 +1608,50 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   /// Updates Firestore keyDebugInfo for a conversation
   Future<void> _updateKeyDebugInfoForConversation(String conversationId, SharedKey key) async {
     try {
-      final availableBits = key.countAvailableBits(_currentUserId);
-      final totalBits = key.lengthInBits;
-      
-      // Find first and last available index
+      final availableBytes = key.countAvailableBytes(_currentUserId);
+      final totalBytes = key.lengthInBytes;
+
+      // Find first and last available byte index
       int firstAvailable = -1;
       int lastAvailable = -1;
-      
-      for (int i = 0; i < totalBits; i++) {
-        if (!key.isBitUsed(i)) {
+      for (int i = 0; i < totalBytes; i++) {
+        if (!key.isByteUsed(i)) {
           if (firstAvailable == -1) firstAvailable = i;
           lastAvailable = i;
         }
       }
       
       // Generate consistency hash
-      final consistencyHash = '$firstAvailable|$lastAvailable|$availableBits';
+      final consistencyHash = '$firstAvailable|$lastAvailable|$availableBytes';
 
       final conversationService = ConversationService(localUserId: _currentUserId);
       await conversationService.updateKeyDebugInfo(
         conversationId: conversationId,
         userId: _currentUserId,
         info: {
-          'availableBits': availableBits,
-          'firstAvailableIndex': firstAvailable,
-          'lastAvailableIndex': lastAvailable,
+          'availableBytes': availableBytes,
+          'firstAvailableByte': firstAvailable,
+          'lastAvailableByte': lastAvailable,
           'consistencyHash': consistencyHash,
           'updatedAt': DateTime.now().toIso8601String(),
         },
       );
       
-      _log.d('KeyExchange', 'KeyDebugInfo updated for user $_currentUserId: $availableBits bits available');
-      _log.d('KeyExchange', '  First available index: $firstAvailable last available index: $lastAvailable consistencyHash: $consistencyHash');
+      _log.d('KeyExchange', 'KeyDebugInfo updated for user $_currentUserId: $availableBytes bytes available');
+      _log.d('KeyExchange', '  First available byte: $firstAvailable last available byte: $lastAvailable consistencyHash: $consistencyHash');
     } catch (e) {
       _log.e('KeyExchange', 'Error updating keyDebugInfo: $e');
     }
   }
 }
+
+
+
+
+
+
+
+
 
 
 

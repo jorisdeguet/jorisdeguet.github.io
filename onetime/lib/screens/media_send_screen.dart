@@ -59,12 +59,12 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
   }
 
   void _calculateKeyUsage() {
-    final availableBits = widget.sharedKey.countAvailableBits(widget.currentUserId);
-    final neededBits = _currentResult!.data.length * 8;
-    final usagePercent = (neededBits / availableBits * 100).toStringAsFixed(1);
-    
-    _addLog('Clé disponible: ${_mediaService.formatKeyBits(availableBits)}');
-    _addLog('Bits nécessaires: ${_mediaService.formatKeyBits(neededBits)}');
+    final availableBytes = widget.sharedKey.countAvailableBytes(widget.currentUserId);
+    final neededBytes = _currentResult!.data.length;
+    final usagePercent = availableBytes > 0 ? (neededBytes / availableBytes * 100).toStringAsFixed(1) : '∞';
+
+    _addLog('Clé disponible: ${FormatService.formatBytes(availableBytes)}');
+    _addLog('Octets nécessaires: ${FormatService.formatBytes(neededBytes)}');
     _addLog('Utilisation: $usagePercent%');
   }
 
@@ -109,10 +109,10 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
       _addLog('Chiffré en ${encryptTime}ms');
       _addLog('Données chiffrées: ${FormatService.formatBytes(result.message.ciphertext.length)}');
 
-      // Single segment model: log start/end
+      // Single segment model: log start/end in bytes
       if (result.message.keySegment != null) {
         final ks = result.message.keySegment!;
-        _addLog('Segment utilisé: ${ks.startBit}-${ks.endBit} (${result.message.totalBitsUsed} bits)');
+        _addLog('Segment utilisé (bytes): ${ks.startByte}-${ks.startByte + ks.lengthBytes} (${ks.lengthBytes} bytes)');
       } else {
         _addLog('Segment utilisé: none');
       }
@@ -133,11 +133,11 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
         ),
       );
 
-      _addLog('Mise à jour du bitmap de bits utilisés...');
-      await keyStorageService.updateUsedBits(
+      _addLog('Mise à jour des octets utilisés...');
+      await keyStorageService.updateUsedBytes(
         widget.conversationId,
-        result.usedSegment.startBit,
-        result.usedSegment.endBit,
+        result.usedSegment.startByte,
+        result.usedSegment.startByte + result.usedSegment.lengthBytes,
       );
 
       final messagePreview = _currentResult!.contentType == MessageContentType.image
@@ -188,9 +188,9 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final availableBits = widget.sharedKey.countAvailableBits(widget.currentUserId);
-    final neededBits = _currentResult!.data.length * 8;
-    final canSend = neededBits <= availableBits;
+    final availableBytes = widget.sharedKey.countAvailableBytes(widget.currentUserId);
+    final neededBytes = _currentResult!.data.length;
+    final canSend = neededBytes <= availableBytes;
 
     return Scaffold(
       appBar: AppBar(
@@ -303,7 +303,7 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
                             : const Icon(Icons.send),
                         label: Text(
                           canSend
-                              ? 'Envoyer (${FormatService.formatBytes(neededBits ~/ 8)})'
+                              ? 'Envoyer (${FormatService.formatBytes(neededBytes)})'
                               : 'Pas assez de clé disponible',
                         ),
                         style: ElevatedButton.styleFrom(

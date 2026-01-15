@@ -3,22 +3,21 @@ import 'format_service.dart';
 
 /// Service pour calculer les statistiques de clé disponible
 class KeyStatsService {
-  /// Calcule les bits disponibles dans une clé partagée
-  static int getAvailableBits(SharedKey? sharedKey, String localPeerId) {
+  /// Calcule les octets disponibles dans une clé partagée
+  static int getAvailableBytes(SharedKey? sharedKey, String localPeerId) {
     if (sharedKey == null) return 0;
-    return sharedKey.countAvailableBits(localPeerId);
+    return sharedKey.countAvailableBytes(localPeerId);
   }
 
   /// Calcule les KB disponibles dans une clé partagée
   static double getAvailableKB(SharedKey? sharedKey, String localPeerId) {
-    final bits = getAvailableBits(sharedKey, localPeerId);
-    return bits / 8 / 1024; // bits -> bytes -> KB
+    final bytes = getAvailableBytes(sharedKey, localPeerId);
+    return bytes / 1024.0; // bytes -> KB
   }
 
-  /// Formatte les KB disponibles pour affichage
+  /// Formatte les octets disponibles pour affichage
   static String formatAvailableKey(SharedKey? sharedKey, String localPeerId) {
-    final bits = getAvailableBits(sharedKey, localPeerId);
-    final bytes = bits ~/ 8;
+    final bytes = getAvailableBytes(sharedKey, localPeerId);
     return FormatService.formatBytes(bytes);
   }
 
@@ -26,9 +25,9 @@ class KeyStatsService {
   static double getAvailablePercent(SharedKey? sharedKey, String localPeerId) {
     if (sharedKey == null) return 0;
     // Allocation linéaire : on utilise la taille totale de la clé
-    final totalBits = sharedKey.lengthInBits;
-    if (totalBits == 0) return 0;
-    final availableBits = getAvailableBits(sharedKey, localPeerId);
-    return (availableBits / totalBits) * 100;
+    final totalBytes = sharedKey.lengthInBytes;
+    if (totalBytes == 0) return 0;
+    final availableBytes = getAvailableBytes(sharedKey, localPeerId);
+    return (availableBytes / totalBytes) * 100;
   }
 }

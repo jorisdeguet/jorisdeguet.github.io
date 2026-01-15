@@ -8,8 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'services/auth_service.dart';
 import 'services/key_pre_generation_service.dart';
 import 'services/pseudo_storage_service.dart';
-import 'services/background_message_service.dart';
-import 'model_remote/conversation.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'l10n/app_localizations.dart';
