@@ -56,6 +56,20 @@ class SharedKey {
 
     // Ensure within bounds
     _nextAvailableByte = _nextAvailableByte.clamp(startOffset, startOffset + maxIndex);
+
+    // If we loade State matches the actual stored key size. This
+    // avoids inconsistencies where the key bytes are non-empty but history
+    // is empty which would make operators like + fail due to mismatched bounds.
+    if (this.history.isEmpty) {
+      final totalEnd = startOffset + keyData.length;
+      if (totalEnd > 0) {
+        // record an initial extension from 0 to totalEnd
+        this.history.recordExtension(
+          segment: KeyInterval(conversationId: id, startIndex: 0, endIndex: totalEnd),
+          reason: 'migrated',
+        );
+      }
+    }
   }
 
   /// Public getter for next available byte index
@@ -241,10 +255,14 @@ class SharedKey {
     newKeyData.setRange(keyData.length, newKeyData.length, additionalKeyData);
 
     // Create extended segment for history
+    // baseIndex is taken from history.currentState to ensure consistency
+    // between stored history and newly appended bytes (handles migration cases
+    // where history and keyData might have diverged).
+    final baseIndex = history.currentState.endIndex;
     final extSegment = KeyInterval(
       conversationId: id,
-      startIndex: startOffset + keyData.length,
-      endIndex: startOffset + newKeyData.length,
+      startIndex: baseIndex,
+      endIndex: baseIndex + additionalKeyData.length,
     );
 
     // Copy history and record extension
