@@ -757,7 +757,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       // Vérifier qu'on n'a pas déjà scanné ce segment
       if (_session!.hasScannedSegment(segment.segmentIndex)) {
         _log.w('QR SCAN', 'Segment ${segment.segmentIndex} already scanned, skipping');
-        _log.d('QR SCAN', 'Already scanned segments: ${_firestoreSession?.scannedBy[segment.segmentIndex]}');
         // Ne pas afficher d'erreur, juste continuer à scanner
         if (mounted) {
           setState(() {

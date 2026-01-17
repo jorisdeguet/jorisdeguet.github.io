@@ -19,24 +19,12 @@ class AuthService {
 
   /// Initialise le service et connecte l'utilisateur anonymement si nécessaire
   Future<bool> initialize() async {
-    _log.d('AuthService', 'initialize()');
-
-    // Écouter les changements d'état (optionnel pour debug)
-    FirebaseAuth.instance.authStateChanges().listen((User? user) {
-      if (user == null) {
-        _log.d('AuthService', 'User is currently signed out!');
-      } else {
-        _log.d('AuthService', 'User is signed in: ${user.uid}');
-      }
-    });
-
     if (!isSignedIn) {
       _log.d('AuthService', 'No user signed in, attempting anonymous sign-in...');
       await signInAnonymously();
     } else {
       _log.d('AuthService', 'Already signed in with ID: $currentUserId');
     }
-    
     return isSignedIn;
   }
 
@@ -50,7 +38,7 @@ class AuthService {
       return user?.uid;
     } catch (e) {
       _log.e('AuthService', 'signInAnonymously ERROR: $e');
-      throw AuthException('Failed to sign in anonymously: $e');
+      throw Exception('AUTH Failed to sign in anonymously: $e');
     }
   }
 
@@ -64,21 +52,15 @@ class AuthService {
     }
 
     final uid = await signInAnonymously();
-    if (uid == null) throw AuthException('Failed to retrieve UID after sign in');
+    if (uid == null) throw Exception('Auth Failed to retrieve UID after sign in');
     return uid;
-  }
-
-  /// Déconnexion
-  Future<void> signOut() async {
-    _log.d('AuthService', 'signOut()');
-    await FirebaseAuth.instance.signOut();
   }
 
   /// Supprime le compte utilisateur
   Future<void> deleteAccount() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      throw AuthException('Aucun utilisateur connecté');
+      throw Exception('AUTH Aucun utilisateur connecté');
     }
 
     try {
@@ -86,17 +68,7 @@ class AuthService {
       _log.i('AuthService', 'Account deleted');
     } catch (e) {
       _log.e('AuthService', 'deleteAccount ERROR: $e');
-      throw AuthException('Failed to delete account: $e');
+      throw Exception('AUTH Failed to delete account: $e');
     }
   }
 }
-
-/// Exception d'authentification
-class AuthException implements Exception {
-  final String message;
-  AuthException(this.message);
-
-  @override
-  String toString() => 'AuthException: $message';
-}
-

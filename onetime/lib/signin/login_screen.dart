@@ -44,14 +44,14 @@ class _LoginScreenState extends State<LoginScreen> {
           MaterialPageRoute(builder: (_) => const HomeScreen()),
         );
       }
-    } on AuthException catch (e) {
+    } on Exception catch (e) {
       setState(() {
-        _errorMessage = e.message;
+        _errorMessage = "ouch";// TODO i18n 'Échec de la création du profil: $e';
         _isLoading = false;
       });
     } catch (e) {
       setState(() {
-        _errorMessage = 'Erreur: $e';
+        _errorMessage = 'Erreur: $e'; // TODO i18n
         _isLoading = false;
       });
     }
@@ -70,7 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Logo / Titre
                 Icon(
                   Icons.lock_outline,
-                  size: 60,
+                  size: 50,
                   color: Theme.of(context).primaryColor,
                 ),
                 const SizedBox(height: 16),
