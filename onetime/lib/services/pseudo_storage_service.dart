@@ -97,16 +97,16 @@ class PseudoStorageService {
 
   /// Retourne un nom d'affichage pour un ID utilisateur
   /// Si un pseudo est connu, le retourne, sinon retourne une version courte de l'ID
-  Future<String> getDisplayName(String oderId) async {
-    final pseudo = await getPseudo(oderId);
+  Future<String> getDisplayName(String userId) async {
+    final pseudo = await getPseudo(userId);
     if (pseudo != null && pseudo.isNotEmpty) {
       return pseudo;
     }
     // Retourner les derniers chiffres du numéro de téléphone
-    if (oderId.length > 4) {
-      return '...${oderId.substring(oderId.length - 4)}';
+    if (userId.length > 4) {
+      return '...${userId.substring(userId.length - 4)}';
     }
-    return oderId;
+    return userId;
   }
 
   /// Retourne les noms d'affichage pour plusieurs IDs

@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../model_remote/conversation.dart';
 import '../model_remote/encrypted_message.dart';
 import 'app_logger.dart';
+import 'key_pre_generation_service.dart';
 
 /// Service de gestion des conversations sur Firebase.
 class ConversationService {
@@ -41,11 +42,20 @@ class ConversationService {
       id: conversationId,
       peerIds: allPeers,
       state: state,
-      totalKeyBytes: totalKeyBytes,
     );
 
     await _conversationsRef.doc(conversationId).set(conversation.toFirestore());
     _log.i('Conversation', 'Conversation created: $conversationId');
+
+    // Start key pre-generation for this conversation if a positive key size was requested.
+    if (totalKeyBytes > 0) {
+      try {
+        KeyPreGenerationService().initialize();
+        _log.d('Conversation', 'Key pre-generation initialized for conversation $conversationId');
+      } catch (e) {
+        _log.w('Conversation', 'Could not initialize KeyPreGenerationService: $e');
+      }
+    }
 
     return conversation;
   }

@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:math';
 
 import '../model_local/shared_key.dart';
-import 'random_key_generator_service.dart';
 
 /// Service pour l'échange local de clés entre appareils via QR code.
 /// 
@@ -12,15 +12,8 @@ import 'random_key_generator_service.dart';
 /// 3. Les lecteurs confirment via réseau (Bluetooth/WiFi/Cloud) les indices lus
 /// 4. Les octets de clé ne transitent jamais sur le réseau
 class KeyExchangeService {
-  final RandomKeyGeneratorService _keyGenerator;
-  
   /// Taille d'un segment de clé en octets pour un QR code
   static const int segmentSizeBytes = 1024; // 8192 bits
-
-  /// Taille maximale d'un QR code en caractères (approx)
-  static const int maxQrCodeChars = 23200;
-
-  KeyExchangeService(this._keyGenerator);
 
   /// Crée une nouvelle session d'échange de clé (côté source).
   /// 
@@ -117,7 +110,7 @@ class KeyExchangeService {
     
     // Générer les octets aléatoires pour ce segment
     final segmentBytes = endByte - startByte;
-    final keyData = _keyGenerator.generateKey(segmentBytes * 8); // generator expects bits
+    final keyData = _generateRandomBytes(segmentBytes); // generator expects bits
 
     // Stocker le segment dans la session (ceci incrémente currentSegmentIndex)
     session.addSegmentData(startByte, keyData);
@@ -200,6 +193,12 @@ class KeyExchangeService {
   String _generateSessionId() {
     final random = DateTime.now().millisecondsSinceEpoch;
     return 'session_$random';
+  }
+
+  Uint8List _generateRandomBytes(int byteCount) {
+    final random = Random.secure();
+    final bytes = List<int>.generate(byteCount, (_) => random.nextInt(256));
+    return Uint8List.fromList(bytes);
   }
 
   int min(int a, int b) => a < b ? a : b;

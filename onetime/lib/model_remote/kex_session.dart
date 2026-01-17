@@ -182,7 +182,7 @@ class KexSessionModel {
       'conversationId': conversationId,
       'sourceId': sourceId,
       'segmentsByPeer': segmentsNormalized.map((k, v) => MapEntry(k.toString(), v)),
-      'participants': segmentsNormalized.keys.toList(),
+      'participants': participants,
       'status': status.name,
       'totalSegments': segmentsNormalized[sourceId]?.length ?? 0,
       // store total key size in bytes for clarity

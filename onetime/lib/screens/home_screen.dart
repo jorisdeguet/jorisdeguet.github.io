@@ -406,8 +406,7 @@ class _ConversationTileState extends State<_ConversationTile> {
   @override
   void didUpdateWidget(_ConversationTile oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.conversation.id != widget.conversation.id || 
-        oldWidget.conversation.usedKeyBytes != widget.conversation.usedKeyBytes ||
+    if (oldWidget.conversation.id != widget.conversation.id ||
         oldWidget.conversation.state != widget.conversation.state) {
       _loadData();
     }
@@ -513,34 +512,7 @@ class _ConversationTileState extends State<_ConversationTile> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          // Indicateur de clé
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: widget.conversation.hasKey
-                  ? _getKeyColor(widget.conversation.keyRemainingPercent)
-                  : Colors.orange,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!widget.conversation.hasKey)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 4),
-                    child: Icon(Icons.warning, size: 12, color: Colors.white),
-                  ),
-                Text(
-                  widget.conversation.remainingKeyFormatted,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
+
         ],
       ),
       subtitle: Row(

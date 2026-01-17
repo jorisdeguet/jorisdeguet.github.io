@@ -8,7 +8,6 @@ import 'package:screen_brightness/screen_brightness.dart';
 import '../config/app_config.dart';
 import '../model_remote/kex_session.dart';
 import '../model_local/shared_key.dart';
-import '../services/random_key_generator_service.dart';
 import '../services/key_exchange_service.dart';
 import '../services/key_exchange_sync_service.dart';
 import '../services/key_storage_service.dart';
@@ -38,7 +37,6 @@ class KeyExchangeScreen extends StatefulWidget {
 
 class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   final AuthService _authService = AuthService();
-  final RandomKeyGeneratorService _keyGenerator = RandomKeyGeneratorService();
   final KeyExchangeSyncService _syncService = KeyExchangeSyncService();
   final KeyStorageService _keyStorageService = KeyStorageService();
   final PseudoStorageService _pseudoService = PseudoStorageService();
@@ -80,7 +78,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   @override
   void initState() {
     super.initState();
-    _keyExchangeService = KeyExchangeService(_keyGenerator);
+    _keyExchangeService = KeyExchangeService();
   }
 
   @override
@@ -1626,6 +1624,8 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     }
   }
 }
+
+
 
 
 
