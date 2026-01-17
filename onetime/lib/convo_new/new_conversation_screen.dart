@@ -3,11 +3,11 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get_it/get_it.dart';
 
-import '../services/auth_service.dart';
+import '../signin/auth_service.dart';
 import '../services/conversation_service.dart';
 import '../services/app_logger.dart';
-import '../services/background_message_service.dart';
-import 'key_exchange_screen.dart';
+import '../convo/message_service.dart';
+import '../key_exchange/key_exchange_screen.dart';
 
 /// Écran de création d'une nouvelle conversation.
 /// 1. Crée une conversation dans Firestore
@@ -68,12 +68,12 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
       // Initialize background service and start listening to this conversation
       try {
         final getIt = GetIt.instance;
-        if (!getIt.isRegistered<BackgroundMessageService>()) {
-          final svc = BackgroundMessageService(localUserId: _currentUserId);
-          getIt.registerSingleton<BackgroundMessageService>(svc);
+        if (!getIt.isRegistered<MessageService>()) {
+          final svc = MessageService(localUserId: _currentUserId);
+          getIt.registerSingleton<MessageService>(svc);
           svc.startWatchingUserConversations();
         }
-        final svc = getIt.get<BackgroundMessageService>();
+        final svc = getIt.get<MessageService>();
         svc.startForConversation(conversation.id);
         svc.rescanConversation(conversation.id).catchError((e) {
           _log.e('NewConversation', 'Background rescan failed: $e');

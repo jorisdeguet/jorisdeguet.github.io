@@ -1,4 +1,4 @@
-import '../services/key_exchange_service.dart';
+import 'package:onetime/key_exchange/key_service.dart';
 
 /// Modèle représentant une session d'échange de clé dans Firestore.
 ///
@@ -55,17 +55,14 @@ class KexSessionModel {
   /// - Le `sourceId` recevra la liste complète des indexes [0..totalSegments-1].
   /// - Les autres participants auront des listes vides (ils n'ont encore scanné rien).
   KexSessionModel.createInitial({
-    required String id,
-    String? conversationId,
-    required String sourceId,
+    required this.id,
+    this.conversationId,
+    required this.sourceId,
     required List<String> participants,
     required int totalSegments,
     DateTime? createdAt,
     DateTime? updatedAt,
-  }) : id = id,
-       conversationId = conversationId,
-       sourceId = sourceId,
-       segmentsByPeer = Map.fromEntries(
+  }) : segmentsByPeer = Map.fromEntries(
          // s'assurer que la source est incluse
          (participants.contains(sourceId) ? participants : ([sourceId] + participants))
              .map((p) => MapEntry(p, p == sourceId ? List<int>.generate(totalSegments, (i) => i) : <int>[])),

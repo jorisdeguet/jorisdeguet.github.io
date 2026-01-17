@@ -1,6 +1,7 @@
 import 'dart:async';
-import '../services/key_exchange_service.dart';
-import 'app_logger.dart';
+import 'package:onetime/key_exchange/key_service.dart';
+
+import '../services/app_logger.dart';
 
 /// Service responsable de la pré-génération des données de clé
 /// pour accélérer le démarrage de l'échange.

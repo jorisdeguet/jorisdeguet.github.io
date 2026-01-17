@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:onetime/convo/encrypted_message.dart';
 
-import '../model_remote/encrypted_message.dart';
 import '../services/media_service.dart';
 
 /// Dialogue de confirmation pour l'envoi d'un média (image ou fichier).

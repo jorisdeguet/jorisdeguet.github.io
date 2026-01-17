@@ -1,8 +1,7 @@
+import 'package:onetime/convo/message_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_logger.dart';
-
-import 'message_storage_service.dart';
 
 /// Service pour tracker les messages non lus par conversation
 class UnreadMessageService {

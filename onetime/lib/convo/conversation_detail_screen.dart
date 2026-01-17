@@ -3,26 +3,26 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:onetime/convo/conversation_info_screen.dart';
+import 'package:onetime/convo/encrypted_message.dart';
+import 'package:onetime/convo/message_storage.dart';
+import 'package:onetime/key_exchange/key_exchange_screen.dart';
+import 'package:onetime/key_exchange/key_storage.dart';
+import 'package:onetime/key_exchange/shared_key.dart';
+import 'package:onetime/l10n/app_localizations.dart';
+import 'package:onetime/services/conversation_pseudo_service.dart';
+import 'package:onetime/services/conversation_service.dart';
+import 'package:onetime/services/crypto_service.dart';
+import 'package:onetime/services/media_service.dart';
+import 'package:onetime/services/unread_message_service.dart';
+import 'package:onetime/signin/auth_service.dart';
+import 'package:onetime/signin/pseudo_storage.dart';
 
 import '../config/app_config.dart';
-import '../model_remote/conversation.dart';
-import '../model_remote/encrypted_message.dart';
-import '../model_local/shared_key.dart';
-import '../services/conversation_service.dart';
-import '../services/auth_service.dart';
-import '../services/crypto_service.dart';
-import '../services/key_storage_service.dart';
-import '../services/media_service.dart';
-import '../services/message_storage_service.dart';
-import '../services/conversation_pseudo_service.dart';
-import '../services/unread_message_service.dart';
-import '../services/pseudo_storage_service.dart';
-import '../l10n/app_localizations.dart';
-import 'key_exchange_screen.dart';
-import 'media_send_screen.dart';
-import 'conversation_info_screen.dart';
+import 'conversation.dart';
 
-import '../services/format_service.dart';
+import 'media_send_screen.dart';
+
 import '../services/app_logger.dart';
 
 /// Wrapper pour afficher un message (local déchiffré ou Firestore chiffré)
@@ -37,10 +37,7 @@ class _DisplayMessage {
   final Uint8List? binaryContent;
   final String? fileName;
   final String? mimeType;
-  
-  // Données Firestore (si pas encore déchiffré)
-  final EncryptedMessage? firestoreMessage;
-  
+
   final bool isCompressed;
   
   /// True si le message est chargé localement (déchiffré)
@@ -55,7 +52,6 @@ class _DisplayMessage {
     this.binaryContent,
     this.fileName,
     this.mimeType,
-    this.firestoreMessage,
     this.isCompressed = false,
     this.isLocal = false,
   });
@@ -192,28 +188,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     if (mounted) {
       setState(() {
         _displayNames = names;
-      });
-    }
-  }
-
-  /// Callback appelé quand un message pseudo est reçu
-  void _onPseudoReceived(String userId, String pseudo) async {
-    _log.d('ConversationDetail', 'onPseudoReceived called: $userId -> $pseudo');
-
-    // Check if pseudo already matches to avoid infinite loop
-    final current = _displayNames[userId];
-    if (current == pseudo) {
-      _log.d('ConversationDetail', 'Pseudo unchanged, skipping');
-      return;
-    }
-    
-    // Save pseudo in conversation-specific storage
-    await _convPseudoService.setPseudo(widget.conversation.id, userId, pseudo);
-    
-    // Update local cache without triggering full reload
-    if (mounted) {
-      setState(() {
-        _displayNames[userId] = pseudo;
       });
     }
   }
@@ -1132,12 +1106,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     return hasMismatch;
   }
 
-  Color _getKeyColor(double percent) {
-    if (percent > 50) return Colors.green;
-    if (percent > 20) return Colors.orange;
-    return Colors.red;
-  }
-
   Future<void> _truncateKey() async {
     if (_sharedKey == null) return;
 
@@ -1169,7 +1137,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${bytesToRemove} octets de clé nettoyés.')),
+          SnackBar(content: Text('$bytesToRemove octets de clé nettoyés.')),
         );
       }
     } catch (e) {
@@ -1441,16 +1409,7 @@ class _MessageBubbleNew extends StatelessWidget {
         child: Text(message.textContent ?? ''),
       );
     }
-
-    // Otherwise it's a Firestore EncryptedMessage: delegate to existing bubble
-    final fm = message.firestoreMessage!;
-    return _MessageBubble(
-      message: fm,
-      isMine: isMine,
-      senderName: senderName,
-      sharedKey: sharedKey,
-      onPseudoReceived: (id, pseudo) {},
-      onKeyUsed: () {},
-    );
+    // Ouch
+    throw Error();
   }
 }

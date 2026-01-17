@@ -1,17 +1,19 @@
 import 'dart:async';
 
-import 'app_logger.dart';
-import 'conversation_service.dart';
-import 'key_storage_service.dart';
-import 'message_storage_service.dart';
-import 'crypto_service.dart';
-import '../model_remote/encrypted_message.dart';
-import '../model_remote/conversation.dart';
+import 'package:onetime/convo/encrypted_message.dart';
+import 'package:onetime/convo/message_storage.dart';
+import 'package:onetime/key_exchange/key_storage.dart';
+import 'package:onetime/services/app_logger.dart';
+import 'package:onetime/services/conversation_service.dart';
+import 'package:onetime/services/crypto_service.dart';
+
+
+import 'conversation.dart';
 
 /// Service d'arrière-plan qui écoute Firestore et effectue le déchiffrement
 /// centralisé des messages. Il enregistre les résultats localement via
 /// MessageStorageService et marque les messages transférés sur Firestore.
-class BackgroundMessageService {
+class MessageService {
   final String localUserId;
   final ConversationService _conversationService;
   final KeyStorageService _keyStorage = KeyStorageService();
@@ -27,7 +29,7 @@ class BackgroundMessageService {
   StreamSubscription<List<Conversation>>? _conversationsSub;
   final Set<String> _activeConversations = {};
 
-  BackgroundMessageService({required this.localUserId})
+  MessageService({required this.localUserId})
       : _conversationService = ConversationService(localUserId: localUserId);
 
   /// Start watching the current user's conversations and automatically

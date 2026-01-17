@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:math';
 
-import '../model_local/shared_key.dart';
+import '../key_exchange/shared_key.dart';
 
 /// Service pour l'échange local de clés entre appareils via QR code.
 /// 
@@ -97,7 +97,7 @@ class KeyExchangeService {
     if (session is! KexSessionSource) {
       throw StateError('Session must be KexSessionSource to generate segments');
     }
-    final src = session as KexSessionSource;
+    final src = session;
 
     // Capturer l'index AVANT de modifier la session
     final segmentIndex = session.currentSegmentIndex;
@@ -317,17 +317,12 @@ class KexSessionSource extends KexSessionReader {
   final int totalBytes;
 
   KexSessionSource({
-    required String sessionId,
-    required KeyExchangeRole role,
-    required List<String> peerIds,
-    required String localPeerId,
+    required super.sessionId,
+    required super.role,
+    required super.peerIds,
+    required super.localPeerId,
     required this.totalBytes,
-  }) : super(
-          sessionId: sessionId,
-          role: role,
-          peerIds: peerIds,
-          localPeerId: localPeerId,
-        );
+  });
 
   int get totalSegments => (totalBytes + KeyExchangeService.segmentSizeBytes - 1) ~/
                            KeyExchangeService.segmentSizeBytes;

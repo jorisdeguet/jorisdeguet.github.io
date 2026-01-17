@@ -2,11 +2,9 @@ import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:math';
 
-import 'key_interval.dart';
 import 'key_history.dart';
+import 'key_interval.dart';
 
-export 'key_interval.dart';
-export 'key_history.dart';
 
 /// Représente une clé partagée entre plusieurs pairs pour le chiffrement One-Time Pad.
 ///

@@ -1,5 +1,4 @@
 import 'package:logger/logger.dart';
-import '../config/app_config.dart';
 
 /// Lightweight application logger wrapper around `logger` package.
 /// This wrapper no longer implements tag-based filtering or custom level

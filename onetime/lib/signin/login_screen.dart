@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../services/auth_service.dart';
-import '../services/pseudo_storage_service.dart';
-import 'home_screen.dart';
+import '../home/home_screen.dart';
+import '../signin/auth_service.dart';
+import '../signin/pseudo_storage.dart';
 
-/// Écran de création de profil (première utilisation).
-/// Demande uniquement un pseudo à l'utilisateur.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -17,7 +15,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final AuthService _authService = AuthService();
   final PseudoStorageService _pseudoService = PseudoStorageService();
   final _pseudoController = TextEditingController();
-
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -29,9 +26,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _createProfile() async {
     final pseudo = _pseudoController.text.trim();
-
     if (pseudo.isEmpty) {
-      setState(() => _errorMessage = 'Veuillez entrer un pseudo');
+      setState(() => _errorMessage = 'Veuillez entrer un pseudo'); // TODO i18n
       return;
     }
 
@@ -42,10 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       await _authService.createUser();
-
-      // Stocker le pseudo localement (jamais sur le serveur)
       await _pseudoService.setMyPseudo(pseudo);
-
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const HomeScreen()),
@@ -70,14 +63,14 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(14),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // Logo / Titre
                 Icon(
                   Icons.lock_outline,
-                  size: 80,
+                  size: 60,
                   color: Theme.of(context).primaryColor,
                 ),
                 const SizedBox(height: 16),
@@ -127,7 +120,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 else
                   _buildPhoneEntry(),
 
-                const SizedBox(height: 32),
+                const SizedBox(height: 22),
 
                 // Texte explicatif
                 Text(
@@ -162,12 +155,12 @@ class _LoginScreenState extends State<LoginScreen> {
           autofocus: true,
           decoration: InputDecoration(
             labelText: 'Pseudo',
-            hintText: 'Ex: Alice, Bob...',
+            hintText: 'Ex: iPhone Jo, Android Sophie...', // TODO i18n
             prefixIcon: const Icon(Icons.person),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
             ),
-            helperText: 'Stocké uniquement sur votre appareil',
+            helperText: 'Stocké uniquement sur votre appareil', // TODO i18n
           ),
           onSubmitted: (_) => _createProfile(),
         ),
@@ -187,7 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             child: const Text(
-              'Commencer',
+              'Commencer',    //TODO i18n
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
           ),

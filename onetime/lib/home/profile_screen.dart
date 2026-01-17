@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:onetime/convo/message_storage.dart';
+import 'package:onetime/key_exchange/key_storage.dart';
+import 'package:onetime/l10n/app_localizations.dart';
+import 'package:onetime/services/app_logger.dart';
+import 'package:onetime/services/conversation_pseudo_service.dart';
+import 'package:onetime/services/format_service.dart';
+import 'package:onetime/services/unread_message_service.dart';
+import 'package:onetime/signin/auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../services/auth_service.dart';
-import '../services/key_storage_service.dart';
-import '../services/message_storage_service.dart';
-import '../services/conversation_pseudo_service.dart';
-import '../services/unread_message_service.dart';
-import '../services/format_service.dart';
-import '../l10n/app_localizations.dart';
-import '../services/app_logger.dart';
 
 /// Profile screen with settings
 class ProfileScreen extends StatefulWidget {

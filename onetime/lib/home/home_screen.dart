@@ -1,21 +1,22 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
+import 'package:onetime/convo/encrypted_message.dart';
+import 'package:onetime/convo/message_storage.dart';
+import 'package:onetime/services/format_service.dart';
 
-import '../services/auth_service.dart';
+import '../signin/auth_service.dart';
 import '../services/conversation_service.dart';
 import '../services/conversation_pseudo_service.dart';
-import '../services/message_storage_service.dart';
 import '../services/unread_message_service.dart';
-import '../services/pseudo_storage_service.dart';
-import '../model_remote/conversation.dart';
-import '../model_remote/encrypted_message.dart';
-import '../services/key_exchange_sync_service.dart';
-import '../services/background_message_service.dart';
+import '../signin/pseudo_storage.dart';
+import '../convo/conversation.dart';
+import '../key_exchange/key_exchange_sync_service.dart';
+import '../convo/message_service.dart';
 import 'profile_screen.dart';
-import 'new_conversation_screen.dart';
-import 'conversation_detail_screen.dart';
-import 'join_conversation_screen.dart';
+import '../convo_new/new_conversation_screen.dart';
+import '../convo/conversation_detail_screen.dart';
+import '../convo_new/join_conversation_screen.dart';
 
 /// Écran d'accueil après connexion.
 class HomeScreen extends StatefulWidget {
@@ -160,13 +161,13 @@ class _ConversationsListScreenState extends State<ConversationsListScreen> {
     if (widget.userId.isNotEmpty) {
       try {
         final getIt = GetIt.instance;
-        if (!getIt.isRegistered<BackgroundMessageService>()) {
-          final svc = BackgroundMessageService(localUserId: widget.userId);
-          getIt.registerSingleton<BackgroundMessageService>(svc);
+        if (!getIt.isRegistered<MessageService>()) {
+          final svc = MessageService(localUserId: widget.userId);
+          getIt.registerSingleton<MessageService>(svc);
           svc.startWatchingUserConversations();
         }
 
-        final svc = GetIt.instance.get<BackgroundMessageService>();
+        final svc = GetIt.instance.get<MessageService>();
 
         // One-shot: fetch current conversations and ask the background service
         // to rescan them so any pending messages are processed immediately.
@@ -547,7 +548,7 @@ class _ConversationTileState extends State<_ConversationTile> {
           ],
           const SizedBox(width: 4),
           Text(
-            _formatTime(_lastMessageTime ?? widget.conversation.createdAt),
+            FormatService.formatTimeRemaining(_lastMessageTime ?? widget.conversation.createdAt),
             style: TextStyle(
               fontSize: 12,
               color: Colors.grey[500],
@@ -557,27 +558,5 @@ class _ConversationTileState extends State<_ConversationTile> {
       ),
       onTap: widget.onTap,
     );
-  }
-
-  Color _getKeyColor(double percent) {
-    if (percent > 50) return Colors.green;
-    if (percent > 20) return Colors.orange;
-    return Colors.red;
-  }
-
-  String _formatTime(DateTime time) {
-    final now = DateTime.now();
-    final diff = now.difference(time);
-    
-    if (diff.inDays > 7) {
-      return '${time.day}/${time.month}';
-    } else if (diff.inDays > 0) {
-      return '${diff.inDays}j';
-    } else if (diff.inHours > 0) {
-      return '${diff.inHours}h';
-    } else if (diff.inMinutes > 0) {
-      return '${diff.inMinutes}m';
-    }
-    return 'maintenant';
   }
 }

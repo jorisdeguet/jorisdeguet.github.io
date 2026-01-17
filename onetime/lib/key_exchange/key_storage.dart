@@ -3,11 +3,13 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:onetime/services/app_logger.dart';
+import 'package:onetime/services/conversation_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../model_local/shared_key.dart';
-import 'app_logger.dart';
-import 'conversation_service.dart';
+import '../key_exchange/key_history.dart';
+import '../key_exchange/key_interval.dart';
+import '../key_exchange/shared_key.dart';
 
 /// Service pour stocker et récupérer les clés partagées localement.
 ///

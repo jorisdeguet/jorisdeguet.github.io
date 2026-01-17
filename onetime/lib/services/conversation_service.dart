@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../model_remote/conversation.dart';
-import '../model_remote/encrypted_message.dart';
+import '../convo/conversation.dart';
+import '../convo/encrypted_message.dart';
 import 'app_logger.dart';
-import 'key_pre_generation_service.dart';
+import '../key_exchange/key_pre_generation_service.dart';
 
 /// Service de gestion des conversations sur Firebase.
 class ConversationService {

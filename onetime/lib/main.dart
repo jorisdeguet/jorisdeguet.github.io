@@ -5,15 +5,14 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'services/auth_service.dart';
-import 'services/key_pre_generation_service.dart';
-import 'services/pseudo_storage_service.dart';
-import 'screens/login_screen.dart';
-import 'screens/home_screen.dart';
+import 'signin/auth_service.dart';
+import 'signin/pseudo_storage.dart';
+import 'signin/login_screen.dart';
+import 'home/home_screen.dart';
 import 'l10n/app_localizations.dart';
 
 // Ajout : options générées par FlutterFire CLI
-import 'firebase_options.dart';
+import 'config/firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

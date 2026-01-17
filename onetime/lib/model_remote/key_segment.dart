@@ -1,4 +1,4 @@
-import '../model_local/key_interval.dart';
+import '../key_exchange/key_interval.dart';
 
 /// Représente une demande de lock sur un segment de clé.
 /// Utilisé pour la synchronisation transactionnelle avant envoi.

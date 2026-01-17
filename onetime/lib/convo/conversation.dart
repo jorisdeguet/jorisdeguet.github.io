@@ -1,4 +1,3 @@
-import '../services/format_service.dart';
 
 /// État d'une conversation
 enum ConversationState {

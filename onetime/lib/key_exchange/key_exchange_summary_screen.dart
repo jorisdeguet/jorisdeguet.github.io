@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../model_remote/kex_session.dart';
-import '../model_local/shared_key.dart';
-import '../model_remote/conversation.dart';
-import 'conversation_detail_screen.dart';
+import 'kex_firestore.dart';
+import 'shared_key.dart';
+import '../convo/conversation.dart';
+import '../convo/conversation_detail_screen.dart';
 import '../services/app_logger.dart';
 import '../services/format_service.dart';
 
@@ -151,37 +151,7 @@ class KeyExchangeSummaryScreen extends StatelessWidget {
     // Segment scan status
     buffer.writeln('📊 ÉTAT DES SEGMENTS (${ session.totalSegments} segments)');
     buffer.writeln('───────────────────────────────────────────────────');
-    
-    int completeSegments = 0;
-    final incompleteSegments = <int>[];
-    
 
-    
-    buffer.writeln('✓ Segments complets:    $completeSegments/${session.totalSegments}');
-    
-
-    
-    buffer.writeln();
-    
-    // Detailed segment-by-segment status (compact)
-    buffer.writeln('📈 DÉTAIL PAR SEGMENT');
-    buffer.writeln('───────────────────────────────────────────────────');
-    
-    // Group segments in rows of 10 for compact display
-    for (int row = 0; row < (session.totalSegments + 9) ~/ 10; row++) {
-      final start = row * 10;
-      final end = (start + 10).clamp(0, session.totalSegments);
-      
-      buffer.write('Seg ${start.toString().padLeft(3)}-${(end - 1).toString().padLeft(3)}: ');
-      
-      for (int i = start; i < end; i++) {
-        final allScanned = session.allParticipantsScannedSegment(i);
-        buffer.write(allScanned ? '✓' : '✗');
-      }
-      
-      buffer.writeln();
-    }
-    
     buffer.writeln();
     
     // Per-participant progress

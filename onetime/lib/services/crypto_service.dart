@@ -1,17 +1,12 @@
 import 'dart:typed_data';
 import 'dart:convert';
 
-import '../model_local/shared_key.dart';
-import '../model_remote/encrypted_message.dart';
-import 'compression_service.dart';
+import 'package:onetime/convo/encrypted_message.dart';
 
-/// Service de chiffrement/déchiffrement One-Time Pad.
-/// 
-/// Gère l'utilisation de la clé locale pour chiffrer et déchiffrer
-/// les messages en s'assurant qu'un segment de clé n'est utilisé qu'une fois.
-/// 
-/// Supporte la compression optionnelle des messages avant chiffrement
-/// pour économiser les octets de clé.
+import '../key_exchange/key_interval.dart';
+import '../key_exchange/shared_key.dart';
+import '../convo/compression_service.dart';
+
 class CryptoService {
   /// ID du peer local
   final String localPeerId;
@@ -316,11 +311,6 @@ class CryptoService {
       return compressed.data.length;
     }
     return utf8.encode(plaintext).length;
-  }
-
-  /// Retourne les statistiques de compression pour un message.
-  CompressionStats getCompressionStats(String plaintext) {
-    return _compressionService.getStats(plaintext);
   }
 
   /// XOR de deux tableaux d'octets

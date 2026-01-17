@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:onetime/convo/encrypted_message.dart';
+import 'package:onetime/services/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../model_remote/encrypted_message.dart';
-import 'app_logger.dart';
 import 'dart:async';
 
 /// Représente un message déchiffré stocké localement

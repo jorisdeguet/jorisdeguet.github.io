@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
-
-import '../config/app_config.dart';
-import '../model_remote/encrypted_message.dart';
-import '../model_local/shared_key.dart';
-import '../services/media_service.dart';
-import '../services/crypto_service.dart';
-import '../services/key_storage_service.dart';
-import '../services/conversation_service.dart';
-import '../services/message_storage_service.dart';
-import '../services/format_service.dart';
-import '../services/app_logger.dart';
+import 'package:onetime/config/app_config.dart';
+import 'package:onetime/convo/encrypted_message.dart';
+import 'package:onetime/convo/message_storage.dart';
+import 'package:onetime/key_exchange/key_storage.dart';
+import 'package:onetime/key_exchange/shared_key.dart';
+import 'package:onetime/services/app_logger.dart';
+import 'package:onetime/services/conversation_service.dart';
+import 'package:onetime/services/crypto_service.dart';
+import 'package:onetime/services/format_service.dart';
+import 'package:onetime/services/media_service.dart';
 
 /// Écran complet pour l'envoi d'un média avec preview et debug
 class MediaSendScreen extends StatefulWidget {
@@ -31,7 +30,6 @@ class MediaSendScreen extends StatefulWidget {
 }
 
 class _MediaSendScreenState extends State<MediaSendScreen> {
-  final MediaService _mediaService = MediaService();
   final List<String> _debugLogs = [];
   final _log = AppLogger();
   bool _isProcessing = false;

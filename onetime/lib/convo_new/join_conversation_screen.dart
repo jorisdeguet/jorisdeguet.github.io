@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../services/auth_service.dart';
+import '../signin/auth_service.dart';
 import '../services/app_logger.dart';
-import 'key_exchange_screen.dart';
+import '../key_exchange/key_exchange_screen.dart';
 
 /// Écran pour rejoindre une conversation existante via QR code.
 /// Le participant scanne le QR code affiché par le créateur.

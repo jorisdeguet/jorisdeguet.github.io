@@ -1,24 +1,25 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
+import 'package:onetime/config/app_config.dart';
+import 'package:onetime/key_exchange/kex_firestore.dart';
+import 'package:onetime/key_exchange/key_exchange_summary_screen.dart';
+import 'package:onetime/key_exchange/key_exchange_sync_service.dart';
+import 'package:onetime/key_exchange/key_pre_generation_service.dart';
+import 'package:onetime/key_exchange/key_service.dart';
+import 'package:onetime/key_exchange/key_storage.dart';
+import 'package:onetime/key_exchange/shared_key.dart';
+import 'package:onetime/services/app_logger.dart';
+import 'package:onetime/services/conversation_service.dart';
+import 'package:onetime/services/crypto_service.dart';
+import 'package:onetime/services/qr_segment_cache_service.dart';
+import 'package:onetime/signin/auth_service.dart';
+import 'package:onetime/signin/pseudo_storage.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 
-import '../config/app_config.dart';
-import '../model_remote/kex_session.dart';
-import '../model_local/shared_key.dart';
-import '../services/key_exchange_service.dart';
-import '../services/key_exchange_sync_service.dart';
-import '../services/key_storage_service.dart';
-import '../services/conversation_service.dart';
-import '../services/auth_service.dart';
-import '../services/pseudo_storage_service.dart';
-import '../services/crypto_service.dart';
-import '../services/qr_segment_cache_service.dart';
-import '../services/key_pre_generation_service.dart';
-import '../services/app_logger.dart';
-import 'key_exchange_summary_screen.dart';
+
 
 /// Écran d'échange de clé via QR codes.
 class KeyExchangeScreen extends StatefulWidget {

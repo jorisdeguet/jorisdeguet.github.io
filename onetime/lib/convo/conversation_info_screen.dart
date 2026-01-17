@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../model_remote/conversation.dart';
-import '../model_local/shared_key.dart';
+import 'package:onetime/key_exchange/key_storage.dart';
+import 'conversation.dart';
+import '../key_exchange/shared_key.dart';
 import '../services/conversation_service.dart';
-import '../services/key_storage_service.dart';
 import '../services/conversation_pseudo_service.dart';
-import '../services/auth_service.dart';
+import '../signin/auth_service.dart';
 import '../services/format_service.dart';
 
 class ConversationInfoScreen extends StatefulWidget {
@@ -57,21 +57,6 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Calcul de la clé restante basé sur SharedKey si disponible (plus précis)
-    // Utiliser l'ID utilisateur courant pour le calcul
-    final remainingKeyFormatted = widget.sharedKey != null && _currentUserId.isNotEmpty && widget.sharedKey!.peerIds.contains(_currentUserId)
-        ? FormatService.formatBytes(widget.sharedKey!.countAvailableBytes(_currentUserId))
-        : "TODO";
-        
-    final totalKeyFormatted = widget.sharedKey != null
-        ? FormatService.formatBytes(widget.sharedKey!.lengthInBytes)
-        : "TODO";
-
-    final keyUsagePercent = widget.sharedKey != null && _currentUserId.isNotEmpty
-        ? (1 - (widget.sharedKey!.countAvailableBytes(_currentUserId) / widget.sharedKey!.lengthInBytes)) * 100
-        : "TODO";
-
-
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(title: const Text('Infos conversation')),
@@ -169,7 +154,7 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
                     ),
                     title: Text(pseudo ?? peerId),
                     subtitle: Text(
-                      (pseudo != null ? '$peerId' : '') + debugInfo,
+                      (pseudo != null ? peerId : '') + debugInfo,
                       style: const TextStyle(fontSize: 10),
                     ),
                   );
@@ -243,31 +228,6 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
     );
   }
 
-  void _showTruncateConfirmation(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Nettoyer les clés ?'),
-        content: const Text(
-          'Cette action va supprimer définitivement les parties de la clé qui ont déjà été utilisées. Cela empêche de relire les anciens messages s\'ils sont perdus localement.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annuler'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              widget.onTruncateKey?.call();
-            },
-            child: const Text('Nettoyer'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showDeleteConfirmation(BuildContext context) {
     showDialog(
       context: context,
@@ -319,47 +279,5 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
         );
       }
     }
-  }
-
-  Color _getKeyColor(double percent) {
-    if (percent > 50) return Colors.green;
-    if (percent > 20) return Colors.orange;
-    return Colors.red;
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color? valueColor;
-
-  const _InfoRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.valueColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        children: [
-          Icon(icon, size: 24, color: Colors.grey[600]),
-          const SizedBox(width: 16),
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 16))),
-          Text(
-            value,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-              color: valueColor,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
