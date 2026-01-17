@@ -5,7 +5,6 @@ import '../model_local/shared_key.dart';
 import '../services/conversation_service.dart';
 import '../services/key_storage_service.dart';
 import '../services/conversation_pseudo_service.dart';
-import '../services/conversation_export_service.dart';
 import '../services/auth_service.dart';
 import '../services/format_service.dart';
 
@@ -33,7 +32,6 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
   final ConversationPseudoService _convPseudoService = ConversationPseudoService();
   final KeyStorageService _keyStorageService = KeyStorageService();
   final AuthService _authService = AuthService();
-  final ConversationExportService _exportService = ConversationExportService();
   late final ConversationService _conversationService;
   
   Map<String, String> _displayNames = {};
@@ -63,17 +61,16 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
     // Utiliser l'ID utilisateur courant pour le calcul
     final remainingKeyFormatted = widget.sharedKey != null && _currentUserId.isNotEmpty && widget.sharedKey!.peerIds.contains(_currentUserId)
         ? FormatService.formatBytes(widget.sharedKey!.countAvailableBytes(_currentUserId))
-        : widget.conversation.remainingKeyFormatted;
+        : "TODO";
         
     final totalKeyFormatted = widget.sharedKey != null
         ? FormatService.formatBytes(widget.sharedKey!.lengthInBytes)
-        : FormatService.formatBytes(widget.conversation.totalKeyBytes);
+        : "TODO";
 
     final keyUsagePercent = widget.sharedKey != null && _currentUserId.isNotEmpty
         ? (1 - (widget.sharedKey!.countAvailableBytes(_currentUserId) / widget.sharedKey!.lengthInBytes)) * 100
-        : widget.conversation.keyUsagePercent;
+        : "TODO";
 
-    final keyRemainingPercent = 100 - keyUsagePercent;
 
     if (_isLoading) {
       return Scaffold(
@@ -97,16 +94,12 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
                 children: [
                   CircleAvatar(
                     radius: 32,
-                    backgroundColor: widget.conversation.hasKey
-                        ? Theme.of(context).primaryColor.withAlpha(30)
-                        : Colors.orange.withAlpha(30),
+                    backgroundColor: Colors.orange.withAlpha(30),
                     child: Text(
                       widget.conversation.displayName.substring(0, 1).toUpperCase(),
                       style: TextStyle(
                         fontSize: 24,
-                        color: widget.conversation.hasKey
-                            ? Theme.of(context).primaryColor
-                            : Colors.orange,
+                        color: Colors.orange,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -119,7 +112,7 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Créée le ${_formatDate(widget.conversation.createdAt)}',
+                    'Créée le ${FormatService.formatDate(widget.conversation.createdAt)}',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -162,7 +155,7 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
                     final remoteStart = info['firstAvailableByte'];
                     final remoteEnd = info['lastAvailableByte'];
                     final lastUpdate = info['updatedAt'] != null
-                        ? _formatTime(DateTime.parse(info['updatedAt'])) 
+                        ? FormatService.formatTime(DateTime.parse(info['updatedAt']))
                         : '?';
                         
                     debugInfo += '\n[Remote $lastUpdate] Clé: ${FormatService.formatBytes(remoteBytes ?? 0)} dispos ($remoteStart-$remoteEnd)';
@@ -191,140 +184,45 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    if (widget.conversation.hasKey) ...[
-                      _InfoRow(
-                        icon: Icons.vpn_key,
-                        label: 'Taille totale de la clé',
-                        value: totalKeyFormatted,
-                      ),
-                      const Divider(),
-                      _InfoRow(
-                        icon: Icons.data_usage,
-                        label: 'Clé restante',
-                        value: remainingKeyFormatted,
-                        valueColor: _getKeyColor(keyRemainingPercent),
-                      ),
-                      const SizedBox(height: 16),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text('Utilisation', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                              Text('${keyUsagePercent.toStringAsFixed(1)}%', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          LinearProgressIndicator(
-                            value: keyUsagePercent / 100,
-                            backgroundColor: Colors.grey[200],
-                            color: _getKeyColor(keyRemainingPercent),
-                          ),
-                        ],
-                      ),
-                    ] else ...[
-                      Row(
-                        children: [
-                          Icon(Icons.warning_amber, color: Colors.orange[800], size: 32),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Aucune clé de chiffrement',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.orange[800],
-                                  ),
-                                ),
-                                const Text('Les messages ne sont pas sécurisés.'),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            
-            const SizedBox(height: 32),
+            //
+            // // Actions
+            // if (widget.conversation.hasKey && widget.conversation.isKeyLow || !widget.conversation.hasKey)
+            //   SizedBox(
+            //     width: double.infinity,
+            //     child: ElevatedButton.icon(
+            //       onPressed: () {
+            //         Navigator.pop(context); // Close info screen
+            //         widget.onExtendKey?.call();
+            //       },
+            //       icon: Icon(widget.conversation.hasKey ? Icons.add : Icons.key),
+            //       label: Text(
+            //         widget.conversation.hasKey
+            //             ? 'Étendre la clé (${keyRemainingPercent.toStringAsFixed(0)}% restant)'
+            //             : 'Créer une clé de chiffrement',
+            //       ),
+            //       style: ElevatedButton.styleFrom(
+            //         padding: const EdgeInsets.all(16),
+            //         backgroundColor: Colors.green,
+            //         foregroundColor: Colors.white,
+            //       ),
+            //     ),
+            //   ),
+            //
+            // if (widget.conversation.hasKey && !widget.conversation.isKeyLow)
+            //   SizedBox(
+            //     width: double.infinity,
+            //     child: OutlinedButton.icon(
+            //       onPressed: () {
+            //         Navigator.pop(context); // Close info screen
+            //         widget.onExtendKey?.call();
+            //       },
+            //       icon: const Icon(Icons.add_link),
+            //       label: const Text('Allonger la clé de chiffrement'),
+            //       style: OutlinedButton.styleFrom(padding: const EdgeInsets.all(16)),
+            //     ),
+            //   ),
+            //
 
-            // Actions
-            if (widget.conversation.hasKey && widget.conversation.isKeyLow || !widget.conversation.hasKey)
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context); // Close info screen
-                    widget.onExtendKey?.call();
-                  },
-                  icon: Icon(widget.conversation.hasKey ? Icons.add : Icons.key),
-                  label: Text(
-                    widget.conversation.hasKey
-                        ? 'Étendre la clé (${keyRemainingPercent.toStringAsFixed(0)}% restant)'
-                        : 'Créer une clé de chiffrement',
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.all(16),
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ),
-
-            if (widget.conversation.hasKey && !widget.conversation.isKeyLow)
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context); // Close info screen
-                    widget.onExtendKey?.call();
-                  },
-                  icon: const Icon(Icons.add_link),
-                  label: const Text('Allonger la clé de chiffrement'),
-                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.all(16)),
-                ),
-              ),
-
-            if (widget.conversation.hasKey)
-              Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () => _showTruncateConfirmation(context),
-                    icon: const Icon(Icons.cut),
-                    label: const Text('Nettoyer les clés utilisées'),
-                    style: OutlinedButton.styleFrom(padding: const EdgeInsets.all(16)),
-                  ),
-                ),
-              ),
-
-            const SizedBox(height: 16),
-
-            // Export conversation
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _exportConversation,
-                icon: const Icon(Icons.upload_file),
-                label: const Text('Exporter vers un autre appareil'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.all(16),
-                ),
-              ),
-            ),
-              
-            const SizedBox(height: 16),
             
             SizedBox(
               width: double.infinity,
@@ -421,91 +319,6 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
         );
       }
     }
-  }
-
-  Future<void> _exportConversation() async {
-    setState(() => _isLoading = true);
-
-    try {
-      // Export the conversation data
-      final exportData = await _exportService.exportConversation(widget.conversation.id);
-
-      if (exportData == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Impossible d\'exporter: aucune donnée trouvée'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-
-      // Convert to JSON string
-      final jsonString = _exportService.encodeExportData(exportData);
-      
-      // Calculate data size for display
-      final dataSize = FormatService.formatBytes(exportData.dataSizeBytes);
-
-      if (mounted) {
-        setState(() => _isLoading = false);
-
-        // Show dialog with export options
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Exporter la conversation'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Taille des données: $dataSize'),
-                const SizedBox(height: 8),
-                Text('${exportData.localMessages.length} message(s) local'),
-                const SizedBox(height: 16),
-                const Text(
-                  'Les données d\'export contiennent la clé de chiffrement et tous les messages locaux. Gardez-les en sécurité!',
-                  style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Annuler'),
-              ),
-              TextButton(
-                onPressed: () {
-                  // Copy to clipboard
-                  Clipboard.setData(ClipboardData(text: jsonString));
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Copié dans le presse-papiers')),
-                  );
-                },
-                child: const Text('Copier'),
-              ),
-            ],
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur d\'export: $e')),
-        );
-      }
-    }
-  }
-
-  String _formatTime(DateTime time) {
-    return '${time.hour}:${time.minute.toString().padLeft(2, '0')}';
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year} à ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }
 
   Color _getKeyColor(double percent) {

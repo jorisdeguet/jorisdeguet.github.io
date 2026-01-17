@@ -1,5 +1,4 @@
 import 'dart:async';
-import '../services/random_key_generator_service.dart';
 import '../services/key_exchange_service.dart';
 import 'app_logger.dart';
 
@@ -10,8 +9,7 @@ class KeyPreGenerationService {
   factory KeyPreGenerationService() => _instance;
   KeyPreGenerationService._internal();
 
-  final RandomKeyGeneratorService _keyGenerator = RandomKeyGeneratorService();
-  late final KeyExchangeService _keyExchangeService = KeyExchangeService(_keyGenerator);
+  late final KeyExchangeService _keyExchangeService = KeyExchangeService();
   final _log = AppLogger();
 
   // Pool de sessions pré-générées
@@ -19,13 +17,6 @@ class KeyPreGenerationService {
   final Map<int, _PreGeneratedSession> _preGeneratedPool = {};
   
   bool _isGenerating = false;
-  
-  // Tailles standards à pré-générer (8KB, 32KB)
-  // On ne pré-génère pas les très grandes clés pour économiser la mémoire
-  static const List<int> _standardSizes = [
-    8192,  // 8 KB
-    32768, // 32 KB
-  ];
 
   // Nombre de segments cibles à avoir prêts (30 segments)
   static const int _targetReadySegments = 30;
@@ -64,18 +55,17 @@ class KeyPreGenerationService {
     _isGenerating = true;
 
     try {
-      for (final size in _standardSizes) {
-        if (!_preGeneratedPool.containsKey(size)) {
-          _log.i('KeyPreGen', 'Generating session for $size bytes...');
 
-          final session = await _generateSession(size);
-          _preGeneratedPool[size] = session;
+        if (!_preGeneratedPool.containsKey(8192)) {
+          _log.i('KeyPreGen', 'Generating session for 8192 bytes...');
+
+          final session = await _generateSession(8192);
+          _preGeneratedPool[8192] = session;
           
-          _log.i('KeyPreGen', 'Session ready for $size bytes (${session.preGeneratedSegments.length} segments)');
+          _log.i('KeyPreGen', 'Session ready for 8192 bytes (${session.preGeneratedSegments.length} segments)');
 
           // Yield to main thread
           await Future.delayed(Duration.zero);
-        }
       }
     } catch (e) {
       _log.e('KeyPreGen', 'Error generating session: $e');

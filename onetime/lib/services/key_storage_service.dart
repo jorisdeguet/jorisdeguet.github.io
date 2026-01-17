@@ -1,14 +1,13 @@
 import 'dart:convert';
 
-import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../model_local/shared_key.dart';
 import 'app_logger.dart';
+import 'conversation_service.dart';
 
 /// Service pour stocker et récupérer les clés partagées localement.
 ///
@@ -17,6 +16,14 @@ import 'app_logger.dart';
 class KeyStorageService {
   static const String _keyPrefix = 'shared_key_';
   final _log = AppLogger();
+
+  // Optional local user id used to report key debug info to Firestore
+  final String _localUserId;
+  final ConversationService? _conversationService;
+
+  KeyStorageService({String? localUserId})
+      : _localUserId = localUserId ?? '',
+        _conversationService = localUserId != null ? ConversationService(localUserId: localUserId) : null;
 
   /// Sauvegarde une clé partagée pour une conversation
   Future<void> saveKey(String conversationId, SharedKey key, {String? lastKexId}) async {
@@ -27,6 +34,9 @@ class KeyStorageService {
 
        // Sérialiser la clé complète avec son historique
        final keyJson = key.toJson();
+
+       // Ensure the stored id is the conversationId (legacy keys may contain other ids)
+       keyJson['id'] = conversationId;
 
        // Ajouter lastKexId si fourni
        if (lastKexId != null) {
@@ -47,6 +57,26 @@ class KeyStorageService {
        await prefs.setString('${_keyPrefix}meta_$conversationId', jsonEncode(keyJson));
 
        _log.i('KeyStorage', 'saveKey: SUCCESS');
+
+       // Update Firestore debug info if possible
+       try {
+         if (_conversationService != null && _localUserId.isNotEmpty) {
+           final info = {
+             'history': key.history.toJson(),
+             'interval': key.interval.toJson(),
+             'nextAvailableByte': key.nextAvailableByte,
+             'startOffset': key.startOffset,
+           };
+           await _conversationService.updateKeyDebugInfo(
+             conversationId: conversationId,
+             userId: _localUserId,
+             info: info,
+           );
+           _log.d('KeyStorage', 'Firestore keyDebugInfo updated after saveKey');
+         }
+       } catch (e) {
+         _log.w('KeyStorage', 'Could not update Firestore keyDebugInfo: $e');
+       }
      } catch (e) {
        _log.e('KeyStorage', 'saveKey ERROR: $e');
        rethrow;
@@ -85,8 +115,9 @@ class KeyStorageService {
 
        final nextAvail = metadata['nextAvailableByte'] as int? ?? (metadata['startOffset'] as int? ?? 0);
 
+       // Force the key id to be the conversationId to avoid mismatches
        final key = SharedKey(
-         id: metadata['id'] as String,
+         id: conversationId,
          keyData: Uint8List.fromList(keyData),
          peerIds: List<String>.from(metadata['peerIds'] as List),
          createdAt: DateTime.parse(metadata['createdAt'] as String),
@@ -96,6 +127,30 @@ class KeyStorageService {
        );
 
        _log.i('KeyStorage', 'getKey: FOUND, ${key.lengthInBits} bits');
+
+       // Log history and push to Firestore for debugging
+       try {
+         final histStr = key.history.format();
+         _log.i('KeyStorage', 'Key history:\n$histStr');
+
+         if (_conversationService != null && _localUserId.isNotEmpty) {
+           final info = {
+             'history': key.history.toJson(),
+             'interval': key.interval.toJson(),
+             'nextAvailableByte': key.nextAvailableByte,
+             'startOffset': key.startOffset,
+           };
+           await _conversationService.updateKeyDebugInfo(
+             conversationId: conversationId,
+             userId: _localUserId,
+             info: info,
+           );
+           _log.d('KeyStorage', 'Firestore keyDebugInfo updated after getKey');
+         }
+       } catch (e) {
+         _log.w('KeyStorage', 'Could not push history to Firestore: $e');
+       }
+
        return key;
      } catch (e) {
        _log.e('KeyStorage', 'getKey ERROR: $e');
@@ -115,6 +170,14 @@ class KeyStorageService {
        }
 
        key.markBytesAsUsed(startByte, endByte);
+
+       // Record consumption in history
+       try {
+         final seg = KeyInterval(conversationId: conversationId, startIndex: startByte, endIndex: endByte);
+         key.history.recordConsumption(segment: seg, reason: 'local-consume');
+       } catch (e) {
+         _log.w('KeyStorage', 'Could not record consumption in history: $e');
+       }
 
        await saveKey(conversationId, key);
        _log.i('KeyStorage', 'updateUsedBytes: SUCCESS');

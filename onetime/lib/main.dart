@@ -20,9 +20,6 @@ void main() async {
   // Utiliser les options générées pour initialiser Firebase (évite le besoin du plist dans le projet iOS)
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Initialiser le service de pré-génération de clés
-  KeyPreGenerationService().initialize();
-  
   runApp(const MyApp());
 }
 

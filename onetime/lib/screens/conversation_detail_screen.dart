@@ -315,16 +315,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
           _log.d('ConversationDetail', 'Auto-send skipped (hasSent=$_hasSentPseudo, isLoading=$_isLoading)');
         }
       }
-
-      // Si pas de clé, naviguer directement vers l'écran d'échange
-      if (key == null && !widget.conversation.hasKey) {
-        _log.d('ConversationDetail', 'No shared key found, navigating to key exchange');
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted) {
-            _startKeyExchange();
-          }
-        });
-      }
     }
   }
 
@@ -863,43 +853,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   }
 
   Widget _buildConversationScreen(BuildContext context, Conversation conversation) {
-    // Calcul de la clé restante basé sur SharedKey si disponible (plus précis)
-    String remainingKeyFormatted = conversation.remainingKeyFormatted;
-    double keyRemainingPercent = conversation.keyRemainingPercent;
-    double displayKeyPercent = conversation.keyRemainingPercent;
-
-    if (_sharedKey != null) {
-      try {
-        // Compute once to avoid multiple failing accesses (byte-based)
-        final availableBytes = _sharedKey!.countAvailableBytes(_currentUserId);
-        final totalBytes = _sharedKey!.lengthInBytes;
-
-        if (totalBytes > 0) {
-          remainingKeyFormatted = FormatService.formatBytes(availableBytes);
-          keyRemainingPercent = (availableBytes / totalBytes) * 100;
-          displayKeyPercent = keyRemainingPercent;
-        } else {
-          // Defensive fallback
-          remainingKeyFormatted = conversation.remainingKeyFormatted;
-          keyRemainingPercent = conversation.keyRemainingPercent;
-          displayKeyPercent = conversation.keyRemainingPercent;
-        }
-      } catch (e, st) {
-        // Log the full error and stack to console for debugging
-        _log.e('ConversationDetail', 'SharedKey error: $e');
-        _log.e('ConversationDetail', 'StackTrace: $st');
-        // Also log error details
-        _log.e('ConversationDetail', '=== SHARED KEY ERROR ===');
-        _log.e('ConversationDetail', 'Error: $e');
-        _log.e('ConversationDetail', 'Stack: $st');
-
-        // Fallback to conversation-provided numbers
-        remainingKeyFormatted = conversation.remainingKeyFormatted;
-        keyRemainingPercent = conversation.keyRemainingPercent;
-        displayKeyPercent = conversation.keyRemainingPercent;
-      }
-    }
-
     return Scaffold(
       appBar: AppBar(
         title: GestureDetector(
@@ -927,21 +880,9 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
                   const SizedBox(width: 12),
                   // Status de la clé
                   Icon(
-                    widget.conversation.hasKey ? Icons.lock : Icons.lock_open,
+                    Icons.lock,
                     size: 12,
-                    color: widget.conversation.hasKey
-                        ? _getKeyColor(displayKeyPercent)
-                        : Colors.orange,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    remainingKeyFormatted,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: widget.conversation.hasKey
-                          ? _getKeyColor(displayKeyPercent)
-                          : Colors.orange,
-                    ),
+                    color: Colors.green,
                   ),
                 ],
               ),
@@ -962,18 +903,12 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
                 );
               },
             ),
-          if (!widget.conversation.hasKey)
-            IconButton(
-              icon: const Icon(Icons.key),
-              tooltip: 'Créer une clé',
-              onPressed: _startKeyExchange,
-            ),
-          if (widget.conversation.hasKey)
-            IconButton(
-              icon: const Icon(Icons.key),
-              tooltip: 'Allonger la clé',
-              onPressed: _startKeyExchange,
-            ),
+
+          IconButton(
+            icon: const Icon(Icons.key),
+            tooltip: 'Créer / étendre une clé',
+            onPressed: _startKeyExchange,
+          ),
           IconButton(
             icon: const Icon(Icons.info_outline),
             onPressed: () => _showConversationInfo(context),
@@ -984,58 +919,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
         children: [
           Column(
             children: [
-              // Bannière pour conversation sans clé
-              if (!widget.conversation.hasKey)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  color: Colors.orange[100],
-                  child: Row(
-                    children: [
-                      Icon(Icons.warning, color: Colors.orange[800], size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Messages non chiffrés. Créez une clé pour sécuriser vos échanges.',
-                          style: TextStyle(color: Colors.orange[800], fontSize: 12),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: _startKeyExchange,
-                        child: Text(
-                          'Créer',
-                          style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-              // Barre d'avertissement si peu de clé restante
-              if (widget.conversation.hasKey && widget.conversation.keyRemainingPercent < 20)
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  color: Colors.red[100],
-                  child: Row(
-                    children: [
-                      Icon(Icons.warning, color: Colors.red[800], size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Clé bientôt épuisée. Pensez à générer une nouvelle clé.',
-                          style: TextStyle(color: Colors.red[800], fontSize: 12),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: _startKeyExchange,
-                        child: Text(
-                          'Ajouter',
-                          style: TextStyle(color: Colors.red[800], fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
               // Liste des messages
               Expanded(
             child: StreamBuilder<List<_DisplayMessage>>(

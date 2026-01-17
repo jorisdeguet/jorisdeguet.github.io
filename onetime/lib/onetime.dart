@@ -12,12 +12,11 @@ library;
 
 // Models
 export 'model_local/shared_key.dart';
-export 'models/key_segment.dart';
+export 'model_remote/key_segment.dart';
 export 'model_remote/conversation.dart';
 export 'model_remote/kex_session.dart';
 
 // Services
-export 'services/random_key_generator_service.dart';
 export 'services/key_exchange_service.dart';
 export 'services/key_exchange_sync_service.dart';
 export 'services/key_storage_service.dart';
