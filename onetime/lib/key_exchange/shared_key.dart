@@ -1,6 +1,6 @@
-import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'key_history.dart';
 import 'key_interval.dart';
@@ -139,10 +139,10 @@ class SharedKey {
 
   /// Trouve le prochain segment disponible de la taille demandée en bits (compat)
   /// Cette implémentation force une allocation alignée sur octet.
-  ({int startBit, int endBit})? findAvailableSegment(String peerId, int bitsNeeded) {
+  ({int startBit, int endBit})? findAvailableSegment(int bitsNeeded) {
     if (bitsNeeded <= 0) return null;
     final bytesNeeded = ((bitsNeeded + 7) ~/ 8);
-    final res = findAvailableSegmentByBytes(peerId, bytesNeeded);
+    final res = findAvailableSegmentByBytes(bytesNeeded);
     if (res == null) return null;
     final startBit = res.startByte * 8;
     final endBit = (res.startByte + res.lengthBytes) * 8;
@@ -151,7 +151,7 @@ class SharedKey {
 
   /// Trouve le prochain segment disponible en octets (allocation linéaire simplifiée)
   /// Retourne tuple (startByte, lengthBytes) ou null si pas assez d'octets.
-  ({int startByte, int lengthBytes})? findAvailableSegmentByBytes(String peerId, int bytesNeeded) {
+  ({int startByte, int lengthBytes})? findAvailableSegmentByBytes(int bytesNeeded) {
     if (bytesNeeded <= 0) return null;
     final firstFree = max(startOffset, _nextAvailableByte);
     final available = keyData.length - (firstFree - startOffset);
@@ -220,7 +220,7 @@ class SharedKey {
   /// Alloue et consomme un segment de la taille demandée.
   /// Retourne le KeyInterval du segment alloué, ou null si pas assez d'espace.
   KeyInterval? allocateAndConsume(int bytesNeeded) {
-    final seg = findAvailableSegmentByBytes('', bytesNeeded);
+    final seg = findAvailableSegmentByBytes(bytesNeeded);
     if (seg == null) return null;
 
     final interval = KeyInterval(
@@ -233,14 +233,9 @@ class SharedKey {
   }
 
   /// Compte les octets disponibles dans toute la clé (allocation linéaire)
-  int countAvailableBytes(String peerId) {
+  int countAvailableBytes() {
     final firstFree = max(startOffset, _nextAvailableByte);
     return keyData.length - (firstFree - startOffset);
-  }
-
-  /// Compte les bits disponibles (compat)
-  int countAvailableBits(String peerId) {
-    return countAvailableBytes(peerId) * 8;
   }
 
   /// Ajoute des octets à la fin de la clé (pour l'agrandissement)

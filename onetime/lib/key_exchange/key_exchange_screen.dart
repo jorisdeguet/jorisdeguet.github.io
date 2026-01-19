@@ -1,7 +1,10 @@
 import 'dart:async';
-import 'package:flutter/services.dart';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:onetime/config/app_config.dart';
+import 'package:onetime/convo/message_service.dart';
 import 'package:onetime/key_exchange/kex_firestore.dart';
 import 'package:onetime/key_exchange/key_exchange_summary_screen.dart';
 import 'package:onetime/key_exchange/key_exchange_sync_service.dart';
@@ -16,7 +19,6 @@ import 'package:onetime/services/qr_segment_cache_service.dart';
 import 'package:onetime/signin/auth_service.dart';
 import 'package:onetime/signin/pseudo_storage.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 
 
@@ -121,60 +123,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     }
   }
 
-  /// Envoie un message pseudo chiffré pour que les autres participants connaissent notre pseudo
-  Future<void> _sendPseudoMessage(String conversationId, SharedKey sharedKey) async {
-    // Vérifier si l'échange de pseudo est activé
-    if (!AppConfig.pseudoExchangeStartConversation) {
-      _log.d('KeyExchange', 'Pseudo exchange disabled by config');
-      return;
-    }
 
-    try {
-      final myPseudo = await _pseudoService.getMyPseudo();
-      if (myPseudo == null || myPseudo.isEmpty) {
-        _log.d('KeyExchange', 'No pseudo to send');
-        return;
-      }
-
-      // Wait 3 seconds before sending
-      _log.d('KeyExchange', 'Waiting 3 seconds before sending pseudo...');
-      await Future.delayed(const Duration(seconds: 3));
-
-      final pseudoMessage = PseudoExchangeMessage(
-        oderId: _currentUserId,
-        pseudo: myPseudo, // No smiley in stored message
-      );
-
-      final cryptoService = CryptoService(localPeerId: _currentUserId);
-      final conversationService = ConversationService(localUserId: _currentUserId);
-
-      // Chiffrer le message pseudo
-      final result = cryptoService.encrypt(
-        plaintext: pseudoMessage.toJson(),
-        sharedKey: sharedKey,
-        compress: true,
-      );
-
-      // Mettre à jour les octets utilisés
-      await _keyStorageService.updateUsedBytes(
-        conversationId,
-        result.usedSegment.startByte,
-        result.usedSegment.startByte + result.usedSegment.lengthBytes,
-      );
-
-      // Envoyer le message
-      await conversationService.sendMessage(
-        conversationId: conversationId,
-        message: result.message,
-        messagePreview: '👤 Pseudo partagé',
-      );
-
-      _log.i('KeyExchange', 'Pseudo message sent successfully');
-    } catch (e) {
-      _log.e('KeyExchange', 'Error sending pseudo message: $e');
-      // Ne pas bloquer si l'envoi du pseudo échoue
-    }
-  }
 
   String get _currentUserId => _authService.currentUserId ?? '';
 
@@ -469,7 +418,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       await _updateKeyDebugInfoForConversation(conversation.id, finalKey);
 
       // Envoyer le message pseudo chiffré
-      await _sendPseudoMessage(conversation.id, finalKey);
+      await MessageService.fromCurrentUserID().sendPseudoMessage(conversation.id);
 
       // NE PAS supprimer la session - c'est la source qui s'en charge
       // await _sync_service.deleteSession(_firestore_session!.id);
@@ -922,7 +871,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       await _updateKeyDebugInfoForConversation(conversationId, finalKey);
 
       // Envoyer le message pseudo chiffré
-      await _sendPseudoMessage(conversationId, finalKey);
+      await MessageService.fromCurrentUserID().sendPseudoMessage(conversationId);
 
       // Supprimer la session d'échange de Firestore (nettoyage par la source)
       if (_firestoreSession != null) {
@@ -1269,7 +1218,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     _log.d('TERMINATE', 'Total Segments (planned): ${_session!.totalSegments}');
     _log.d('TERMINATE', 'ScannedBy status from Firestore:');
 
-    _firestoreSession!.scannedBy.forEach((idx, scanners) {
+    _firestoreSession!.   scannedBy.forEach((idx, scanners) {
       final allScanned = _firestoreSession!.allParticipantsScannedSegment(idx);
       _log.d('TERMINATE', '  Segment $idx: $scanners → ${allScanned ? "✅ COMPLETE" : "⚠️  INCOMPLETE"}');
     });
@@ -1588,7 +1537,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   /// Updates Firestore keyDebugInfo for a conversation
   Future<void> _updateKeyDebugInfoForConversation(String conversationId, SharedKey key) async {
     try {
-      final availableBytes = key.countAvailableBytes(_currentUserId);
+      final availableBytes = key.countAvailableBytes();
       final totalBytes = key.lengthInBytes;
 
       // Find first and last available byte index

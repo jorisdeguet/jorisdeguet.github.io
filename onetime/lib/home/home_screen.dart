@@ -1,22 +1,22 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:onetime/convo/encrypted_message.dart';
 import 'package:onetime/convo/message_storage.dart';
 import 'package:onetime/services/format_service.dart';
 
-import '../signin/auth_service.dart';
-import '../services/conversation_service.dart';
-import '../services/conversation_pseudo_service.dart';
-import '../services/unread_message_service.dart';
-import '../signin/pseudo_storage.dart';
 import '../convo/conversation.dart';
-import '../key_exchange/key_exchange_sync_service.dart';
-import '../convo/message_service.dart';
-import 'profile_screen.dart';
-import '../convo_new/new_conversation_screen.dart';
 import '../convo/conversation_detail_screen.dart';
+import '../convo/message_service.dart';
 import '../convo_new/join_conversation_screen.dart';
+import '../convo_new/new_conversation_screen.dart';
+import '../key_exchange/key_exchange_sync_service.dart';
+import '../services/conversation_pseudo_service.dart';
+import '../services/conversation_service.dart';
+import '../signin/auth_service.dart';
+import '../signin/pseudo_storage.dart';
+import 'profile_screen.dart';
 
 /// Écran d'accueil après connexion.
 class HomeScreen extends StatefulWidget {
@@ -384,7 +384,7 @@ class _ConversationTile extends StatefulWidget {
 class _ConversationTileState extends State<_ConversationTile> {
   final ConversationPseudoService _convPseudoService = ConversationPseudoService();
   final MessageStorageService _messageStorage = MessageStorageService();
-  final UnreadMessageService _unreadService = UnreadMessageService();
+  final MessageService _messageService = MessageService.fromCurrentUserID();
   String _displayName = '';
   String _lastMessageText = '';
   DateTime? _lastMessageTime;
@@ -488,7 +488,7 @@ class _ConversationTileState extends State<_ConversationTile> {
   }
 
   Future<void> _loadUnreadCount() async {
-    final count = await _unreadService.getUnreadCountExcludingUser(
+    final count = await _messageService.getUnreadCountExcludingUser(
       widget.conversation.id,
       widget.currentUserId,
     );

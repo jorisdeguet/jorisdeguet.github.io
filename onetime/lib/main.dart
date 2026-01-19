@@ -1,18 +1,18 @@
 import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'signin/auth_service.dart';
-import 'signin/pseudo_storage.dart';
-import 'signin/login_screen.dart';
-import 'home/home_screen.dart';
-import 'l10n/app_localizations.dart';
-
 // Ajout : options générées par FlutterFire CLI
 import 'config/firebase_options.dart';
+import 'home/home_screen.dart';
+import 'l10n/app_localizations.dart';
+import 'signin/auth_service.dart';
+import 'signin/login_screen.dart';
+import 'signin/pseudo_storage.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:onetime/convo/conversation_info_screen.dart';
 import 'package:onetime/convo/encrypted_message.dart';
+import 'package:onetime/convo/message_service.dart';
 import 'package:onetime/convo/message_storage.dart';
 import 'package:onetime/key_exchange/key_exchange_screen.dart';
 import 'package:onetime/key_exchange/key_storage.dart';
@@ -12,26 +13,21 @@ import 'package:onetime/key_exchange/shared_key.dart';
 import 'package:onetime/l10n/app_localizations.dart';
 import 'package:onetime/services/conversation_pseudo_service.dart';
 import 'package:onetime/services/conversation_service.dart';
-import 'package:onetime/services/crypto_service.dart';
 import 'package:onetime/services/media_service.dart';
-import 'package:onetime/services/unread_message_service.dart';
 import 'package:onetime/signin/auth_service.dart';
 import 'package:onetime/signin/pseudo_storage.dart';
 
-import '../config/app_config.dart';
+import '../services/app_logger.dart';
 import 'conversation.dart';
-
 import 'media_send_screen.dart';
 
-import '../services/app_logger.dart';
-
-/// Wrapper pour afficher un message (local déchiffré ou Firestore chiffré)
+/// Wrapper pour afficher un message local déchiffré
 class _DisplayMessage {
   final String id;
   final String senderId;
   final DateTime createdAt;
   final MessageContentType contentType;
-  
+
   // Données locales déchiffrées
   final String? textContent;
   final Uint8List? binaryContent;
@@ -39,9 +35,6 @@ class _DisplayMessage {
   final String? mimeType;
 
   final bool isCompressed;
-  
-  /// True si le message est chargé localement (déchiffré)
-  final bool isLocal;
 
   _DisplayMessage({
     required this.id,
@@ -53,7 +46,6 @@ class _DisplayMessage {
     this.fileName,
     this.mimeType,
     this.isCompressed = false,
-    this.isLocal = false,
   });
 
   /// Crée depuis un message local déchiffré
@@ -68,7 +60,6 @@ class _DisplayMessage {
       fileName: local.fileName,
       mimeType: local.mimeType,
       isCompressed: local.isCompressed,
-      isLocal: true,
     );
   }
 }
@@ -87,29 +78,24 @@ class ConversationDetailScreen extends StatefulWidget {
 }
 
 class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
-   final AuthService _authService = AuthService();
-   final KeyStorageService _keyStorageService = KeyStorageService();
-   final AppLogger _log = AppLogger();
-   final MediaService _mediaService = MediaService();
-   final MessageStorageService _messageStorage = MessageStorageService();
-   final ConversationPseudoService _convPseudoService = ConversationPseudoService();
-   final UnreadMessageService _unreadService = UnreadMessageService();
-   late final ConversationService _conversationService;
-   late final CryptoService _cryptoService;
-   final _messageController = TextEditingController();
-   final _scrollController = ScrollController();
+  final AuthService _authService = AuthService();
+  final KeyStorageService _keyStorageService = KeyStorageService();
+  final AppLogger _log = AppLogger();
+  final MediaService _mediaService = MediaService();
+  final MessageStorageService _messageStorage = MessageStorageService();
+  final ConversationPseudoService _convPseudoService = ConversationPseudoService();
+  final MessageService _messageService = MessageService.fromCurrentUserID();
+  late final ConversationService _conversationService;
+  final _messageController = TextEditingController();
+  final _scrollController = ScrollController();
 
   bool _isLoading = false;
-  SharedKey? _sharedKey;
+  // SharedKey? _sharedKey;
   bool _hasSentPseudo = false;
-  /// Track whether we previously had a key for this conversation.
-  /// Used to detect the transition "no key -> key available".
-  bool _hadKey = false;
   bool _showScrollToBottom = false;
-
   // Cache des pseudos pour affichage
   Map<String, String> _displayNames = {};
-  
+
   StreamSubscription<String>? _pseudoSubscription;
 
   @override
@@ -117,15 +103,13 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     super.initState();
     final userId = _authService.currentUserId ?? '';
     _conversationService = ConversationService(localUserId: userId);
-    _cryptoService = CryptoService(localPeerId: userId);
     // Load display names immediately (UI-friendly)
     _loadDisplayNames();
-
     // First determine if we already sent our pseudo locally, then load the key.
     // This ordering avoids racing: we want to know whether to auto-send the pseudo
     // when a key becomes available.
     _checkIfPseudoSent().whenComplete(() {
-      _loadSharedKey();
+      // _loadSharedKey();
     });
 
     // Listen for pseudo updates
@@ -134,18 +118,14 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
         _loadDisplayNames();
       }
     });
-    
-    // Mark all messages as read when opening conversation
-    _unreadService.markAllAsRead(widget.conversation.id);
-
-    // Scroll listeners
+    _messageService.markAllAsRead(widget.conversation.id);
     _scrollController.addListener(_onScroll);
   }
 
   void _onScroll() {
     if (_scrollController.hasClients) {
-      final isAtBottom = _scrollController.position.pixels >= 
-                         _scrollController.position.maxScrollExtent - 100;
+      final isAtBottom = _scrollController.position.pixels >=
+          _scrollController.position.maxScrollExtent - 100;
       if (isAtBottom && _showScrollToBottom) {
         setState(() => _showScrollToBottom = false);
       }
@@ -166,7 +146,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   /// Check if user has already sent their pseudo in this conversation
   Future<void> _checkIfPseudoSent() async {
     final messages = await _messageStorage.getConversationMessages(widget.conversation.id);
-    
+
     // Check if any message from current user is a pseudo message
     for (final msg in messages) {
       if (msg.senderId == _currentUserId && msg.textContent != null) {
@@ -192,44 +172,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     }
   }
 
-  Future<void> _updateKeyDebugInfo() async {
-    if (_sharedKey == null) return;
 
-    try {
-      final availableBytes = _sharedKey!.countAvailableBytes(_currentUserId);
-      // Allocation linéaire : on scanne toute la clé
-      final totalBytes = _sharedKey!.lengthInBytes;
-
-      // Trouver le premier et dernier octet disponible
-      int firstAvailable = -1;
-      int lastAvailable = -1;
-
-      for (int i = 0; i < totalBytes; i++) {
-        if (!_sharedKey!.isByteUsed(i)) {
-          if (firstAvailable == -1) firstAvailable = i;
-          lastAvailable = i;
-        }
-      }
-
-      // Générer un hash simple pour la détection d'incohérences (first|last|available)
-      final consistencyHash = '$firstAvailable|$lastAvailable|$availableBytes';
-
-      await _conversationService.updateKeyDebugInfo(
-        conversationId: widget.conversation.id,
-        userId: _currentUserId,
-        info: {
-          'availableBytes': availableBytes,
-          'firstAvailableByte': firstAvailable,
-          'lastAvailableByte': lastAvailable,
-          'consistencyHash': consistencyHash,
-          'updatedAt': DateTime.now().toIso8601String(),
-        },
-      );
-      _log.d('ConversationDetail', 'Key debug info updated in Firestore');
-    } catch (e) {
-      _log.e('ConversationDetail', 'Error updating key debug info: $e');
-    }
-  }
 
   /// Combine local decrypted messages with Firestore messages
   Stream<List<_DisplayMessage>> _getCombinedMessagesStream() async* {
@@ -251,54 +194,14 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       _log.e('ConversationDetail', 'ERROR in _getCombinedMessagesStream: $e');
       yield [];
     }
-   }
-
-  Future<void> _loadSharedKey() async {
-    _log.d('ConversationDetail', 'Loading shared key for ${widget.conversation.id}');
-    // remember whether we had a key before loading (used to detect transition)
-    final prevHadKey = _hadKey || _sharedKey != null;
-
-    final key = await _keyStorageService.getKey(widget.conversation.id);
-    if (mounted) {
-      setState(() {
-        _sharedKey = key;
-        _hadKey = key != null;
-      });
-      _log.i('ConversationDetail', 'Shared key loaded: ${key != null ? "${key.lengthInBytes} bytes" : "NOT FOUND"}');
-
-      // Update debug info immediately after loading key
-      if (key != null) {
-        _updateKeyDebugInfo();
-      }
-      
-      // If we just transitioned from no-key to having a key, optionally auto-send pseudo
-      if (!prevHadKey && key != null && AppConfig.autoSendPseudoOnKeyAvailable) {
-        _log.d('ConversationDetail', 'Detected new key availability. Evaluating auto-send pseudo...');
-        // Only auto-send if user hasn't already sent their pseudo and we're not already busy
-        if (!_hasSentPseudo && !_isLoading) {
-          // Defer a bit to let UI stabilize
-          Future.microtask(() async {
-            try {
-              _log.d('ConversationDetail', 'Auto-sending pseudo (key became available)');
-              await _sendMyPseudo();
-            } catch (e) {
-              _log.e('ConversationDetail', 'Auto-send pseudo failed: $e');
-            }
-          });
-        } else {
-          _log.d('ConversationDetail', 'Auto-send skipped (hasSent=$_hasSentPseudo, isLoading=$_isLoading)');
-        }
-      }
-    }
   }
+
+
 
   @override
   void dispose() {
     _pseudoSubscription?.cancel();
     // Sauvegarder la clé avant de quitter pour persister les bits utilisés
-    if (_sharedKey != null) {
-      _keyStorageService.saveKey(widget.conversation.id, _sharedKey!);
-    }
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -307,7 +210,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   /// Handles when the conversation is deleted from Firestore
   Future<void> _handleConversationDeleted(BuildContext context) async {
     if (!mounted) return;
-
     // Check if user initiated the deletion (if they're not in the conversation anymore)
     final conversationExists = await _conversationService.getConversation(widget.conversation.id);
     if (conversationExists != null) return; // Conversation still exists, false alarm
@@ -319,18 +221,18 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Conversation supprimée'),
         content: const Text(
-          'Cette conversation a été supprimée par un autre participant.\n\n'
-          'Voulez-vous également supprimer les messages déchiffrés stockés localement ?',
+          'Cette conversation a été supprimée par un autre participant.\n\n' // TODO i18n
+              'Voulez-vous également supprimer les messages déchiffrés stockés localement ?',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Conserver les messages'),
+            child: const Text('Conserver les messages'), // TODO i18n
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Supprimer'),
+            child: const Text('Supprimer'), // TODO i18n
           ),
         ],
       ),
@@ -348,18 +250,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   String get _currentUserId => _authService.currentUserId ?? '';
 
   Future<void> _sendMyPseudo() async {
-    if (_sharedKey == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Impossible d\'envoyer: pas de clé de chiffrement'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
     setState(() => _isLoading = true);
-
     try {
       final myPseudo = await PseudoStorageService().getMyPseudo();
       if (myPseudo == null || myPseudo.isEmpty) {
@@ -371,56 +262,9 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
         return;
       }
 
-      final pseudoMessage = PseudoExchangeMessage(
-        oderId: _currentUserId,
-        pseudo: myPseudo, // No smiley in stored message
-      );
+      await _messageService.sendPseudoMessage(widget.conversation.id);
 
-      // Chiffrer le message pseudo
-      final result = _cryptoService.encrypt(
-        plaintext: pseudoMessage.toJson(),
-        sharedKey: _sharedKey!,
-        compress: true,
-      );
 
-      final message = result.message;
-
-      // Store decrypted message locally FIRST
-      await _messageStorage.saveDecryptedMessage(
-        conversationId: widget.conversation.id,
-        message: DecryptedMessageData(
-          id: message.id,
-          senderId: message.senderId,
-          createdAt: message.createdAt,
-          contentType: message.contentType,
-          textContent: pseudoMessage.toJson(),
-          isCompressed: message.isCompressed,
-        ),
-      );
-
-      // Mettre à jour les bits utilisés
-      await _keyStorageService.updateUsedBytes(
-        widget.conversation.id,
-        result.usedSegment.startByte,
-        result.usedSegment.startByte + result.usedSegment.lengthBytes,
-      );
-
-      // Recharger la clé
-      await _loadSharedKey();
-
-      // Envoyer le message
-      await _conversationService.sendMessage(
-        conversationId: widget.conversation.id,
-        message: message,
-        messagePreview: '👤 Pseudo partagé',
-      );
-
-      // Mark as transferred immediately
-      await _conversationService.markMessageAsTransferred(
-        conversationId: widget.conversation.id,
-        messageId: message.id,
-        allParticipants: widget.conversation.peerIds,
-      );
 
       // Update state to show message input
       if (mounted) {
@@ -447,104 +291,25 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
-    if (text.isEmpty) return;
-
-    // Vérifier qu'on a une clé
-    if (_sharedKey == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Impossible d\'envoyer: pas de clé de chiffrement'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
     _log.d('ConversationDetail', '_sendMessage: "$text"');
     _log.d('ConversationDetail', 'conversationId: ${widget.conversation.id}');
-    _log.d('ConversationDetail', 'currentUserId: $_currentUserId');
-
-    setState(() => _isLoading = true);
-    _messageController.clear();
-
-    try {
-      // Chiffrement avec One-Time Pad
-      _log.d('ConversationDetail', 'Encrypting message with OTP...');
-
-      final result = _cryptoService.encrypt(
-        plaintext: text,
-        sharedKey: _sharedKey!,
-        compress: true,
-      );
-
-      final message = result.message;
-      const messagePreview = '🔒 Message chiffré';
-
-      // Store decrypted message locally FIRST
-      await _messageStorage.saveDecryptedMessage(
-        conversationId: widget.conversation.id,
-        message: DecryptedMessageData(
-          id: message.id,
-          senderId: message.senderId,
-          createdAt: message.createdAt,
-          contentType: message.contentType,
-          textContent: text,
-          isCompressed: message.isCompressed,
-        ),
-      );
-
-      // Mettre à jour les bits utilisés dans le stockage local
-      await _keyStorageService.updateUsedBytes(
-        widget.conversation.id,
-        result.usedSegment.startByte,
-        result.usedSegment.startByte + result.usedSegment.lengthBytes,
-      );
-
-      // Recharger la clé pour avoir les bits à jour
-      await _loadSharedKey();
-      
-      // Update debug info after sending message
-      await _updateKeyDebugInfo();
-
-      _log.d('ConversationDetail', 'Message encrypted: ${message.totalBytesUsed} bytes used');
-
-      _log.d('ConversationDetail', 'Calling conversationService.sendMessage...');
-      await _conversationService.sendMessage(
-        conversationId: widget.conversation.id,
-        message: message,
-        messagePreview: messagePreview,
-      );
-
-      // Mark as transferred immediately (we sent it)
-      await _conversationService.markMessageAsTransferred(
-        conversationId: widget.conversation.id,
-        messageId: message.id,
-        allParticipants: widget.conversation.peerIds,
-      );
-
-      _log.i('ConversationDetail', 'Message sent successfully!');
-
+    if (text.isEmpty) return;
+    try{
+      await _messageService.sendMessage(text, widget.conversation.id);
+      setState(() => _isLoading = true);
+      _messageController.clear();
       // Scroll to bottom after sending
       if (mounted) {
         // Petit délai pour laisser le temps à l'UI de se mettre à jour
-        Future.delayed(const Duration(milliseconds: 100), () {
+        Future.delayed(const Duration(milliseconds: 10), () {
           if (mounted) _scrollToBottom();
         });
       }
-    } catch (e, stackTrace) {
-      _log.e('ConversationDetail', 'ERROR sending message: $e');
-      _log.e('ConversationDetail', 'Stack trace: $stackTrace');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: $e')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+    }catch(e) {
+      // TODO message erreur
     }
   }
+
 
   /// Affiche le menu d'attachement (image/fichier)
   void _showAttachmentMenu() {
@@ -585,16 +350,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
   /// Sélectionne et envoie une image
   Future<void> _pickImage(ImageSource source) async {
-    if (_sharedKey == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Impossible d\'envoyer: pas de clé de chiffrement'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
     // Afficher un indicateur de chargement pendant le traitement de l'image
     if (!mounted) return;
     showDialog(
@@ -621,45 +376,26 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       source: source,
       quality: ImageQuality.medium,
     );
-
     // Fermer l'indicateur de chargement
     if (mounted) Navigator.of(context).pop();
-
     if (result == null) return;
-
     if (!mounted) return;
-
     // Naviguer vers l'écran complet d'envoi
     final sent = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (_) => MediaSendScreen(
           mediaResult: result,
-          sharedKey: _sharedKey!,
           conversationId: widget.conversation.id,
           currentUserId: _currentUserId,
         ),
       ),
     );
 
-    // Recharger la clé si envoyé avec succès
-    if (sent == true && mounted) {
-      await _loadSharedKey();
-    }
   }
 
   /// Sélectionne et envoie un fichier
   Future<void> _pickFile() async {
-    if (_sharedKey == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Impossible d\'envoyer: pas de clé de chiffrement'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
     // Afficher un indicateur de chargement pendant le traitement du fichier
     if (!mounted) return;
     showDialog(
@@ -697,88 +433,12 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
       MaterialPageRoute(
         builder: (_) => MediaSendScreen(
           mediaResult: result,
-          sharedKey: _sharedKey!,
           conversationId: widget.conversation.id,
           currentUserId: _currentUserId,
         ),
       ),
     );
-
-    // Recharger la clé si envoyé avec succès
-    if (sent == true && mounted) {
-      await _loadSharedKey();
-    }
   }
-
-  /// Envoie un média chiffré (DEPRECATED - utiliser MediaSendScreen)
-  // Deprecated: kept for compatibility. Use `MediaSendScreen` instead.
-  // ignore: unused_element
-  Future<void> _sendMedia(MediaPickResult media) async {
-     setState(() => _isLoading = true);
-
-     try {
-      if (AppConfig.verboseCryptoLogs) {
-        _log.d('EncryptBinary', '=== ENCRYPT BINARY DEBUG ===');
-        _log.d('EncryptBinary', '[Encrypt Binary] Content type: ${media.contentType}');
-        _log.d('EncryptBinary', '[Encrypt Binary] Original data length: ${media.data.length} bytes');
-        _log.d('EncryptBinary', '[Encrypt Binary] MIME type: ${media.mimeType}');
-        _log.d('EncryptBinary', '[Encrypt Binary] Shared key length: ${_sharedKey!.lengthInBits} bits');
-      }
-
-      final result = _cryptoService.encryptBinary(
-        data: media.data,
-        sharedKey: _sharedKey!,
-        contentType: media.contentType,
-        fileName: media.fileName,
-        mimeType: media.mimeType,
-      );
-
-      if (AppConfig.verboseCryptoLogs) {
-        _log.d('EncryptBinary', '[Encrypt Binary] Encrypted data length: ${result.message.ciphertext.length} bytes');
-        final seg = result.message.keySegment;
-        if (seg != null) {
-          _log.d('EncryptBinary', '[Encrypt Binary] Key segment used: ${seg.startByte}-${seg.startByte + seg.lengthBytes} (${result.message.totalBytesUsed} bytes)');
-        } else {
-          _log.d('EncryptBinary', '[Encrypt Binary] Key segment used: none');
-        }
-        _log.d('EncryptBinary', '=== END ENCRYPT BINARY DEBUG ===');
-      }
-
-      final message = result.message;
-      final messagePreview = media.contentType == MessageContentType.image
-          ? '📷 Image'
-          : '📎 ${media.fileName}';
-
-      // Mettre à jour les bits utilisés dans le stockage local
-      await _keyStorageService.updateUsedBytes(
-        widget.conversation.id,
-        result.usedSegment.startByte,
-        result.usedSegment.startByte + result.usedSegment.lengthBytes,
-      );
-
-      // Recharger la clé pour avoir les bits à jour
-      await _loadSharedKey();
-
-      await _conversationService.sendMessage(
-        conversationId: widget.conversation.id,
-        message: message,
-        messagePreview: messagePreview,
-      );
-
-      _log.i('ConversationDetail', 'Media sent: ${message.totalBytesUsed} bytes used');
-     } catch (e) {
-      _log.e('ConversationDetail', 'ERROR sending media: $e');
-       if (mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(
-           SnackBar(content: Text('Erreur: $e')),
-         );
-       }
-     } finally {
-       if (mounted) {
-         setState(() => _isLoading = false);
-       }
-     }
-   }
 
   void _startKeyExchange() {
     Navigator.push(
@@ -797,11 +457,11 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
         .where((id) => id != _currentUserId) // Filter out current user
         .map((id) => _displayNames[id] ?? id.substring(0, 8))
         .toList();
-    
+
     if (pseudos.isEmpty) {
       return widget.conversation.displayName;
     }
-    
+
     return pseudos.join(', ');
   }
 
@@ -895,176 +555,175 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
             children: [
               // Liste des messages
               Expanded(
-            child: StreamBuilder<List<_DisplayMessage>>(
-              stream: _getCombinedMessagesStream(),
-              builder: (context, snapshot) {
-                // Show loading only if no data yet
-                if (snapshot.data == null) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final messages = snapshot.data ?? [];
-                
-                // Don't filter pseudo messages - show them in the thread
-                final visibleMessages = messages;
-
-                if (visibleMessages.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      'Aucun message\nEnvoyez le premier!',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  );
-                }
-
-                // Auto-scroll on initial load or new message if already at bottom
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (_scrollController.hasClients) {
-                    final maxScroll = _scrollController.position.maxScrollExtent;
-                    final currentScroll = _scrollController.position.pixels;
-                    final isAtBottom = maxScroll - currentScroll < 100;
-                    
-                    if (isAtBottom) {
-                      _scrollController.jumpTo(maxScroll);
-                    } else {
-                      // New message arrived while scrolled up
-                      // Verify if it is really a new message by checking length or last id
-                      // For now, simple logic: if not at bottom, show button
-                      setState(() => _showScrollToBottom = true);
+                child: StreamBuilder<List<_DisplayMessage>>(
+                  stream: _getCombinedMessagesStream(),
+                  builder: (context, snapshot) {
+                    // Show loading only if no data yet
+                    if (snapshot.data == null) {
+                      return const Center(child: CircularProgressIndicator());
                     }
-                  }
-                });
 
-                return ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: visibleMessages.length,
-                  itemBuilder: (context, index) {
-                    final message = visibleMessages[index];
-                    final isMine = message.senderId == _currentUserId;
-                    final senderName = _displayNames[message.senderId] ?? message.senderId;
-                    
-                    return _MessageBubbleNew(
-                      message: message,
-                      isMine: isMine,
-                      senderName: senderName,
-                      sharedKey: _sharedKey,
-                      onMessageRead: (messageId) async {
-                        // Mark as read and potentially delete
-                        await _conversationService.markMessageAsReadAndCleanup(
-                          conversationId: widget.conversation.id,
-                          messageId: messageId,
-                          allParticipants: widget.conversation.peerIds,
+                    final messages = snapshot.data ?? [];
+
+                    // Don't filter pseudo messages - show them in the thread
+                    final visibleMessages = messages;
+
+                    if (visibleMessages.isEmpty) {
+                      return const Center(
+                        child: Text(
+                          'Aucun message\nEnvoyez le premier!',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      );
+                    }
+
+                    // Auto-scroll on initial load or new message if already at bottom
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (_scrollController.hasClients) {
+                        final maxScroll = _scrollController.position.maxScrollExtent;
+                        final currentScroll = _scrollController.position.pixels;
+                        final isAtBottom = maxScroll - currentScroll < 100;
+
+                        if (isAtBottom) {
+                          _scrollController.jumpTo(maxScroll);
+                        } else {
+                          // New message arrived while scrolled up
+                          // Verify if it is really a new message by checking length or last id
+                          // For now, simple logic: if not at bottom, show button
+                          setState(() => _showScrollToBottom = true);
+                        }
+                      }
+                    });
+
+                    return ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: visibleMessages.length,
+                      itemBuilder: (context, index) {
+                        final message = visibleMessages[index];
+                        final isMine = message.senderId == _currentUserId;
+                        final senderName = _displayNames[message.senderId] ?? message.senderId;
+
+                        return _MessageBubbleNew(
+                          message: message,
+                          isMine: isMine,
+                          senderName: senderName,
+                          onMessageRead: (messageId) async {
+                            // Mark as read and potentially delete
+                            await _conversationService.markMessageAsReadAndCleanup(
+                              conversationId: widget.conversation.id,
+                              messageId: messageId,
+                              allParticipants: widget.conversation.peerIds,
+                            );
+                          },
                         );
                       },
                     );
                   },
-                );
-              },
-            ),
-          ),
-
-          // Barre de saisie ou bouton pseudo
-          if (!_hasSentPseudo)
-            // Show "Send my pseudo" button
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(20),
-                    blurRadius: 4,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-              ),
-              child: SafeArea(
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _isLoading || _sharedKey == null ? null : _sendMyPseudo,
-                    icon: _isLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Icon(Icons.person_add),
-                    label: const Text('👋 Envoyer mon pseudo'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.all(16),
-                      backgroundColor: Theme.of(context).primaryColor,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
                 ),
               ),
-            )
-          else
-            // Show message input
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(20),
-                    blurRadius: 4,
-                    offset: const Offset(0, -2),
+
+              // Barre de saisie ou bouton pseudo
+              if (!_hasSentPseudo)
+              // Show "Send my pseudo" button
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(20),
+                        blurRadius: 4,
+                        offset: const Offset(0, -2),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: SafeArea(
-                child: Row(
-                  children: [
-                    // Bouton d'attachement (image/fichier)
-                    IconButton(
-                      onPressed: _isLoading || _sharedKey == null ? null : _showAttachmentMenu,
-                      icon: const Icon(Icons.attach_file),
-                      tooltip: 'Envoyer image/fichier',
-                    ),
-                    Expanded(
-                      child: TextField(
-                        controller: _messageController,
-                        decoration: InputDecoration(
-                          hintText: AppLocalizations.of(context).get('conversation_type_message'),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(24),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
+                  child: SafeArea(
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _isLoading ? null : _sendMyPseudo,
+                        icon: _isLoading
+                            ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                            : const Icon(Icons.person_add),
+                        label: const Text('👋 Envoyer mon pseudo'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.all(16),
+                          backgroundColor: Theme.of(context).primaryColor,
+                          foregroundColor: Colors.white,
                         ),
-                        maxLines: null,
-                        keyboardType: TextInputType.text,
-                        enableIMEPersonalizedLearning: false,
-                        enableSuggestions: false,
-                        autocorrect: false,
-                        textInputAction: TextInputAction.send,
-                        onSubmitted: (_) => _sendMessage(),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    FloatingActionButton.small(
-                      onPressed: _isLoading ? null : _sendMessage,
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.send),
+                  ),
+                )
+              else
+              // Show message input
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(20),
+                        blurRadius: 4,
+                        offset: const Offset(0, -2),
+                      ),
+                    ],
+                  ),
+                  child: SafeArea(
+                    child: Row(
+                      children: [
+                        // Bouton d'attachement (image/fichier)
+                        IconButton(
+                          onPressed: _isLoading ? null : _showAttachmentMenu,
+                          icon: const Icon(Icons.attach_file),
+                          tooltip: 'Envoyer image/fichier',
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: _messageController,
+                            decoration: InputDecoration(
+                              hintText: AppLocalizations.of(context).get('conversation_type_message'),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                            ),
+                            maxLines: null,
+                            keyboardType: TextInputType.text,
+                            enableIMEPersonalizedLearning: false,
+                            enableSuggestions: false,
+                            autocorrect: false,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (_) => _sendMessage(),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FloatingActionButton.small(
+                          onPressed: _isLoading ? null : _sendMessage,
+                          child: _isLoading
+                              ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                              : const Icon(Icons.send),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ],
-        ),
-          
+            ],
+          ),
+
           // Bouton Scroll To Bottom
           if (_showScrollToBottom)
             Positioned(
@@ -1082,13 +741,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   }
 
   bool _hasKeyConsistencyIssue() {
-    if (_sharedKey == null) return false;
     if (widget.conversation.keyDebugInfo.isEmpty) return false;
-
-    // Récupérer mon hash local
-    // Note: On recalcule pas ici, on utilise ce qui est dans Firestore si dispo, sinon on suppose OK
-    // Pour simplifier, on compare les valeurs dans keyDebugInfo pour tous les pairs
-    
     String? referenceHash;
     bool hasMismatch = false;
 
@@ -1106,61 +759,16 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     return hasMismatch;
   }
 
-  Future<void> _truncateKey() async {
-    if (_sharedKey == null) return;
-
-    // Calculate number of leading fully-used bytes using nextAvailableByte
-    final nextAvail = _sharedKey!.nextAvailableByte;
-    final currentOffset = _sharedKey!.startOffset;
-    final bytesToRemove = (nextAvail - currentOffset).clamp(0, _sharedKey!.keyData.length);
-
-    if (bytesToRemove == 0) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Aucune partie de la clé à nettoyer.')),
-        );
-      }
-      return;
-    }
-
-    final newOffset = currentOffset + bytesToRemove;
-
-    try {
-      final truncatedKey = _sharedKey!.truncate(newOffset);
-      await _keyStorageService.saveKey(widget.conversation.id, truncatedKey);
-
-      setState(() {
-        _sharedKey = truncatedKey;
-      });
-
-      await _updateKeyDebugInfo();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$bytesToRemove octets de clé nettoyés.')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors du nettoyage: $e')),
-        );
-      }
-    }
-  }
-
   void _showConversationInfo(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ConversationInfoScreen(
           conversation: widget.conversation,
-          sharedKey: _sharedKey,
           onDelete: () {
             Navigator.pop(context); // Close detail screen
           },
           onExtendKey: _startKeyExchange,
-          onTruncateKey: _truncateKey,
         ),
       ),
     );
@@ -1168,140 +776,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
 }
 
-class _MessageBubble extends StatefulWidget {
-  final EncryptedMessage message;
-  final bool isMine;
-  final String? senderName;
-  final SharedKey? sharedKey;
-  final void Function(String oderId, String pseudo)? onPseudoReceived;
-  final VoidCallback? onKeyUsed;
-
-  const _MessageBubble({
-    required this.message,
-    required this.isMine,
-    this.senderName,
-    this.sharedKey,
-    this.onPseudoReceived,
-    this.onKeyUsed,
-  });
-
-  @override
-  State<_MessageBubble> createState() => _MessageBubbleState();
-}
-
-class _MessageBubbleState extends State<_MessageBubble> {
-  final AppLogger _log = AppLogger();
-  String? _decryptedText;
-  Uint8List? _decryptedBinary;
-  bool _isPseudoMessage = false;
-  String? _pseudoName;
-
-  @override
-  void initState() {
-    super.initState();
-    // Decrypt synchronously (existing crypto service is synchronous)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _tryDecrypt();
-    });
-  }
-
-  void _tryDecrypt() {
-    try {
-      if (widget.message.contentType == MessageContentType.text) {
-        if (widget.sharedKey != null && widget.message.isEncrypted) {
-          final text = CryptoService(localPeerId: widget.message.senderId)
-              .decrypt(encryptedMessage: widget.message, sharedKey: widget.sharedKey!, markAsUsed: false);
-          setState(() => _decryptedText = text);
-
-          if (PseudoExchangeMessage.isPseudoExchange(text)) {
-            final pseudo = PseudoExchangeMessage.fromJson(text);
-            if (pseudo != null) {
-              widget.onPseudoReceived?.call(pseudo.oderId, pseudo.pseudo);
-              _isPseudoMessage = true;
-              _pseudoName = pseudo.pseudo;
-            }
-          }
-
-          // Mark bits used when we actually consume the key (done by parent callbacks)
-          if (!widget.isMine && widget.sharedKey != null && widget.message.isEncrypted) {
-            final seg = widget.message.keySegment;
-            if (seg != null) {
-              widget.sharedKey!.markBytesAsUsed(seg.startByte, seg.startByte + seg.lengthBytes);
-              widget.onKeyUsed?.call();
-            }
-          }
-        } else if (!widget.message.isEncrypted) {
-          // Unencrypted text stored directly
-          final text = String.fromCharCodes(widget.message.ciphertext);
-          setState(() => _decryptedText = text);
-        }
-      } else {
-        // binary
-        if (widget.sharedKey != null && widget.message.isEncrypted) {
-          final bin = CryptoService(localPeerId: widget.message.senderId)
-              .decryptBinary(encryptedMessage: widget.message, sharedKey: widget.sharedKey!, markAsUsed: false);
-          setState(() => _decryptedBinary = bin);
-
-          if (!widget.isMine && widget.sharedKey != null && widget.message.isEncrypted) {
-            final seg = widget.message.keySegment;
-            if (seg != null) {
-              widget.sharedKey!.markBytesAsUsed(seg.startByte, seg.startByte + seg.lengthBytes);
-              widget.onKeyUsed?.call();
-            }
-          }
-        }
-      }
-    } catch (e) {
-      _log.e('_MessageBubble', 'Decrypt error: $e');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        mainAxisAlignment: widget.isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
-        children: [
-          if (!widget.isMine)
-            Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: CircleAvatar(
-                radius: 16,
-                backgroundColor: Colors.grey[300],
-                child: Text(widget.senderName?.substring(0, 1) ?? ''),
-              ),
-            ),
-          Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: widget.isMine ? Theme.of(context).primaryColor : Colors.grey[200],
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: widget.message.contentType == MessageContentType.text
-                  ? (_isPseudoMessage
-                      ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.check_circle, color: Colors.green, size: 16),
-                            const SizedBox(width: 6),
-                            Text(' ${_pseudoName ?? ''}', style: TextStyle(color: widget.isMine ? Colors.white : Colors.black87, fontWeight: FontWeight.w600)),
-                          ],
-                        )
-                      : SelectableText(_decryptedText ?? (widget.message.isEncrypted ? '🔒 [chiffré]' : String.fromCharCodes(widget.message.ciphertext)),
-                          style: TextStyle(color: widget.isMine ? Colors.white : Colors.black87)))
-                  : (_decryptedBinary != null
-                      ? ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.memory(_decryptedBinary!, width: 180, fit: BoxFit.cover))
-                      : (widget.message.isEncrypted ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator()) : const SizedBox())),
-            ),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-    );
-  }
-}
 
 /// Adapter widget to display either a local decrypted message (_DisplayMessage)
 /// or wrap the encrypted `_MessageBubble` when the message is from Firestore.
@@ -1323,60 +797,32 @@ class _MessageBubbleNew extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // If the message is stored locally (decrypted), present it directly.
-    if (message.isLocal) {
-      if (message.contentType == MessageContentType.text) {
-        // If the local text is a pseudo exchange message, show a concise UI
-        if (message.textContent != null && PseudoExchangeMessage.isPseudoExchange(message.textContent!)) {
-          final pseudo = PseudoExchangeMessage.fromJson(message.textContent!);
-          final pseudoName = pseudo?.pseudo ?? '';
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-            child: Row(
-              mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
-              children: [
-                if (!isMine) CircleAvatar(radius: 14, child: Text((senderName ?? '').substring(0,1))),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isMine ? Theme.of(context).colorScheme.primaryContainer : Colors.grey[200],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.check_circle, color: Colors.green, size: 16),
-                      const SizedBox(width: 6),
-                      Text(' $pseudoName', style: TextStyle(color: isMine ? Theme.of(context).colorScheme.onPrimaryContainer : Colors.black87, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
 
+    if (message.contentType == MessageContentType.text) {
+      // If the local text is a pseudo exchange message, show a concise UI
+      if (message.textContent != null && PseudoExchangeMessage.isPseudoExchange(message.textContent!)) {
+        final pseudo = PseudoExchangeMessage.fromJson(message.textContent!);
+        final pseudoName = pseudo?.pseudo ?? '';
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
           child: Row(
             mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
             children: [
-              if (!isMine)
-                CircleAvatar(radius: 14, child: Text(senderName?.substring(0,1) ?? '')),
+              if (!isMine) CircleAvatar(radius: 14, child: Text((senderName ?? '').substring(0,1))),
               const SizedBox(width: 8),
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isMine ? Theme.of(context).colorScheme.primaryContainer : Colors.grey[200],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: SelectableText(
-                    message.textContent ?? '',
-                    style: TextStyle(
-                      color: isMine ? Theme.of(context).colorScheme.onPrimaryContainer : Colors.black87,
-                    ),
-                  ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isMine ? Theme.of(context).colorScheme.primaryContainer : Colors.grey[200],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                    const SizedBox(width: 6),
+                    Text(' $pseudoName', style: TextStyle(color: isMine ? Theme.of(context).colorScheme.onPrimaryContainer : Colors.black87, fontWeight: FontWeight.w600)),
+                  ],
                 ),
               ),
             ],
@@ -1384,32 +830,58 @@ class _MessageBubbleNew extends StatelessWidget {
         );
       }
 
-      // Binary local message (image/file)
-      if (message.contentType == MessageContentType.image && message.binaryContent != null) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-          child: Row(
-            mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
-            children: [
-              if (!isMine)
-                CircleAvatar(radius: 14, child: Text((senderName ?? '').substring(0, 1))),
-              const SizedBox(width: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.memory(message.binaryContent!, width: 180, fit: BoxFit.cover),
-              ),
-            ],
-          ),
-        );
-      }
-
-      // Fallback simple view for other local messages
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-        child: Text(message.textContent ?? ''),
+        child: Row(
+          mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+          children: [
+            if (!isMine)
+              CircleAvatar(radius: 14, child: Text(senderName?.substring(0,1) ?? '')),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isMine ? Theme.of(context).colorScheme.primaryContainer : Colors.grey[200],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: SelectableText(
+                  message.textContent ?? '',
+                  style: TextStyle(
+                    color: isMine ? Theme.of(context).colorScheme.onPrimaryContainer : Colors.black87,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       );
     }
-    // Ouch
-    throw Error();
+
+    // Binary local message (image/file)
+    if (message.contentType == MessageContentType.image && message.binaryContent != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+        child: Row(
+          mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+          children: [
+            if (!isMine)
+              CircleAvatar(radius: 14, child: Text((senderName ?? '').substring(0, 1))),
+            const SizedBox(width: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.memory(message.binaryContent!, width: 180, fit: BoxFit.cover),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Fallback simple view for other local messages
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      child: Text(message.textContent ?? ''),
+    );
+
   }
 }

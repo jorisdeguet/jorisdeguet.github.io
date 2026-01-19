@@ -1,27 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:onetime/key_exchange/key_storage.dart';
-import 'conversation.dart';
+
 import '../key_exchange/shared_key.dart';
-import '../services/conversation_service.dart';
 import '../services/conversation_pseudo_service.dart';
-import '../signin/auth_service.dart';
+import '../services/conversation_service.dart';
 import '../services/format_service.dart';
+import '../signin/auth_service.dart';
+import 'conversation.dart';
 
 class ConversationInfoScreen extends StatefulWidget {
   final Conversation conversation;
-  final SharedKey? sharedKey;
   final VoidCallback? onDelete;
   final VoidCallback? onExtendKey;
-  final VoidCallback? onTruncateKey;
 
   const ConversationInfoScreen({
     super.key,
     required this.conversation,
-    this.sharedKey,
     this.onDelete,
     this.onExtendKey,
-    this.onTruncateKey,
   });
 
   @override
@@ -120,32 +116,7 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
                 itemBuilder: (context, index) {
                   final peerId = widget.conversation.peerIds[index];
                   final pseudo = _displayNames[peerId];
-                  
-                  // Key Debug Info
-                  String debugInfo = '';
-                  if (widget.sharedKey != null && peerId.isNotEmpty) {
-                    try {
-                      // Check if peer exists in key first to avoid ArgumentError
-                      final availableBytes = widget.sharedKey!.countAvailableBytes(peerId);
-                      debugInfo = '\n[Local] Clé: ${FormatService.formatBytes(availableBytes)} dispos (sur ${FormatService.formatBytes(widget.sharedKey!.lengthInBytes)})';
-                    } catch (e) {
-                      debugInfo = '\n[Local] Erreur lecture clé';
-                    }
-                  }
-                  
-                  // Add Remote Key Info from Firestore
-                  if (widget.conversation.keyDebugInfo.containsKey(peerId)) {
-                    final info = widget.conversation.keyDebugInfo[peerId] as Map<String, dynamic>;
-                    final remoteBytes = info['availableBytes'];
-                    final remoteStart = info['firstAvailableByte'];
-                    final remoteEnd = info['lastAvailableByte'];
-                    final lastUpdate = info['updatedAt'] != null
-                        ? FormatService.formatTime(DateTime.parse(info['updatedAt']))
-                        : '?';
-                        
-                    debugInfo += '\n[Remote $lastUpdate] Clé: ${FormatService.formatBytes(remoteBytes ?? 0)} dispos ($remoteStart-$remoteEnd)';
-                  }
-                  
+
                   return ListTile(
                     leading: CircleAvatar(
                       child: Text(
@@ -154,7 +125,7 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
                     ),
                     title: Text(pseudo ?? peerId),
                     subtitle: Text(
-                      (pseudo != null ? peerId : '') + debugInfo,
+                      (pseudo != null ? peerId : ''),
                       style: const TextStyle(fontSize: 10),
                     ),
                   );

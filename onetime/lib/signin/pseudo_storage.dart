@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../services/app_logger.dart';
 
 /// Service pour stocker localement les pseudos des utilisateurs.

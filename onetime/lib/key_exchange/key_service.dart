@@ -1,16 +1,26 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'dart:math';
+import 'dart:typed_data';
+
+import 'package:onetime/key_exchange/key_storage.dart';
+import 'package:onetime/services/app_logger.dart';
 
 import '../key_exchange/shared_key.dart';
 
-/// Service pour l'échange local de clés entre appareils via QR code.
-/// 
-/// Protocole d'échange:
-/// 1. Un appareil (source) génère et affiche les octets de clé en QR codes
-/// 2. Les autres appareils (lecteurs) scannent les QR codes
-/// 3. Les lecteurs confirment via réseau (Bluetooth/WiFi/Cloud) les indices lus
-/// 4. Les octets de clé ne transitent jamais sur le réseau
+
+class KeyService {
+  final _keyStorage = KeyStorageService();
+
+  KeyService();
+
+  Future<SharedKey?> getKey(String conversationId) async
+    => _keyStorage.getKey(conversationId);
+
+  Future<void> updateUsedBytes(String conversationId, int startByte, int endByte) async
+    => _keyStorage.updateUsedBits(conversationId, startByte, endByte);
+
+}
+
 class KeyExchangeService {
   /// Taille d'un segment de clé en octets pour un QR code
   static const int segmentSizeBytes = 1024; // 8192 bits

@@ -1,12 +1,18 @@
 import 'dart:async';
 
+import 'package:onetime/config/app_config.dart';
 import 'package:onetime/convo/encrypted_message.dart';
 import 'package:onetime/convo/message_storage.dart';
+import 'package:onetime/key_exchange/key_service.dart';
 import 'package:onetime/key_exchange/key_storage.dart';
+import 'package:onetime/key_exchange/shared_key.dart';
 import 'package:onetime/services/app_logger.dart';
 import 'package:onetime/services/conversation_service.dart';
 import 'package:onetime/services/crypto_service.dart';
-
+import 'package:onetime/services/media_service.dart';
+import 'package:onetime/signin/auth_service.dart';
+import 'package:onetime/signin/pseudo_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'conversation.dart';
 
@@ -14,23 +20,310 @@ import 'conversation.dart';
 /// centralisé des messages. Il enregistre les résultats localement via
 /// MessageStorageService et marque les messages transférés sur Firestore.
 class MessageService {
-  final String localUserId;
-  final ConversationService _conversationService;
+  late final String localUserId;
+  late final ConversationService _conversationService;
+  final AuthService _authService = AuthService();
   final KeyStorageService _keyStorage = KeyStorageService();
+  final KeyService _keyService = KeyService();
+  final CryptoService _cryptoService = CryptoService();
+  final PseudoStorageService _pseudoService = PseudoStorageService();
   final MessageStorageService _messageStorage = MessageStorageService();
+  static const String _readMessagesPrefix = 'read_msg_ids_';
   final AppLogger _log = AppLogger();
 
-  // Map conversationId -> subscription
   final Map<String, StreamSubscription<List<EncryptedMessage>>> _subscriptions = {};
-  // Track messages processing to avoid duplication
   final Map<String, Set<String>> _processing = {};
-
-  // Watcher for user's conversations
   StreamSubscription<List<Conversation>>? _conversationsSub;
   final Set<String> _activeConversations = {};
 
+  MessageService.fromCurrentUserID() {
+    localUserId = _authService.currentUserId!;
+    _conversationService = ConversationService(localUserId: localUserId);
+  }
+
   MessageService({required this.localUserId})
       : _conversationService = ConversationService(localUserId: localUserId);
+
+
+  Future<void> sendMessage(String messageToSend, String conversationID) async {
+    final text = messageToSend.trim();
+    if (text.isEmpty) return;
+
+    final key = await _keyService.getKey(conversationID);
+    // Vérifier qu'on a une clé
+    if (key == null) {
+      throw Exception("no key");
+    }
+    _log.d('MessageService', '_sendMessage: "$text" in $conversationID');
+    final result = _cryptoService.encrypt(
+      senderID: _authService.currentUserId!,
+      plaintext: text,
+      sharedKey: key,
+      compress: true,
+    );
+    final message = result.message;
+    // Store decrypted message locally FIRST
+    await _messageStorage.saveDecryptedMessage(
+      conversationId: conversationID,
+      message: DecryptedMessageData(
+        id: message.id,
+        senderId: message.senderId,
+        createdAt: message.createdAt,
+        contentType: message.contentType,
+        textContent: text,
+        isCompressed: message.isCompressed,
+      ),
+    );
+    // Mettre à jour les bits utilisés dans le stockage local
+    await _keyService.updateUsedBytes(
+      conversationID,
+      result.usedSegment.startByte,
+      result.usedSegment.startByte + result.usedSegment.lengthBytes,
+    );
+    _log.d('MessageService', 'Calling conversationService.sendMessage...');
+    await _conversationService.sendMessage(
+      conversationId: conversationID,
+      message: message,
+    );
+    // Mark as transferred immediately (we sent it)
+    await _conversationService.markMessageAsTransferred(
+      conversationId: conversationID,
+      messageId: message.id,
+    );
+    _log.i('ConversationDetail', 'Message sent successfully!');
+    _updateKeyDebugInfo(conversationID);
+  }
+
+
+  Future<void> sendMedia(MediaPickResult media, String conversationId) async {
+    final SharedKey? key = await _keyService.getKey(conversationId);
+    final result = _cryptoService.encryptBinary(
+      senderID: _authService.currentUserId!,
+      data: media.data,
+      sharedKey: key!,
+      contentType: media.contentType,
+      fileName: media.fileName,
+      mimeType: media.mimeType,
+    );
+
+
+    // Store decrypted message locally FIRST
+    await _messageStorage.saveDecryptedMessage(
+      conversationId: conversationId,
+      message: DecryptedMessageData(
+        id: result.message.id,
+        senderId: result.message.senderId,
+        createdAt: result.message.createdAt,
+        contentType: result.message.contentType,
+        binaryContent: media.data,
+        fileName: media.fileName,
+        mimeType: media.mimeType,
+        isCompressed: result.message.isCompressed,
+      ),
+    );
+
+    await _keyStorage.updateUsedBytes(
+      conversationId,
+      result.usedSegment.startByte,
+      result.usedSegment.startByte + result.usedSegment.lengthBytes,
+    );
+
+    await _conversationService.sendMessage(
+      conversationId: conversationId,
+      message: result.message,
+    );
+
+    await _conversationService.markMessageAsTransferred(
+      conversationId: conversationId,
+      messageId: result.message.id,
+    );
+  }
+
+  /// Envoie un message pseudo chiffré pour que les autres participants connaissent notre pseudo
+  Future<void> sendPseudoMessage(String conversationId) async {
+    // Vérifier si l'échange de pseudo est activé
+    if (!AppConfig.pseudoExchangeStartConversation) {
+      _log.d('KeyExchange', 'Pseudo exchange disabled by config');
+      return;
+    }
+    final SharedKey? key = await _keyService.getKey(conversationId);
+    final myPseudo = await _pseudoService.getMyPseudo();
+    if (myPseudo == null || myPseudo.isEmpty) {
+      _log.d('KeyExchange', 'No pseudo to send');
+      return;
+    }
+    final pseudoMessage = PseudoExchangeMessage(
+      oderId: _authService.currentUserId!,
+      pseudo: myPseudo, // No smiley in stored message
+    );
+
+    // Chiffrer le message pseudo
+    final result = _cryptoService.encrypt(
+      senderID: _authService.currentUserId!,
+      plaintext: pseudoMessage.toJson(),
+      sharedKey: key!,
+      compress: true,
+    );
+
+    // Mettre à jour les octets utilisés
+    await _keyStorage.updateUsedBytes(
+      conversationId,
+      result.usedSegment.startByte,
+      result.usedSegment.startByte + result.usedSegment.lengthBytes,
+    );
+
+    // Envoyer le message
+    await _conversationService.sendMessage(
+      conversationId: conversationId,
+      message: result.message,
+    );
+    _log.i('KeyExchange', 'Pseudo message sent successfully');
+  }
+
+
+  // /// Envoie un message pseudo chiffré pour que les autres participants connaissent notre pseudo
+  // Future<void> _sendPseudoMessage(String conversationId, SharedKey sharedKey) async {
+  //   // Vérifier si l'échange de pseudo est activé
+  //   if (!AppConfig.pseudoExchangeStartConversation) {
+  //     _log.d('KeyExchange', 'Pseudo exchange disabled by config');
+  //     return;
+  //   }
+  //
+  //   try {
+  //     final myPseudo = await _pseudoService.getMyPseudo();
+  //     if (myPseudo == null || myPseudo.isEmpty) {
+  //       _log.d('KeyExchange', 'No pseudo to send');
+  //       return;
+  //     }
+  //
+  //     // Wait 3 seconds before sending
+  //     _log.d('KeyExchange', 'Waiting 3 seconds before sending pseudo...');
+  //     await Future.delayed(const Duration(seconds: 3));
+  //
+  //     final pseudoMessage = PseudoExchangeMessage(
+  //       oderId: _currentUserId,
+  //       pseudo: myPseudo, // No smiley in stored message
+  //     );
+  //
+  //
+  //     final conversationService = ConversationService(localUserId: _currentUserId);
+  //
+  //     // Chiffrer le message pseudo
+  //     final result = cryptoService.encrypt(
+  //       senderID: _currentUserId,
+  //       plaintext: pseudoMessage.toJson(),
+  //       sharedKey: sharedKey,
+  //       compress: true,
+  //     );
+  //
+  //     // Mettre à jour les octets utilisés
+  //     await _keyStorageService.updateUsedBytes(
+  //       conversationId,
+  //       result.usedSegment.startByte,
+  //       result.usedSegment.startByte + result.usedSegment.lengthBytes,
+  //     );
+  //
+  //     // Envoyer le message
+  //     await conversationService.sendMessage(
+  //       conversationId: conversationId,
+  //       message: result.message,
+  //     );
+  //
+  //     _log.i('KeyExchange', 'Pseudo message sent successfully');
+  //   } catch (e) {
+  //     _log.e('KeyExchange', 'Error sending pseudo message: $e');
+  //     // Ne pas bloquer si l'envoi du pseudo échoue
+  //   }
+  // }
+
+  //
+  // final pseudoMessage = PseudoExchangeMessage(
+  //   oderId: _currentUserId,
+  //   pseudo: myPseudo, // No smiley in stored message
+  // );
+  //
+  // // Chiffrer le message pseudo
+  // final result = _cryptoService.encrypt(
+  //   senderID: _currentUserId,
+  //   plaintext: pseudoMessage.toJson(),
+  //   sharedKey: _sharedKey!,
+  //   compress: true,
+  // );
+  //
+  // final message = result.message;
+  //
+  // // Store decrypted message locally FIRST
+  // await _messageStorage.saveDecryptedMessage(
+  // conversationId: widget.conversation.id,
+  // message: DecryptedMessageData(
+  // id: message.id,
+  // senderId: message.senderId,
+  // createdAt: message.createdAt,
+  // contentType: message.contentType,
+  // textContent: pseudoMessage.toJson(),
+  // isCompressed: message.isCompressed,
+  // ),
+  // );
+  //
+  // // Mettre à jour les bits utilisés
+  // await _keyStorageService.updateUsedBytes(
+  // widget.conversation.id,
+  // result.usedSegment.startByte,
+  // result.usedSegment.startByte + result.usedSegment.lengthBytes,
+  // );
+  //
+  // // Envoyer le message
+  // await _conversationService.sendMessage(
+  // conversationId: widget.conversation.id,
+  // message: message,
+  // );
+  //
+  // // Mark as transferred immediately
+  // await _conversationService.markMessageAsTransferred(
+  // conversationId: widget.conversation.id,
+  // messageId: message.id,
+  // );
+
+
+  // after each key update, update debug info in Firestore
+  Future<void> _updateKeyDebugInfo(String conversationId) async {
+    final SharedKey? key = await _keyService.getKey(conversationId);
+
+    try {
+      final availableBytes = key!.countAvailableBytes();
+      final totalBytes = key.lengthInBytes;
+
+      // Trouver le premier et dernier octet disponible
+      int firstAvailable = -1;
+      int lastAvailable = -1;
+
+      for (int i = 0; i < totalBytes; i++) {
+        if (!key!.isByteUsed(i)) {
+          if (firstAvailable == -1) firstAvailable = i;
+          lastAvailable = i;
+        }
+      }
+
+      // Générer un hash simple pour la détection d'incohérences (first|last|available)
+      final consistencyHash = '$firstAvailable|$lastAvailable|$availableBytes';
+
+      await _conversationService.updateKeyDebugInfo(
+        conversationId: conversationId,
+        userId: _authService.currentUserId!,
+        info: {
+          'availableBytes': availableBytes,
+          'firstAvailableByte': firstAvailable,
+          'lastAvailableByte': lastAvailable,
+          'consistencyHash': consistencyHash,
+          'updatedAt': DateTime.now().toIso8601String(),
+        },
+      );
+      _log.d('ConversationDetail', 'Key debug info updated in Firestore');
+    } catch (e) {
+      _log.e('ConversationDetail', 'Error updating key debug info: $e');
+    }
+  }
+
 
   /// Start watching the current user's conversations and automatically
   /// start/stop listeners per conversation.
@@ -152,7 +445,7 @@ class MessageService {
     }
 
     try {
-      final crypto = CryptoService(localPeerId: localUserId);
+      final crypto = CryptoService();
 
       // Compute key segment start/end in bytes (if present)
       final int? keySegmentStartByte = msg.keySegment?.startByte;
@@ -202,7 +495,6 @@ class MessageService {
       await _conversationService.markMessageAsTransferred(
         conversationId: conversationId,
         messageId: msg.id,
-        allParticipants: key.peerIds,
       );
 
       // Persist updated key bitmap
@@ -256,6 +548,124 @@ class MessageService {
       _log.e('BackgroundMessage', 'rescanConversation ERROR: $e');
       _log.e('BackgroundMessage', 'Stack: $st');
       rethrow;
+    }
+  }
+
+  /// Marque un message comme lu  TODO getInto storage
+  Future<void> markMessageAsRead(String conversationId, String messageId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = '$_readMessagesPrefix$conversationId';
+
+      final readIds = await _getReadMessageIds(conversationId);
+      if (!readIds.contains(messageId)) {
+        readIds.add(messageId);
+        await prefs.setStringList(key, readIds);
+        _log.i('UnreadMsg', 'Marked message $messageId as read');
+      }
+    } catch (e) {
+      _log.e('UnreadMsg', 'Error marking message as read: $e');
+    }
+  }
+
+  /// Récupère le nombre de messages non lus
+  /// = nombre de messages décryptés localement - nombre de messages lus
+  Future<int> getUnreadCount(String conversationId) async {
+    try {
+      // Get all local decrypted messages
+      final allMessages = await _messageStorage.getConversationMessages(conversationId);
+
+      // Get read message IDs
+      final readIds = await _getReadMessageIds(conversationId);
+
+      // Count unread = messages not in read set and not sent by me
+      // We need userId but we don't have it here, so we'll count all non-read messages
+      final unreadCount = allMessages.where((msg) => !readIds.contains(msg.id)).length;
+
+      return unreadCount;
+    } catch (e) {
+      _log.e('UnreadMsg', 'Error getting unread count: $e');
+      return 0;
+    }
+  }
+
+  /// Récupère le nombre de messages non lus (excluant les messages de l'utilisateur)
+  Future<int> getUnreadCountExcludingUser(String conversationId, String userId) async {
+    try {
+      // Get all local decrypted messages
+      final allMessages = await _messageStorage.getConversationMessages(conversationId);
+
+      // Get read message IDs
+      final readIds = await _getReadMessageIds(conversationId);
+
+      // Count unread = messages not in read set and not sent by me
+      final unreadCount = allMessages.where((msg) =>
+      !readIds.contains(msg.id) && msg.senderId != userId
+      ).length;
+
+      return unreadCount;
+    } catch (e) {
+      _log.e('UnreadMsg', 'Error getting unread count: $e');
+      return 0;
+    }
+  }
+
+  /// Marque tous les messages comme lus
+  Future<void> markAllAsRead(String conversationId) async {
+    try {
+      // Get all local messages
+      final allMessages = await _messageStorage.getConversationMessages(conversationId);
+
+      // Mark all as read
+      final prefs = await SharedPreferences.getInstance();
+      final key = '$_readMessagesPrefix$conversationId';
+      final allIds = allMessages.map((m) => m.id).toList();
+      await prefs.setStringList(key, allIds);
+
+      _log.i('UnreadMsg', 'Marked all ${allIds.length} messages as read for $conversationId');
+    } catch (e) {
+      _log.e('UnreadMsg', 'Error marking all as read: $e');
+    }
+  }
+
+  /// Supprime les données de lecture pour une conversation
+  Future<void> deleteUnreadCount(String conversationId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = '$_readMessagesPrefix$conversationId';
+      await prefs.remove(key);
+    } catch (e) {
+      _log.e('UnreadMsg', 'Error deleting unread data: $e');
+    }
+  }
+
+  /// Supprime tous les compteurs
+  Future<void> deleteAllUnreadCounts() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys();
+
+      for (final key in keys) {
+        if (key.startsWith(_readMessagesPrefix)) {
+          await prefs.remove(key);
+        }
+      }
+
+      _log.i('UnreadMsg', 'All unread data deleted');
+    } catch (e) {
+      _log.e('UnreadMsg', 'Error deleting all unread data: $e');
+    }
+  }
+
+  /// Récupère les IDs de messages lus
+  Future<List<String>> _getReadMessageIds(String conversationId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = '$_readMessagesPrefix$conversationId';
+      return prefs.getStringList(key) ?? [];
+    } catch (e) {
+      _log.e('UnreadMsg', 'Error getting read message IDs: $e');
+      return [];
     }
   }
 }

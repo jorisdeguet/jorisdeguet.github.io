@@ -1,26 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:onetime/config/app_config.dart';
 import 'package:onetime/convo/encrypted_message.dart';
-import 'package:onetime/convo/message_storage.dart';
-import 'package:onetime/key_exchange/key_storage.dart';
+import 'package:onetime/convo/message_service.dart';
+import 'package:onetime/key_exchange/key_service.dart';
 import 'package:onetime/key_exchange/shared_key.dart';
-import 'package:onetime/services/app_logger.dart';
-import 'package:onetime/services/conversation_service.dart';
-import 'package:onetime/services/crypto_service.dart';
 import 'package:onetime/services/format_service.dart';
 import 'package:onetime/services/media_service.dart';
 
 /// Écran complet pour l'envoi d'un média avec preview et debug
 class MediaSendScreen extends StatefulWidget {
   final MediaPickResult mediaResult;
-  final SharedKey sharedKey;
   final String conversationId;
   final String currentUserId;
 
   const MediaSendScreen({
     super.key,
     required this.mediaResult,
-    required this.sharedKey,
     required this.conversationId,
     required this.currentUserId,
   });
@@ -30,51 +24,26 @@ class MediaSendScreen extends StatefulWidget {
 }
 
 class _MediaSendScreenState extends State<MediaSendScreen> {
-  final List<String> _debugLogs = [];
-  final _log = AppLogger();
   bool _isProcessing = false;
   bool _isComplete = false;
   String? _errorMessage;
   ImageQuality _selectedQuality = ImageQuality.medium;
   MediaPickResult? _currentResult;
 
+  KeyService _keyService = KeyService();
+  MessageService _messageService = MessageService.fromCurrentUserID();
+
   @override
   void initState() {
     super.initState();
     _currentResult = widget.mediaResult;
-    _addLog('Média sélectionné: ${widget.mediaResult.fileName}');
-    _addLog('Taille originale: ${FormatService.formatBytes(widget.mediaResult.data.length)}');
-    _calculateKeyUsage();
-  }
-
-  void _addLog(String message) {
-    setState(() {
-      _debugLogs.add('[${DateTime.now().toIso8601String().substring(11, 23)}] $message');
-    });
-    if (AppConfig.verboseCryptoLogs) {
-      _log.d('MediaSend', message);
-    }
-  }
-
-  void _calculateKeyUsage() {
-    final availableBytes = widget.sharedKey.countAvailableBytes(widget.currentUserId);
-    final neededBytes = _currentResult!.data.length;
-    final usagePercent = availableBytes > 0 ? (neededBytes / availableBytes * 100).toStringAsFixed(1) : '∞';
-
-    _addLog('Clé disponible: ${FormatService.formatBytes(availableBytes)}');
-    _addLog('Octets nécessaires: ${FormatService.formatBytes(neededBytes)}');
-    _addLog('Utilisation: $usagePercent%');
   }
 
   Future<void> _changeQuality(ImageQuality quality) async {
     if (widget.mediaResult.contentType != MessageContentType.image) return;
-
     setState(() {
       _selectedQuality = quality;
     });
-
-    _addLog('Changement de qualité sélectionnée: ${quality.label}');
-    _addLog('Note: Le redimensionnement sera fait lors de l\'envoi');
   }
 
   Future<void> _sendMedia() async {
@@ -82,101 +51,18 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
       _isProcessing = true;
       _errorMessage = null;
     });
-
-    _addLog('=== DÉBUT DU CHIFFREMENT ===');
-
-    try {
-      final startTime = DateTime.now();
-      
-      final cryptoService = CryptoService(localPeerId: widget.currentUserId);
-      final keyStorageService = KeyStorageService();
-      final conversationService = ConversationService(localUserId: widget.currentUserId);
-      final messageStorage = MessageStorageService();
-
-      _addLog('Chiffrement en cours...');
-      
-      final result = cryptoService.encryptBinary(
-        data: _currentResult!.data,
-        sharedKey: widget.sharedKey,
-        contentType: _currentResult!.contentType,
-        fileName: _currentResult!.fileName,
-        mimeType: _currentResult!.mimeType,
-      );
-
-      final encryptTime = DateTime.now().difference(startTime).inMilliseconds;
-      _addLog('Chiffré en ${encryptTime}ms');
-      _addLog('Données chiffrées: ${FormatService.formatBytes(result.message.ciphertext.length)}');
-
-      // Single segment model: log start/end in bytes
-      if (result.message.keySegment != null) {
-        final ks = result.message.keySegment!;
-        _addLog('Segment utilisé (bytes): ${ks.startByte}-${ks.startByte + ks.lengthBytes} (${ks.lengthBytes} bytes)');
-      } else {
-        _addLog('Segment utilisé: none');
-      }
-
-      // Store decrypted message locally FIRST
-      _addLog('Sauvegarde locale...');
-      await messageStorage.saveDecryptedMessage(
-        conversationId: widget.conversationId,
-        message: DecryptedMessageData(
-          id: result.message.id,
-          senderId: result.message.senderId,
-          createdAt: result.message.createdAt,
-          contentType: result.message.contentType,
-          binaryContent: _currentResult!.data,
-          fileName: _currentResult!.fileName,
-          mimeType: _currentResult!.mimeType,
-          isCompressed: result.message.isCompressed,
-        ),
-      );
-
-      _addLog('Mise à jour des octets utilisés...');
-      await keyStorageService.updateUsedBytes(
-        widget.conversationId,
-        result.usedSegment.startByte,
-        result.usedSegment.startByte + result.usedSegment.lengthBytes,
-      );
-
-      final messagePreview = _currentResult!.contentType == MessageContentType.image
-          ? '📷 Image'
-          : '📎 ${_currentResult!.fileName}';
-
-      _addLog('Envoi vers Firestore...');
-      await conversationService.sendMessage(
-        conversationId: widget.conversationId,
-        message: result.message,
-        messagePreview: messagePreview,
-      );
-
-      // Mark as transferred immediately
-      _addLog('Marquage comme transféré...');
-      await conversationService.markMessageAsTransferred(
-        conversationId: widget.conversationId,
-        messageId: result.message.id,
-        allParticipants: (await conversationService.getConversation(widget.conversationId))?.peerIds ?? [],
-      );
-
-      final totalTime = DateTime.now().difference(startTime).inMilliseconds;
-      _addLog('=== ENVOI RÉUSSI en ${totalTime}ms ===');
-
+    try{
+      await _messageService.sendMedia(_currentResult!, widget.conversationId);
       setState(() {
         _isComplete = true;
         _isProcessing = false;
       });
-
       // Retourner après 1 seconde
-      await Future.delayed(const Duration(seconds: 1));
+      await Future.delayed(const Duration(milliseconds: 10));
       if (mounted) {
         Navigator.pop(context, true);
       }
     } catch (e, stackTrace) {
-      _addLog('=== ERREUR ===');
-      _addLog('Erreur: $e');
-      if (AppConfig.verboseCryptoLogs) {
-        _addLog('Stack trace: $stackTrace');
-      }
-      
       setState(() {
         _errorMessage = e.toString();
         _isProcessing = false;
@@ -186,13 +72,11 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final availableBytes = widget.sharedKey.countAvailableBytes(widget.currentUserId);
     final neededBytes = _currentResult!.data.length;
-    final canSend = neededBytes <= availableBytes;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Envoyer un média'),
+        title: const Text('Envoyer un média'),  // TODO i18n
       ),
       body: Column(
         children: [
@@ -245,33 +129,6 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
                 ],
               ),
             ),
-
-          // Logs de debug
-          Expanded(
-            flex: 3,
-            child: Container(
-              color: Colors.black87,
-              padding: const EdgeInsets.all(8),
-              child: ListView.builder(
-                reverse: false,
-                itemCount: _debugLogs.length,
-                itemBuilder: (context, index) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Text(
-                      _debugLogs[index],
-                      style: const TextStyle(
-                        color: Colors.greenAccent,
-                        fontFamily: 'monospace',
-                        fontSize: 11,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-
           // Boutons d'action
           if (!_isComplete)
             SafeArea(
@@ -291,7 +148,7 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: _isProcessing || !canSend ? null : _sendMedia,
+                        onPressed: _isProcessing ? null : _sendMedia,
                         icon: _isProcessing
                             ? const SizedBox(
                                 width: 20,
@@ -300,13 +157,10 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
                               )
                             : const Icon(Icons.send),
                         label: Text(
-                          canSend
-                              ? 'Envoyer (${FormatService.formatBytes(neededBytes)})'
-                              : 'Pas assez de clé disponible',
-                        ),
+                           'Envoyer (${FormatService.formatBytes(neededBytes)})'),
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.all(16),
-                          backgroundColor: canSend ? null : Colors.grey,
+                          backgroundColor: null,
                         ),
                       ),
                     ),
@@ -314,7 +168,6 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
                 ),
               ),
             ),
-
           if (_isComplete)
             SafeArea(
               child: Container(

@@ -1,20 +1,19 @@
-import 'dart:typed_data';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:onetime/convo/encrypted_message.dart';
+import 'package:onetime/signin/auth_service.dart';
 
+import '../convo/compression_service.dart';
 import '../key_exchange/key_interval.dart';
 import '../key_exchange/shared_key.dart';
-import '../convo/compression_service.dart';
 
 class CryptoService {
-  /// ID du peer local
-  final String localPeerId;
   
   /// Service de compression
   final CompressionService _compressionService = CompressionService();
 
-  CryptoService({required this.localPeerId});
+  CryptoService();
 
   /// Chiffre un message avec One-Time Pad.
   /// 
@@ -25,9 +24,9 @@ class CryptoService {
   /// 
   /// Retourne le message chiffré et l'intervalle utilisé pour mise à jour
   ({EncryptedMessage message, KeyInterval usedSegment}) encrypt({
+    required String senderID,
     required String plaintext,
     required SharedKey sharedKey,
-    bool deleteAfterRead = false,
     bool compress = true,
   }) {
     // Préparer les données à chiffrer
@@ -45,7 +44,7 @@ class CryptoService {
     final bytesNeeded = dataToEncrypt.length;
 
     // Trouver un segment disponible en octets
-    final seg = sharedKey.findAvailableSegmentByBytes(localPeerId, bytesNeeded);
+    final seg = sharedKey.findAvailableSegmentByBytes(bytesNeeded);
     if (seg == null) {
       throw InsufficientKeyException(
         'Not enough key bytes available. Needed: $bytesNeeded bytes',
@@ -69,7 +68,7 @@ class CryptoService {
     final encryptedMessage = EncryptedMessage(
       id: _generateMessageId(),
       keyId: sharedKey.id,
-      senderId: localPeerId,
+      senderId: senderID,
       // keySegment now uses bytes: (startByte, lengthBytes)
       keySegment: (startByte: startByte, lengthBytes: lengthBytes),
       ciphertext: ciphertext,
@@ -98,6 +97,7 @@ class CryptoService {
   ///
   /// Retourne le message chiffré et l'intervalle utilisé pour mise à jour
   ({EncryptedMessage message, KeyInterval usedSegment}) encryptBinary({
+    required String senderID,
     required Uint8List data,
     required SharedKey sharedKey,
     required MessageContentType contentType,
@@ -108,7 +108,7 @@ class CryptoService {
     final bytesNeeded = data.length;
 
     // Find contiguous bytes segment
-    final seg = sharedKey.findAvailableSegmentByBytes(localPeerId, bytesNeeded);
+    final seg = sharedKey.findAvailableSegmentByBytes(bytesNeeded);
     if (seg == null) {
       throw InsufficientKeyException('Not enough key bytes available. Needed: $bytesNeeded bytes');
     }
@@ -129,7 +129,7 @@ class CryptoService {
     final encryptedMessage = EncryptedMessage(
       id: _generateMessageId(),
       keyId: sharedKey.id,
-      senderId: localPeerId,
+      senderId: senderID,
       // keySegment now uses bytes: (startByte, lengthBytes)
       keySegment: (startByte: startByte, lengthBytes: lengthBytes),
       ciphertext: ciphertext,
@@ -177,62 +177,6 @@ class CryptoService {
     }
 
     return decryptedData;
-  }
-
-  /// Chiffre un long message qui peut nécessiter plusieurs segments.
-  /// 
-  /// Utile quand un seul segment contigu n'est pas disponible.
-  ({EncryptedMessage message, List<KeyInterval> usedSegments}) encryptLong({
-    required String plaintext,
-    required SharedKey sharedKey,
-    bool deleteAfterRead = false,
-    bool compress = true,
-  }) {
-    // Préparer les données à chiffrer
-    Uint8List dataToEncrypt;
-    bool isCompressed = false;
-    
-    if (compress) {
-      final compressed = _compressionService.smartCompress(plaintext);
-      dataToEncrypt = compressed.data;
-      isCompressed = compressed.isCompressed;
-    } else {
-      dataToEncrypt = Uint8List.fromList(utf8.encode(plaintext));
-    }
-    
-    // Option A: Do not support long messages across multiple segments.
-    // If compressed data doesn't fit in a single contiguous segment, throw.
-    final totalBytesNeeded = dataToEncrypt.length;
-    final seg = sharedKey.findAvailableSegmentByBytes(localPeerId, totalBytesNeeded);
-    if (seg == null) {
-      throw InsufficientKeyException('Not enough contiguous key bytes for a single-segment message. Needed: $totalBytesNeeded bytes');
-    }
-
-    final keyBytes = sharedKey.extractKeyBytes(seg.startByte, seg.lengthBytes).sublist(0, totalBytesNeeded);
-    final ciphertext = _xor(dataToEncrypt, keyBytes);
-
-    // Mark used
-    sharedKey.markBytesAsUsed(seg.startByte, seg.startByte + seg.lengthBytes);
-
-    final startByte = seg.startByte;
-    final lengthBytes = seg.lengthBytes;
-
-    final usedSegments = <KeyInterval>[KeyInterval(
-      conversationId: sharedKey.id,
-      startIndex: startByte,
-      endIndex: startByte + lengthBytes,
-    )];
-
-    final encryptedMessage = EncryptedMessage(
-      id: _generateMessageId(),
-      keyId: sharedKey.id,
-      senderId: localPeerId,
-      keySegment: (startByte: startByte, lengthBytes: lengthBytes),
-      ciphertext: ciphertext,
-      isCompressed: isCompressed,
-    );
-    
-    return (message: encryptedMessage, usedSegments: usedSegments);
   }
 
   /// Déchiffre un message.
@@ -322,8 +266,10 @@ class CryptoService {
     return result;
   }
 
+  // TODO change id for message with interval
   String _generateMessageId() {
-    return 'msg_${DateTime.now().millisecondsSinceEpoch}_$localPeerId';
+    String myID = AuthService().currentUserId!;
+    return 'msg_${DateTime.now().millisecondsSinceEpoch}_$myID';
   }
 }
 
@@ -334,17 +280,4 @@ class InsufficientKeyException implements Exception {
   
   @override
   String toString() => 'InsufficientKeyException: $message';
-}
-
-/// Résultat d'une tentative de réservation de segment
-class SegmentReservationResult {
-  final bool success;
-  final KeyInterval? segment;
-  final String? errorMessage;
-
-  SegmentReservationResult.success(this.segment) 
-      : success = true, errorMessage = null;
-  
-  SegmentReservationResult.failure(this.errorMessage)
-      : success = false, segment = null;
 }

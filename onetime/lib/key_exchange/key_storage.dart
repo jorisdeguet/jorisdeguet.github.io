@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -170,9 +169,7 @@ class KeyStorageService {
          _log.w('KeyStorage', 'updateUsedBytes: Key not found');
          return;
        }
-
        key.markBytesAsUsed(startByte, endByte);
-
        // Record consumption in history
        try {
          final seg = KeyInterval(conversationId: conversationId, startIndex: startByte, endIndex: endByte);

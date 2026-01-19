@@ -4,8 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../convo/conversation.dart';
 import '../convo/encrypted_message.dart';
-import 'app_logger.dart';
 import '../key_exchange/key_pre_generation_service.dart';
+import 'app_logger.dart';
 
 /// Service de gestion des conversations sur Firebase.
 class ConversationService {
@@ -215,19 +215,17 @@ class ConversationService {
   Future<void> sendMessage({
     required String conversationId,
     required EncryptedMessage message,
-    required String messagePreview,
     String? plaintextDebug,
   }) async {
     _log.d('Conversation', 'sendMessage: conversationId=$conversationId');
     _log.d('Conversation', 'sendMessage: messageId=${message.id}');
-    _log.d('Conversation', 'sendMessage: senderId=${message.senderId}');
 
     try {
       // Ajouter le message
       _log.d('Conversation', 'Adding message to Firestore...');
       final messageData = message.toJson();
       
-      await _messagesRef(conversationId).doc(message.id).set(messageData);
+      await _messagesRef(conversationId).doc(message.id).set(messageData); // TODO move to message Service ??
       _log.i('Conversation', 'Message added successfully');
 
       // Mettre à jour la conversation (octets utilisés)
@@ -283,10 +281,10 @@ class ConversationService {
   Future<void> markMessageAsTransferred({
     required String conversationId,
     required String messageId,
-    required List<String> allParticipants,
+    // required List<String> allParticipants,
   }) async {
     final docRef = _messagesRef(conversationId).doc(messageId);
-
+    final conversation = await getConversation(conversationId);
     await _firestore.runTransaction((transaction) async {
       final doc = await transaction.get(docRef);
       if (!doc.exists) return;
@@ -299,7 +297,7 @@ class ConversationService {
       }
 
       // Vérifier si tous les participants ont transféré
-      final allTransferred = allParticipants.every((p) => transferredBy.contains(p));
+      final allTransferred = conversation!.peerIds.every((p) => transferredBy.contains(p));
 
       if (allTransferred) {
         // Supprimer le contenu chiffré (garder les métadonnées pour le statut de lecture)

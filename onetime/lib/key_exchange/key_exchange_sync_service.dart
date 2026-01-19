@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import 'kex_firestore.dart';
 import '../services/app_logger.dart';
+import 'kex_firestore.dart';
 
 /// Service pour synchroniser les sessions d'échange de clé via Firestore.
 ///

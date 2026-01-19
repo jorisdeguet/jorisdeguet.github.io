@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -5,8 +6,6 @@ import 'package:flutter/foundation.dart';
 import 'package:onetime/convo/encrypted_message.dart';
 import 'package:onetime/services/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-import 'dart:async';
 
 /// Représente un message déchiffré stocké localement
 class DecryptedMessageData {

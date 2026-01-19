@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'kex_firestore.dart';
-import 'shared_key.dart';
+
 import '../convo/conversation.dart';
 import '../convo/conversation_detail_screen.dart';
 import '../services/app_logger.dart';
 import '../services/format_service.dart';
+import 'kex_firestore.dart';
+import 'shared_key.dart';
 
 /// Screen showing detailed summary of a key exchange
 class KeyExchangeSummaryScreen extends StatelessWidget {
@@ -144,7 +145,7 @@ class KeyExchangeSummaryScreen extends StatelessWidget {
     }
     
     // Calculate actually available bytes for current user
-    final availableBytes = newKey.countAvailableBytes(currentUserId);
+    final availableBytes = newKey.countAvailableBytes();
     buffer.writeln('Octets disponibles:     ${FormatService.formatBytes(availableBytes)}');
     buffer.writeln();
     
