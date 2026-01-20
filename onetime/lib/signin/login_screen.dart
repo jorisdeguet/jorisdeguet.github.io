@@ -13,7 +13,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final AuthService _authService = AuthService();
-  final PseudoStorageService _pseudoService = PseudoStorageService();
+  final PseudoService _pseudoService = PseudoService();
   final _pseudoController = TextEditingController();
   bool _isLoading = false;
   String? _errorMessage;

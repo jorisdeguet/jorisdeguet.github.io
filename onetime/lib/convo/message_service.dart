@@ -26,7 +26,7 @@ class MessageService {
   final KeyStorage _keyStorage = KeyStorage();
   final KeyService _keyService = KeyService();
   final CryptoService _cryptoService = CryptoService();
-  final PseudoStorageService _pseudoService = PseudoStorageService();
+  final PseudoService _pseudoService = PseudoService();
   final MessageStorageService _messageStorage = MessageStorageService();
   static const String _readMessagesPrefix = 'read_msg_ids_';
   final AppLogger _log = AppLogger();
@@ -156,119 +156,11 @@ class MessageService {
     return content.startsWith("@@@") && content.contains("===");
   }
 
-  //
-  static String idFromPseudoMessage(String content) {
-    return content.split('===')[0].substring(3);
-  }
+  static String idFromPseudoMessage(String content) =>
+      content.split('===')[0].substring(3);
 
-  static String pseudoFromPseudoMessage(String content) {
-    return content.split('===')[1];
-  }
-
-
-  // /// Envoie un message pseudo chiffré pour que les autres participants connaissent notre pseudo
-  // Future<void> _sendPseudoMessage(String conversationId, SharedKey sharedKey) async {
-  //   // Vérifier si l'échange de pseudo est activé
-  //   if (!AppConfig.pseudoExchangeStartConversation) {
-  //     _log.d('KeyExchange', 'Pseudo exchange disabled by config');
-  //     return;
-  //   }
-  //
-  //   try {
-  //     final myPseudo = await _pseudoService.getMyPseudo();
-  //     if (myPseudo == null || myPseudo.isEmpty) {
-  //       _log.d('KeyExchange', 'No pseudo to send');
-  //       return;
-  //     }
-  //
-  //     // Wait 3 seconds before sending
-  //     _log.d('KeyExchange', 'Waiting 3 seconds before sending pseudo...');
-  //     await Future.delayed(const Duration(seconds: 3));
-  //
-  //     final pseudoMessage = PseudoExchangeMessage(
-  //       oderId: _currentUserId,
-  //       pseudo: myPseudo, // No smiley in stored message
-  //     );
-  //
-  //
-  //     final conversationService = ConversationService(localUserId: _currentUserId);
-  //
-  //     // Chiffrer le message pseudo
-  //     final result = cryptoService.encrypt(
-  //       senderID: _currentUserId,
-  //       plaintext: pseudoMessage.toJson(),
-  //       sharedKey: sharedKey,
-  //       compress: true,
-  //     );
-  //
-  //     // Mettre à jour les octets utilisés
-  //     await _keyStorageService.updateUsedBytes(
-  //       conversationId,
-  //       result.usedSegment.startByte,
-  //       result.usedSegment.startByte + result.usedSegment.lengthBytes,
-  //     );
-  //
-  //     // Envoyer le message
-  //     await conversationService.sendMessage(
-  //       conversationId: conversationId,
-  //       message: result.message,
-  //     );
-  //
-  //     _log.i('KeyExchange', 'Pseudo message sent successfully');
-  //   } catch (e) {
-  //     _log.e('KeyExchange', 'Error sending pseudo message: $e');
-  //     // Ne pas bloquer si l'envoi du pseudo échoue
-  //   }
-  // }
-
-  //
-  // final pseudoMessage = PseudoExchangeMessage(
-  //   oderId: _currentUserId,
-  //   pseudo: myPseudo, // No smiley in stored message
-  // );
-  //
-  // // Chiffrer le message pseudo
-  // final result = _cryptoService.encrypt(
-  //   senderID: _currentUserId,
-  //   plaintext: pseudoMessage.toJson(),
-  //   sharedKey: _sharedKey!,
-  //   compress: true,
-  // );
-  //
-  // final message = result.message;
-  //
-  // // Store decrypted message locally FIRST
-  // await _messageStorage.saveDecryptedMessage(
-  // conversationId: widget.conversation.id,
-  // message: DecryptedMessageData(
-  // id: message.id,
-  // senderId: message.senderId,
-  // createdAt: message.createdAt,
-  // contentType: message.contentType,
-  // textContent: pseudoMessage.toJson(),
-  // isCompressed: message.isCompressed,
-  // ),
-  // );
-  //
-  // // Mettre à jour les bits utilisés
-  // await _keyStorageService.updateUsedBytes(
-  // widget.conversation.id,
-  // result.usedSegment.startByte,
-  // result.usedSegment.startByte + result.usedSegment.lengthBytes,
-  // );
-  //
-  // // Envoyer le message
-  // await _conversationService.sendMessage(
-  // conversationId: widget.conversation.id,
-  // message: message,
-  // );
-  //
-  // // Mark as transferred immediately
-  // await _conversationService.markMessageAsTransferred(
-  // conversationId: widget.conversation.id,
-  // messageId: message.id,
-  // );
-
+  static String pseudoFromPseudoMessage(String content) =>
+      content.split('===')[1];
 
   // after each key update, update debug info in Firestore
   Future<void> _updateKeyDebugInfo(String conversationId) async {
@@ -308,7 +200,6 @@ class MessageService {
       _log.e('ConversationDetail', 'Error updating key debug info: $e');
     }
   }
-
 
   /// Start watching the current user's conversations and automatically
   /// start/stop listeners per conversation.
@@ -371,7 +262,7 @@ class MessageService {
         _processing[conversationId]!.add(msg.id);
 
         try {
-          await _processMessage(conversationId, msg);
+          await _receiveMessage(conversationId, msg);
         } catch (e) {
           _log.e('BackgroundMessage', 'Error processing ${msg.id}: $e');
         } finally {
@@ -419,7 +310,7 @@ class MessageService {
     }
   }
 
-  Future<void> _processMessage(String conversationId, EncryptedMessage msg) async {
+  Future<void> _receiveMessage(String conversationId, EncryptedMessage msg) async {
     _log.d('BackgroundMessage', 'Processing message ${msg.id} in $conversationId');
 
     // Load the key
@@ -440,7 +331,6 @@ class MessageService {
 
       if (msg.contentType == MessageContentType.text) {
         final decrypted = crypto.decrypt(encryptedMessage: msg, sharedKey: key, markAsUsed: true);
-
         // Save decrypted message locally with key metadata
         await _messageStorage.saveDecryptedMessage(
           conversationId: conversationId,
@@ -456,6 +346,9 @@ class MessageService {
             keySegmentEnd: keySegmentEndByte,
           ),
         );
+        if (isPseudoMessage(decrypted)){
+          _pseudoService.setPseudo(idFromPseudoMessage(decrypted), pseudoFromPseudoMessage(decrypted));
+        }
       } else {
         final decryptedBin = crypto.decryptBinary(encryptedMessage: msg, sharedKey: key, markAsUsed: true);
         await _messageStorage.saveDecryptedMessage(
@@ -489,8 +382,6 @@ class MessageService {
     } catch (e, st) {
       _log.e('BackgroundMessage', 'Error decrypting message ${msg.id}: $e');
       _log.e('BackgroundMessage', 'Stack: $st');
-
-      // If decryption failed we should not mark as transferred. Leave for retry.
       rethrow;
     }
   }
@@ -522,7 +413,7 @@ class MessageService {
         _processing[conversationId]!.add(msg.id);
 
         try {
-          await _processMessage(conversationId, msg);
+          await _receiveMessage(conversationId, msg);
         } catch (e) {
           _log.e('BackgroundMessage', 'Error rescanning ${msg.id}: $e');
         } finally {

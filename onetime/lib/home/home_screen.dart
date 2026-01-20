@@ -30,7 +30,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final AuthService _authService = AuthService();
-  final PseudoStorageService _pseudoService = PseudoStorageService();
+  final PseudoService _pseudoService = PseudoService();
   final GlobalKey<_ConversationsListScreenState> _conversationsKey = GlobalKey();
   String? _myPseudo;
 

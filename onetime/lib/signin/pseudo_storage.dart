@@ -8,7 +8,7 @@ import '../services/app_logger.dart';
 ///
 /// Les pseudos sont stockés uniquement sur le téléphone et jamais en clair sur Firestore.
 /// Ils sont échangés de manière chiffrée au début de chaque conversation.
-class PseudoStorageService {
+class PseudoService {
   static const String _pseudosKey = 'local_pseudos';
   static const String _myPseudoKey = 'my_pseudo';
 

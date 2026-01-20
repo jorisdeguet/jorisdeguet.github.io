@@ -252,7 +252,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   Future<void> _sendMyPseudo() async {
     setState(() => _isLoading = true);
     try {
-      final myPseudo = await PseudoStorageService().getMyPseudo();
+      final myPseudo = await PseudoService().getMyPseudo();
       if (myPseudo == null || myPseudo.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

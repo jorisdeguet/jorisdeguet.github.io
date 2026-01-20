@@ -111,8 +111,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void initState() {
     super.initState();
     _checkAuth();
-    // Écouter les changements d'état d'auth
-    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((_) => _checkAuth());
   }
 
   @override
@@ -123,7 +121,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   Future<void> _checkAuth() async {
     final isSignedIn = await _authService.initialize();
-    final myPseudo = await PseudoStorageService().getMyPseudo();
+    final myPseudo = await PseudoService().getMyPseudo();
     
     if (mounted) {
       setState(() {
