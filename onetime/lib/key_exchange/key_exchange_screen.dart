@@ -17,7 +17,7 @@ import 'package:onetime/services/conversation_service.dart';
 import 'package:onetime/services/crypto_service.dart';
 import 'package:onetime/services/qr_segment_cache_service.dart';
 import 'package:onetime/signin/auth_service.dart';
-import 'package:onetime/signin/pseudo_storage.dart';
+import 'package:onetime/signin/pseudo_service.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 

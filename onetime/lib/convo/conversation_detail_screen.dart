@@ -12,7 +12,7 @@ import 'package:onetime/l10n/app_localizations.dart';
 import 'package:onetime/services/conversation_service.dart';
 import 'package:onetime/services/media_service.dart';
 import 'package:onetime/signin/auth_service.dart';
-import 'package:onetime/signin/pseudo_storage.dart';
+import 'package:onetime/signin/pseudo_service.dart';
 
 import '../services/app_logger.dart';
 import 'conversation.dart';

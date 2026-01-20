@@ -12,7 +12,7 @@ import 'home/home_screen.dart';
 import 'l10n/app_localizations.dart';
 import 'signin/auth_service.dart';
 import 'signin/login_screen.dart';
-import 'signin/pseudo_storage.dart';
+import 'signin/pseudo_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

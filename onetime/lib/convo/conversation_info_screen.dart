@@ -3,7 +3,7 @@ import 'package:onetime/key_exchange/key_storage.dart';
 import 'package:onetime/services/conversation_service.dart';
 import 'package:onetime/services/format_service.dart';
 import 'package:onetime/signin/auth_service.dart';
-import 'package:onetime/signin/pseudo_storage.dart';
+import 'package:onetime/signin/pseudo_service.dart';
 
 
 import 'conversation.dart';

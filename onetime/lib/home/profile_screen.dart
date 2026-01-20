@@ -6,7 +6,7 @@ import 'package:onetime/l10n/app_localizations.dart';
 import 'package:onetime/services/app_logger.dart';
 import 'package:onetime/services/format_service.dart';
 import 'package:onetime/signin/auth_service.dart';
-import 'package:onetime/signin/pseudo_storage.dart';
+import 'package:onetime/signin/pseudo_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 

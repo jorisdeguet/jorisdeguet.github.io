@@ -14,7 +14,7 @@ import '../convo_new/new_conversation_screen.dart';
 import '../key_exchange/key_exchange_sync_service.dart';
 import '../services/conversation_service.dart';
 import '../signin/auth_service.dart';
-import '../signin/pseudo_storage.dart';
+import '../signin/pseudo_service.dart';
 import 'profile_screen.dart';
 
 /// Écran d'accueil après connexion.
