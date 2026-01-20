@@ -142,10 +142,10 @@ class MessageService {
   /// Envoie un message pseudo chiffré pour que les autres participants connaissent notre pseudo
   Future<void> sendPseudoMessage(String conversationId) async {
     // Vérifier si l'échange de pseudo est activé
-    if (!AppConfig.pseudoExchangeStartConversation) {
-      _log.d('KeyExchange', 'Pseudo exchange disabled by config');
-      return;
-    }
+    // if (!AppConfig.pseudoExchangeStartConversation) {
+    //   _log.d('KeyExchange', 'Pseudo exchange disabled by config');
+    //   return;
+    // }
     final SharedKey? key = await _keyService.getKey(conversationId);
     final myPseudo = await _pseudoService.getMyPseudo();
     if (myPseudo == null || myPseudo.isEmpty) {
@@ -153,7 +153,7 @@ class MessageService {
       return;
     }
     final pseudoMessage = PseudoExchangeMessage(
-      oderId: _authService.currentUserId!,
+      id: _authService.currentUserId!,
       pseudo: myPseudo, // No smiley in stored message
     );
 

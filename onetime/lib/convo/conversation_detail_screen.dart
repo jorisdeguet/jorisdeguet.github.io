@@ -294,10 +294,12 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     _log.d('ConversationDetail', '_sendMessage: "$text"');
     _log.d('ConversationDetail', 'conversationId: ${widget.conversation.id}');
     if (text.isEmpty) return;
+    setState(() => _isLoading = true);
     try{
       await _messageService.sendMessage(text, widget.conversation.id);
-      setState(() => _isLoading = true);
+
       _messageController.clear();
+      setState(() => _isLoading = false);
       // Scroll to bottom after sending
       if (mounted) {
         // Petit délai pour laisser le temps à l'UI de se mettre à jour
@@ -306,6 +308,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
         });
       }
     }catch(e) {
+      setState(() => _isLoading = false);
       // TODO message erreur
     }
   }

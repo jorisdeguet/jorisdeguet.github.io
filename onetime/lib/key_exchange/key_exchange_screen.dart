@@ -334,6 +334,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   }
 
   /// Finalise l'échange côté reader et navigue vers la conversation
+  /// TODO factorise all common elements with _finalizeExchange
   Future<void> _finalizeExchangeForReader() async {
     if (_session == null || _firestoreSession == null) return;
 
@@ -416,7 +417,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       await _updateKeyDebugInfoForConversation(conversation.id, finalKey);
 
       // Envoyer le message pseudo chiffré
-      await MessageService.fromCurrentUserID().sendPseudoMessage(conversation.id);
+      //await MessageService.fromCurrentUserID().sendPseudoMessage(conversation.id);
 
       // NE PAS supprimer la session - c'est la source qui s'en charge
       // await _sync_service.deleteSession(_firestore_session!.id);
@@ -869,7 +870,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       await _updateKeyDebugInfoForConversation(conversationId, finalKey);
 
       // Envoyer le message pseudo chiffré
-      await MessageService.fromCurrentUserID().sendPseudoMessage(conversationId);
+      //await MessageService.fromCurrentUserID().sendPseudoMessage(conversationId);
 
       // Supprimer la session d'échange de Firestore (nettoyage par la source)
       if (_firestoreSession != null) {

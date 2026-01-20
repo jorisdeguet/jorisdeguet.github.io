@@ -136,11 +136,11 @@ class PseudoStorageService {
 
 /// Type de message spécial pour l'échange de pseudo
 class PseudoExchangeMessage {
-  final String oderId;
+  final String id;
   final String pseudo;
 
   PseudoExchangeMessage({
-    required this.oderId,
+    required this.id,
     required this.pseudo,
   });
 
@@ -148,7 +148,7 @@ class PseudoExchangeMessage {
   String toJson() {
     return jsonEncode({
       'type': 'pseudo_exchange',
-      'userId': oderId,
+      'userId': id,
       'pseudo': pseudo,
     });
   }
@@ -160,7 +160,7 @@ class PseudoExchangeMessage {
       if (data['type'] != 'pseudo_exchange') return null;
 
       return PseudoExchangeMessage(
-        oderId: data['userId'] as String,
+        id: data['userId'] as String,
         pseudo: data['pseudo'] as String,
       );
     } catch (e) {
