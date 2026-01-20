@@ -457,7 +457,7 @@ class _ConversationTileState extends State<_ConversationTile> {
         text = lastMsg.textContent ?? '';
         
         // Check if it's a pseudo exchange message - don't show it
-        if (PseudoExchangeMessage.isPseudoExchange(text)) {
+        if (MessageService.isPseudoMessage(text)) {
           // Don't show pseudo messages as last message
           if (mounted) {
             setState(() {

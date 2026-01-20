@@ -140,44 +140,29 @@ class MessageService {
   }
 
   /// Envoie un message pseudo chiffré pour que les autres participants connaissent notre pseudo
-  Future<void> sendPseudoMessage(String conversationId) async {
-    // Vérifier si l'échange de pseudo est activé
-    // if (!AppConfig.pseudoExchangeStartConversation) {
-    //   _log.d('KeyExchange', 'Pseudo exchange disabled by config');
-    //   return;
-    // }
-    final SharedKey? key = await _keyService.getKey(conversationId);
+  Future<void>  sendPseudoMessage(String conversationId) async {
     final myPseudo = await _pseudoService.getMyPseudo();
     if (myPseudo == null || myPseudo.isEmpty) {
       _log.d('KeyExchange', 'No pseudo to send');
-      return;
+      throw new Exception("No pseudo");
     }
-    final pseudoMessage = PseudoExchangeMessage(
-      id: _authService.currentUserId!,
-      pseudo: myPseudo, // No smiley in stored message
-    );
+    // add the pseudo to pseudo service cache
+    await _pseudoService.setMyPseudo(myPseudo);
+    final String pseudoMessage = "@@@"+_authService.currentUserId!+"==="+myPseudo;
+    this.sendMessage(pseudoMessage, conversationId);
+  }
 
-    // Chiffrer le message pseudo
-    final result = _cryptoService.encrypt(
-      senderID: _authService.currentUserId!,
-      plaintext: pseudoMessage.toJson(),
-      sharedKey: key!,
-      compress: true,
-    );
+  static bool isPseudoMessage(String content) {
+    return content.startsWith("@@@") && content.contains("===");
+  }
 
-    // Mettre à jour les octets utilisés
-    await _keyStorage.updateUsedBytes(
-      conversationId,
-      result.usedSegment.startByte,
-      result.usedSegment.startByte + result.usedSegment.lengthBytes,
-    );
+  //
+  static String idFromPseudoMessage(String content) {
+    return content.split('===')[0].substring(3);
+  }
 
-    // Envoyer le message
-    await _conversationService.sendMessage(
-      conversationId: conversationId,
-      message: result.message,
-    );
-    _log.i('KeyExchange', 'Pseudo message sent successfully');
+  static String pseudoFromPseudoMessage(String content) {
+    return content.split('===')[1];
   }
 
 

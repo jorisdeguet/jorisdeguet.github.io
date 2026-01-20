@@ -150,7 +150,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     // Check if any message from current user is a pseudo message
     for (final msg in messages) {
       if (msg.senderId == _currentUserId && msg.textContent != null) {
-        if (PseudoExchangeMessage.isPseudoExchange(msg.textContent!)) {
+        if (MessageService.isPseudoMessage(msg.textContent!)) {
           if (mounted) {
             setState(() {
               _hasSentPseudo = true;
@@ -786,14 +786,12 @@ class _MessageBubbleNew extends StatelessWidget {
   final _DisplayMessage message;
   final bool isMine;
   final String? senderName;
-  final SharedKey? sharedKey;
   final Future<void> Function(String messageId)? onMessageRead;
 
   const _MessageBubbleNew({
     required this.message,
     required this.isMine,
     this.senderName,
-    this.sharedKey,
     this.onMessageRead,
   });
 
@@ -803,9 +801,9 @@ class _MessageBubbleNew extends StatelessWidget {
 
     if (message.contentType == MessageContentType.text) {
       // If the local text is a pseudo exchange message, show a concise UI
-      if (message.textContent != null && PseudoExchangeMessage.isPseudoExchange(message.textContent!)) {
-        final pseudo = PseudoExchangeMessage.fromJson(message.textContent!);
-        final pseudoName = pseudo?.pseudo ?? '';
+      if (message.textContent != null && MessageService.isPseudoMessage(message.textContent!)) {
+        final pseudo = MessageService.pseudoFromPseudoMessage(message.textContent!);
+        final pseudoName = pseudo;
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
           child: Row(
