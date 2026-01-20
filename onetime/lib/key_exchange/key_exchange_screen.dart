@@ -41,10 +41,9 @@ class KeyExchangeScreen extends StatefulWidget {
 class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   final AuthService _authService = AuthService();
   final KeyExchangeSyncService _syncService = KeyExchangeSyncService();
-  final KeyStorageService _keyStorageService = KeyStorageService();
-  final PseudoStorageService _pseudoService = PseudoStorageService();
+  final KeyStorage _keyStorageService = KeyStorage();
   final QrSegmentCacheService _cacheService = QrSegmentCacheService();
-  late final KeyExchangeService _keyExchangeService;
+  late final KeyService _keyService = KeyService();
   final _log = AppLogger();
 
   // Session locale (pour les données de clé)
@@ -81,7 +80,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   @override
   void initState() {
     super.initState();
-    _keyExchangeService = KeyExchangeService();
   }
 
   @override
@@ -148,8 +146,8 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       _log.d('KeyExchange', '+${step1.difference(startTime).inMilliseconds}ms - Calculating segments');
 
       // Calculer le nombre de segments
-      final totalSegments = (_keySizeBytes + KeyExchangeService.segmentSizeBytes - 1) ~/
-                            KeyExchangeService.segmentSizeBytes;
+      final totalSegments = (_keySizeBytes + KeyService.segmentSizeBytes - 1) ~/
+                            KeyService.segmentSizeBytes;
 
       final step2 = DateTime.now();
       _log.d('KeyExchange', '+${step2.difference(startTime).inMilliseconds}ms - Creating Firestore session');
@@ -173,7 +171,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
       // Créer la session locale avec le MÊME ID que Firestore
       // Et injecter les segments pré-générés si disponibles
-      _session = _keyExchangeService.createSourceSession(
+      _session = _keyService.createSourceSession(
         totalBytes: _keySizeBytes,
         peerIds: widget.peerIds,
         sourceId: _currentUserId,
@@ -387,7 +385,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         _log.d('KeyExchange', 'Reader: Loading existing key for extension...');
         _log.d('KeyExchange', 'Reader: Existing key: ${existingKey.lengthInBytes} bytes');
 
-        final newKeyData = _keyExchangeService.finalizeExchange(
+        final newKeyData = _keyService.finalizeExchange(
           _session!,
           force: true,
         );
@@ -400,7 +398,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         _log.d('KeyExchange', 'Reader: Extended key: ${finalKey.lengthInBytes} bytes');
       } else {
         // NOUVELLE CLÉ
-        finalKey = _keyExchangeService.finalizeExchange(
+        finalKey = _keyService.finalizeExchange(
           _session!,
           force: true,
         );
@@ -459,7 +457,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     if (_session == null) return;
 
     try {
-      _currentQrData = _keyExchangeService.generateNextSegment((_session as KexSessionSource));
+      _currentQrData = _keyService.generateNextSegment((_session as KexSessionSource));
       // Mettre la luminosité au maximum pour l'affichage du QR code
       _setMaxBrightness();
       setState(() {});
@@ -478,7 +476,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     // Use the cache service to generate segments, but we don't await it here
     // so it doesn't block if called from a sync context (though here it is async)
     if (_session is KexSessionSource) {
-      _cacheService.pregenerateSegments((_session as KexSessionSource), _keyExchangeService).then((_) {
+      _cacheService.pregenerateSegments((_session as KexSessionSource), _keyService).then((_) {
          _log.d('KeyExchange', 'Background generation complete');
       });
     }
@@ -622,8 +620,8 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
     try {
       // Recréer le QR data pour ce segment (octets)
-      final startByte = segmentIndex * KeyExchangeService.segmentSizeBytes;
-      final endByte = min(startByte + KeyExchangeService.segmentSizeBytes, _session is KexSessionSource ? (_session as KexSessionSource).totalBytes : (_firestoreSession?.totalSegments ?? startByte + KeyExchangeService.segmentSizeBytes));
+      final startByte = segmentIndex * KeyService.segmentSizeBytes;
+      final endByte = min(startByte + KeyService.segmentSizeBytes, _session is KexSessionSource ? (_session as KexSessionSource).totalBytes : (_firestoreSession?.totalSegments ?? startByte + KeyService.segmentSizeBytes));
 
       // Récupérer les données du segment depuis la session
       final segmentData = _session!.getSegmentData(segmentIndex);
@@ -632,7 +630,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         _log.d('Torrent', 'Segment $segmentIndex data not found, regenerating...');
         // Le segment n'a pas encore été généré, le générer maintenant
         if (_session is KexSessionSource) {
-          _keyExchangeService.generateNextSegment((_session as KexSessionSource));
+          _keyService.generateNextSegment((_session as KexSessionSource));
         }
         return;
       }
@@ -662,7 +660,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     _processingScan = true;
 
     try {
-      final segment = _keyExchangeService.parseQrCode(qrData);
+      final segment = _keyService.parseQrCode(qrData);
 
       _log.d('QR SCAN', 'Reader: ${_currentUserId.substring(0, 8)}...');
       _log.d('QR SCAN', 'Segment Index: ${segment.segmentIndex}');
@@ -687,7 +685,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         _log.d('QR SCAN', '  - Total segments: ${_firestoreSession!.totalSegments}');
 
         // Créer la session locale reader avec les infos de Firestore
-        _session = _keyExchangeService.createReaderSession(
+        _session = _keyService.createReaderSession(
           sessionId: segment.sessionId,
           localPeerId: _currentUserId,
           peerIds: _firestoreSession!.participants,
@@ -721,7 +719,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       HapticFeedback.lightImpact();
 
       // Enregistrer le segment localement
-      _keyExchangeService.recordReadSegment(_session!, segment);
+      _keyService.recordReadSegment(_session!, segment);
       _log.d('QR SCAN', 'Segment recorded locally');
 
       // Notifier Firestore que ce participant a scanné ce segment
@@ -799,7 +797,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           _log.d('KeyExchange', 'Existing key found: ${existingKey.lengthInBytes} bytes - extending...');
 
           // Forcer la finalisation pour obtenir les nouveaux segments
-          final newKeyData = _keyExchangeService.finalizeExchange(
+          final newKeyData = _keyService.finalizeExchange(
             (_session as KexSessionSource),
             force: true,
           );
@@ -816,7 +814,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           _log.w('KeyExchange', 'WARNING: Extension requested but no existing key found!');
           _log.d('KeyExchange', 'This may cause decryption errors. Delete conversation and restart.');
 
-          finalKey = _keyExchangeService.finalizeExchange(
+          finalKey = _keyService.finalizeExchange(
             (_session as KexSessionSource),
             force: true,
           );
@@ -833,7 +831,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       } else {
         // NOUVELLE CONVERSATION: Créer tout de zéro
         existingKey = null;
-        finalKey = _keyExchangeService.finalizeExchange(
+        finalKey = _keyService.finalizeExchange(
           (_session as KexSessionSource),
           force: true,
         );
@@ -1276,7 +1274,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     _log.d('TERMINATE', '✓ Will include $segmentsToInclude segments (0 to $lastCompleteSegment) in the key');
 
     // Update the session's total bytes to only include complete segments
-    final bytesPerSegment = KeyExchangeService.segmentSizeBytes;
+    final bytesPerSegment = KeyService.segmentSizeBytes;
     final adjustedTotalBytes = segmentsToInclude * bytesPerSegment;
 
     _log.d('TERMINATE', 'Bytes adjustment:');

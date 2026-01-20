@@ -18,7 +18,7 @@ class QrSegmentCacheService {
   /// Pré-génère les segments pour une session
   Future<void> pregenerateSegments(
     KexSessionSource session,
-    KeyExchangeService service,
+    KeyService service,
   ) async {
     final sessionId = session.sessionId;
     

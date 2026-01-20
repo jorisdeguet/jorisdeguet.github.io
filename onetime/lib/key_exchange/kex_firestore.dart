@@ -183,7 +183,7 @@ class KexSessionModel {
       'status': status.name,
       'totalSegments': segmentsNormalized[sourceId]?.length ?? 0,
       // store total key size in bytes for clarity
-      'totalKeyBytes': (segmentsNormalized[sourceId]?.length ?? 0) * KeyExchangeService.segmentSizeBytes,
+      'totalKeyBytes': (segmentsNormalized[sourceId]?.length ?? 0) * KeyService.segmentSizeBytes,
        'startIndex': startIndex,
        'endIndex': endIndex,
        // store dates as ISO strings for readability and cross-platform parsing

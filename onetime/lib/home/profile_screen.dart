@@ -22,7 +22,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
-  final KeyStorageService _keyStorage = KeyStorageService();
+  final KeyStorage _keyStorage = KeyStorage();
   final MessageStorageService _messageStorage = MessageStorageService();
   final ConversationPseudoService _convPseudoService = ConversationPseudoService();
   final MessageService _messageService = MessageService.fromCurrentUserID();

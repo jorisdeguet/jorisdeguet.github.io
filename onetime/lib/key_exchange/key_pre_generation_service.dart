@@ -11,7 +11,7 @@ class KeyPreGenerationService {
   factory KeyPreGenerationService() => _instance;
   KeyPreGenerationService._internal();
 
-  late final KeyExchangeService _keyExchangeService = KeyExchangeService();
+  late final KeyService _keyService = KeyService();
   final _log = AppLogger();
 
   // Pool de sessions pré-générées
@@ -93,9 +93,9 @@ class KeyPreGenerationService {
     
     // Générer les N premiers segments
     for (int i = 0; i < _targetReadySegments; i++) {
-      if (i * KeyExchangeService.segmentSizeBytes >= totalBytes) break;
+      if (i * KeyService.segmentSizeBytes >= totalBytes) break;
 
-      final segment = _keyExchangeService.generateNextSegment(tempSession);
+      final segment = _keyService.generateNextSegment(tempSession);
       segments.add(segment);
       
       // Yield pour ne pas bloquer l'UI

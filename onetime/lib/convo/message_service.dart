@@ -23,7 +23,7 @@ class MessageService {
   late final String localUserId;
   late final ConversationService _conversationService;
   final AuthService _authService = AuthService();
-  final KeyStorageService _keyStorage = KeyStorageService();
+  final KeyStorage _keyStorage = KeyStorage();
   final KeyService _keyService = KeyService();
   final CryptoService _cryptoService = CryptoService();
   final PseudoStorageService _pseudoService = PseudoStorageService();

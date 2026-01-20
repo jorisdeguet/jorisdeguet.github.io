@@ -26,7 +26,7 @@ class ConversationInfoScreen extends StatefulWidget {
 
 class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
   final ConversationPseudoService _convPseudoService = ConversationPseudoService();
-  final KeyStorageService _keyStorageService = KeyStorageService();
+  final KeyStorage _keyStorageService = KeyStorage();
   final AuthService _authService = AuthService();
   late final ConversationService _conversationService;
   

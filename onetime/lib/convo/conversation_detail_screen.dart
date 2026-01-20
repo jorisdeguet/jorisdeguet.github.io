@@ -79,7 +79,7 @@ class ConversationDetailScreen extends StatefulWidget {
 
 class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   final AuthService _authService = AuthService();
-  final KeyStorageService _keyStorageService = KeyStorageService();
+  final KeyStorage _keyStorageService = KeyStorage();
   final AppLogger _log = AppLogger();
   final MediaService _mediaService = MediaService();
   final MessageStorageService _messageStorage = MessageStorageService();

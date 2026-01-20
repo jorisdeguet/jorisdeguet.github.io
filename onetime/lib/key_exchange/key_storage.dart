@@ -14,7 +14,7 @@ import '../key_exchange/shared_key.dart';
 ///
 /// Les clés sont stockées de manière sécurisée sur l'appareil.
 /// Chaque conversation a sa propre clé identifiée par conversationId.
-class KeyStorageService {
+class KeyStorage {
   static const String _keyPrefix = 'shared_key_';
   final _log = AppLogger();
 
@@ -22,7 +22,7 @@ class KeyStorageService {
   final String _localUserId;
   final ConversationService? _conversationService;
 
-  KeyStorageService({String? localUserId})
+  KeyStorage({String? localUserId})
       : _localUserId = localUserId ?? '',
         _conversationService = localUserId != null ? ConversationService(localUserId: localUserId) : null;
 
