@@ -12,7 +12,6 @@ import '../convo/message_service.dart';
 import '../convo_new/join_conversation_screen.dart';
 import '../convo_new/new_conversation_screen.dart';
 import '../key_exchange/key_exchange_sync_service.dart';
-import '../services/conversation_pseudo_service.dart';
 import '../services/conversation_service.dart';
 import '../signin/auth_service.dart';
 import '../signin/pseudo_storage.dart';
@@ -382,7 +381,7 @@ class _ConversationTile extends StatefulWidget {
 }
 
 class _ConversationTileState extends State<_ConversationTile> {
-  final ConversationPseudoService _convPseudoService = ConversationPseudoService();
+  final PseudoService _convPseudoService = PseudoService();
   final MessageStorageService _messageStorage = MessageStorageService();
   final MessageService _messageService = MessageService.fromCurrentUserID();
   String _displayName = '';
@@ -428,7 +427,7 @@ class _ConversationTileState extends State<_ConversationTile> {
   }
 
   Future<void> _loadDisplayName() async {
-    final pseudos = await _convPseudoService.getPseudos(widget.conversation.id);
+    final pseudos = await _convPseudoService.getPseudos(widget.conversation.peerIds);
     final displayNames = <String>[];
     
     for (final peerId in widget.conversation.peerIds) {

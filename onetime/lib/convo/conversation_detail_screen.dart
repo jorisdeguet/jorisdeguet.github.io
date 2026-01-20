@@ -8,10 +8,7 @@ import 'package:onetime/convo/encrypted_message.dart';
 import 'package:onetime/convo/message_service.dart';
 import 'package:onetime/convo/message_storage.dart';
 import 'package:onetime/key_exchange/key_exchange_screen.dart';
-import 'package:onetime/key_exchange/key_storage.dart';
-import 'package:onetime/key_exchange/shared_key.dart';
 import 'package:onetime/l10n/app_localizations.dart';
-import 'package:onetime/services/conversation_pseudo_service.dart';
 import 'package:onetime/services/conversation_service.dart';
 import 'package:onetime/services/media_service.dart';
 import 'package:onetime/signin/auth_service.dart';
@@ -79,18 +76,16 @@ class ConversationDetailScreen extends StatefulWidget {
 
 class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   final AuthService _authService = AuthService();
-  final KeyStorage _keyStorageService = KeyStorage();
   final AppLogger _log = AppLogger();
   final MediaService _mediaService = MediaService();
   final MessageStorageService _messageStorage = MessageStorageService();
-  final ConversationPseudoService _convPseudoService = ConversationPseudoService();
+  final PseudoService _pseudoService = PseudoService();
   final MessageService _messageService = MessageService.fromCurrentUserID();
   late final ConversationService _conversationService;
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
 
   bool _isLoading = false;
-  // SharedKey? _sharedKey;
   bool _hasSentPseudo = false;
   bool _showScrollToBottom = false;
   // Cache des pseudos pour affichage
@@ -103,17 +98,13 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     super.initState();
     final userId = _authService.currentUserId ?? '';
     _conversationService = ConversationService(localUserId: userId);
-    // Load display names immediately (UI-friendly)
     _loadDisplayNames();
-    // First determine if we already sent our pseudo locally, then load the key.
-    // This ordering avoids racing: we want to know whether to auto-send the pseudo
-    // when a key becomes available.
     _checkIfPseudoSent().whenComplete(() {
       // _loadSharedKey();
     });
 
     // Listen for pseudo updates
-    _pseudoSubscription = _convPseudoService.pseudoUpdates.listen((conversationId) {
+    _pseudoSubscription = _pseudoService.pseudoUpdates.listen((conversationId) {
       if (conversationId == widget.conversation.id) {
         _loadDisplayNames();
       }
@@ -164,10 +155,10 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
   /// Charge les noms d'affichage des participants
   Future<void> _loadDisplayNames() async {
-    final names = await _convPseudoService.getPseudos(widget.conversation.id);
+    _displayNames = await _pseudoService.getDisplayNames(widget.conversation.peerIds);
     if (mounted) {
       setState(() {
-        _displayNames = names;
+        //_displayNames = names;
       });
     }
   }
@@ -384,7 +375,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     if (result == null) return;
     if (!mounted) return;
     // Naviguer vers l'écran complet d'envoi
-    final sent = await Navigator.push<bool>(
+    await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (_) => MediaSendScreen(
@@ -431,7 +422,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     if (!mounted) return;
 
     // Naviguer vers l'écran complet d'envoi
-    final sent = await Navigator.push<bool>(
+    await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (_) => MediaSendScreen(

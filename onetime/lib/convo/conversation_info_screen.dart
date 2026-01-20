@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:onetime/key_exchange/key_storage.dart';
+import 'package:onetime/services/conversation_service.dart';
+import 'package:onetime/services/format_service.dart';
+import 'package:onetime/signin/auth_service.dart';
+import 'package:onetime/signin/pseudo_storage.dart';
 
-import '../key_exchange/shared_key.dart';
-import '../services/conversation_pseudo_service.dart';
-import '../services/conversation_service.dart';
-import '../services/format_service.dart';
-import '../signin/auth_service.dart';
+
 import 'conversation.dart';
 
 class ConversationInfoScreen extends StatefulWidget {
@@ -25,7 +25,7 @@ class ConversationInfoScreen extends StatefulWidget {
 }
 
 class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
-  final ConversationPseudoService _convPseudoService = ConversationPseudoService();
+  final PseudoService _pseudoService = PseudoService();
   final KeyStorage _keyStorageService = KeyStorage();
   final AuthService _authService = AuthService();
   late final ConversationService _conversationService;
@@ -43,7 +43,7 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
   }
 
   Future<void> _loadDisplayNames() async {
-    final names = await _convPseudoService.getPseudos(widget.conversation.id);
+    final names = await _pseudoService.getDisplayNames(widget.conversation.peerIds);
     if (mounted) {
       setState(() {
         _displayNames = names;

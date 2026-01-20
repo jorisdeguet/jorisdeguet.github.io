@@ -1,28 +1,27 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/app_logger.dart';
 
-/// Service pour stocker localement les pseudos des utilisateurs.
-///
-/// Les pseudos sont stockés uniquement sur le téléphone et jamais en clair sur Firestore.
-/// Ils sont échangés de manière chiffrée au début de chaque conversation.
+
 class PseudoService {
   static const String _pseudosKey = 'local_pseudos';
   static const String _myPseudoKey = 'my_pseudo';
+
+  final _pseudoUpdateController = StreamController<String>.broadcast();
+  Stream<String> get pseudoUpdates => _pseudoUpdateController.stream;
 
   /// Cache en mémoire des pseudos
   Map<String, String>? _pseudosCache;
   final _log = AppLogger();
 
-  /// Récupère le pseudo local de l'utilisateur actuel
   Future<String?> getMyPseudo() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_myPseudoKey);
   }
 
-  /// Définit le pseudo local de l'utilisateur actuel
   Future<void> setMyPseudo(String pseudo) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_myPseudoKey, pseudo);
@@ -30,7 +29,7 @@ class PseudoService {
   }
 
   /// Charge tous les pseudos depuis le stockage local
-  Future<Map<String, String>> loadPseudos() async {
+  Future<Map<String, String>> _loadPseudos() async {
     if (_pseudosCache != null) return _pseudosCache!;
 
     final prefs = await SharedPreferences.getInstance();
@@ -63,35 +62,34 @@ class PseudoService {
 
   /// Récupère le pseudo d'un utilisateur par son ID
   Future<String?> getPseudo(String oderId) async {
-    final pseudos = await loadPseudos();
+    final pseudos = await _loadPseudos();
     return pseudos[oderId];
   }
 
   /// Définit le pseudo d'un utilisateur
-  Future<void> setPseudo(String oderId, String pseudo) async {
-    await loadPseudos();
-    
-    // Ne rien faire si le pseudo n'a pas changé
-    if (_pseudosCache![oderId] == pseudo) {
+  Future<void> setPseudo(String userID, String pseudo) async {
+    await _loadPseudos();
+    if (_pseudosCache![userID] == pseudo) {
       return;
     }
-    
-    _pseudosCache![oderId] = pseudo;
+    _pseudosCache![userID] = pseudo;
     await _savePseudos();
-    _log.i('PseudoStorage', 'Pseudo set for $oderId: $pseudo');
+    _pseudoUpdateController.add("update");
+    _log.i('PseudoStorage', 'Pseudo set for $userID: $pseudo');
   }
 
   /// Définit plusieurs pseudos en une fois
   Future<void> setPseudos(Map<String, String> pseudos) async {
-    await loadPseudos();
+    await _loadPseudos();
     _pseudosCache!.addAll(pseudos);
     await _savePseudos();
     _log.i('PseudoStorage', 'Pseudos set: ${pseudos.keys.join(", ")}');
+    _pseudoUpdateController.add("update");
   }
 
   /// Supprime le pseudo d'un utilisateur
   Future<void> removePseudo(String oderId) async {
-    await loadPseudos();
+    await _loadPseudos();
     _pseudosCache!.remove(oderId);
     await _savePseudos();
   }
@@ -110,9 +108,13 @@ class PseudoService {
     return userId;
   }
 
+  Future<Map<String, String>> getPseudos(List<String> oderIds) async {
+    return getDisplayNames(oderIds);
+  }
+
   /// Retourne les noms d'affichage pour plusieurs IDs
   Future<Map<String, String>> getDisplayNames(List<String> oderIds) async {
-    final pseudos = await loadPseudos();
+    final pseudos = await _loadPseudos();
     final result = <String, String>{};
 
     for (final oderId in oderIds) {
@@ -131,6 +133,14 @@ class PseudoService {
   /// Efface le cache en mémoire (pour forcer un rechargement)
   void clearCache() {
     _pseudosCache = null;
+  }
+
+  /// Optionally expose a way to close the internal stream controller.
+  /// Call this only when the app is shutting down (rare in Flutter mobile apps).
+  void dispose() {
+    if (!_pseudoUpdateController.isClosed) {
+      _pseudoUpdateController.close();
+    }
   }
 }
 

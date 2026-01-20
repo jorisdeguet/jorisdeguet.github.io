@@ -4,9 +4,9 @@ import 'package:onetime/convo/message_storage.dart';
 import 'package:onetime/key_exchange/key_storage.dart';
 import 'package:onetime/l10n/app_localizations.dart';
 import 'package:onetime/services/app_logger.dart';
-import 'package:onetime/services/conversation_pseudo_service.dart';
 import 'package:onetime/services/format_service.dart';
 import 'package:onetime/signin/auth_service.dart';
+import 'package:onetime/signin/pseudo_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 
@@ -24,7 +24,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
   final KeyStorage _keyStorage = KeyStorage();
   final MessageStorageService _messageStorage = MessageStorageService();
-  final ConversationPseudoService _convPseudoService = ConversationPseudoService();
+  final PseudoService _pseudoService = PseudoService();
   final MessageService _messageService = MessageService.fromCurrentUserID();
   final _log = AppLogger();
 
@@ -135,12 +135,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         for (final convId in conversationIds) {
           await _keyStorage.deleteKey(convId);
           await _messageStorage.deleteConversationMessages(convId);
-          await _convPseudoService.deletePseudos(convId);
           await _messageService.deleteUnreadCount(convId);
         }
         
         // Delete global data
-        await _convPseudoService.deleteAllPseudos();
         await _messageService.deleteAllUnreadCounts();
 
         // Supprimer le compte Firebase (reset complet de l'identité)
