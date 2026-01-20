@@ -9,7 +9,7 @@ import 'package:onetime/convo/message_service.dart';
 import 'package:onetime/convo/message_storage.dart';
 import 'package:onetime/key_exchange/key_exchange_screen.dart';
 import 'package:onetime/l10n/app_localizations.dart';
-import 'package:onetime/services/conversation_service.dart';
+import 'package:onetime/services/firestore_service.dart';
 import 'package:onetime/services/media_service.dart';
 import 'package:onetime/signin/auth_service.dart';
 import 'package:onetime/signin/pseudo_service.dart';

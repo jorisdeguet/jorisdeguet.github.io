@@ -7,7 +7,7 @@ import 'package:onetime/key_exchange/key_service.dart';
 import 'package:onetime/key_exchange/key_storage.dart';
 import 'package:onetime/key_exchange/shared_key.dart';
 import 'package:onetime/services/app_logger.dart';
-import 'package:onetime/services/conversation_service.dart';
+import 'package:onetime/services/firestore_service.dart';
 import 'package:onetime/services/crypto_service.dart';
 import 'package:onetime/services/media_service.dart';
 import 'package:onetime/signin/auth_service.dart';

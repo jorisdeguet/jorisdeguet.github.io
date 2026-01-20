@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:onetime/services/app_logger.dart';
-import 'package:onetime/services/conversation_service.dart';
+import 'package:onetime/services/firestore_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../key_exchange/key_history.dart';

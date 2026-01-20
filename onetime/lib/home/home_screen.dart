@@ -12,7 +12,7 @@ import '../convo/message_service.dart';
 import '../convo_new/join_conversation_screen.dart';
 import '../convo_new/new_conversation_screen.dart';
 import '../key_exchange/key_exchange_sync_service.dart';
-import '../services/conversation_service.dart';
+import '../services/firestore_service.dart';
 import '../signin/auth_service.dart';
 import '../signin/pseudo_service.dart';
 import 'profile_screen.dart';

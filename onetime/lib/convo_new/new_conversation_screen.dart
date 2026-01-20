@@ -6,7 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../convo/message_service.dart';
 import '../key_exchange/key_exchange_screen.dart';
 import '../services/app_logger.dart';
-import '../services/conversation_service.dart';
+import '../services/firestore_service.dart';
 import '../signin/auth_service.dart';
 
 /// Écran de création d'une nouvelle conversation.
