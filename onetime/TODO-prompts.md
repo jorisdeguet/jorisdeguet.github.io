@@ -5,7 +5,7 @@
 - Placer le séparateur de message dans le gros blob de messages
 - Optimiser encodage QR (binaire au lieu de JSON/Base64) pour 3x plus de données
 - Augmenter taille QR à 2048-2953 bytes (version 40)
-- solliciter un don de temps en temps
+- solliciter un don de temps en temps genre tous les 100 messages envoyés
 
 
 # TODO core 
