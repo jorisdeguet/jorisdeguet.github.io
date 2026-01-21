@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:onetime/convo/encrypted_message.dart';
+import 'package:onetime/convo/lock_service.dart';
 import 'package:onetime/convo/message_service.dart';
 import 'package:onetime/key_exchange/key_service.dart';
-import 'package:onetime/key_exchange/shared_key.dart';
 import 'package:onetime/services/format_service.dart';
 import 'package:onetime/services/media_service.dart';
 
@@ -30,7 +30,6 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
   ImageQuality _selectedQuality = ImageQuality.medium;
   MediaPickResult? _currentResult;
 
-  KeyService _keyService = KeyService();
   MessageService _messageService = MessageService.fromCurrentUserID();
 
   @override
@@ -62,7 +61,12 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
       if (mounted) {
         Navigator.pop(context, true);
       }
-    } catch (e, stackTrace) {
+    } on LockAcquisitionException catch (e) {
+      setState(() {
+        _errorMessage = e.message;
+        _isProcessing = false;
+      });
+    } catch (e) {
       setState(() {
         _errorMessage = e.toString();
         _isProcessing = false;

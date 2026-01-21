@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:onetime/convo/conversation_info_screen.dart';
 import 'package:onetime/convo/encrypted_message.dart';
+import 'package:onetime/convo/lock_service.dart';
 import 'package:onetime/convo/message_service.dart';
 import 'package:onetime/convo/message_storage.dart';
 import 'package:onetime/key_exchange/key_exchange_screen.dart';
@@ -298,9 +299,28 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
           if (mounted) _scrollToBottom();
         });
       }
-    }catch(e) {
+    } on LockAcquisitionException catch (e) {
       setState(() => _isLoading = false);
-      // TODO message erreur
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch(e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de l\'envoi: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 

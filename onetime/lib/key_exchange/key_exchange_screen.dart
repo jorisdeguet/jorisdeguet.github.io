@@ -347,7 +347,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       final updatedSession = await _syncService.getSession(_firestoreSession!.id);
       final conversationId = updatedSession?.conversationId;
 
-      _log.d('KeyExchange', 'Reader: conversationId from session: $conversationId');
+      _log.d('KeyExchange', 'Reader: conversationId from session: ${_firestoreSession!.id} $conversationId');
 
       if (conversationId == null || conversationId.isEmpty) {
         _log.d('KeyExchange', 'Reader: No conversationId found, waiting...');
