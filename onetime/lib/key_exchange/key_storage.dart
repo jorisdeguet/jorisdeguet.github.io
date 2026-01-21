@@ -7,7 +7,6 @@ import 'package:onetime/services/firestore_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../key_exchange/key_history.dart';
-import '../key_exchange/key_interval.dart';
 import '../key_exchange/shared_key.dart';
 
 /// Service pour stocker et récupérer les clés partagées localement.

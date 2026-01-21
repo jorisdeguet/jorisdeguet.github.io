@@ -28,7 +28,6 @@ class ConversationService {
   /// Crée une nouvelle conversation (en état "joining")
   Future<Conversation> createConversation({
     required List<String> peerIds,
-    int totalKeyBytes = 0,
     ConversationState state = ConversationState.joining,
   }) async {
     _log.d('Conversation', 'createConversation: peerIds=$peerIds, state=$state');
@@ -47,14 +46,12 @@ class ConversationService {
     await _conversationsRef.doc(conversationId).set(conversation.toFirestore());
     _log.i('Conversation', 'Conversation created: $conversationId');
 
-    // Start key pre-generation for this conversation if a positive key size was requested.
-    if (totalKeyBytes > 0) {
-      try {
-        KeyPreGenerationService().initialize();
-        _log.d('Conversation', 'Key pre-generation initialized for conversation $conversationId');
-      } catch (e) {
-        _log.w('Conversation', 'Could not initialize KeyPreGenerationService: $e');
-      }
+
+    try {
+      KeyPreGenerationService().initialize();
+      _log.d('Conversation', 'Key pre-generation initialized for conversation $conversationId');
+    } catch (e) {
+      _log.w('Conversation', 'Could not initialize KeyPreGenerationService: $e');
     }
 
     return conversation;
@@ -120,23 +117,6 @@ class ConversationService {
     });
   }
 
-  /// Met à jour une conversation après envoi de message
-  Future<void> updateConversationWithMessage({
-    required String conversationId,
-    required int bytesUsed,
-  }) async {
-    _log.d('Conversation', 'updateConversationWithMessage: conversationId=$conversationId');
-    try {
-      await _conversationsRef.doc(conversationId).update({
-        'usedKeyBytes': FieldValue.increment(bytesUsed),
-      });
-      _log.i('Conversation', 'updateConversationWithMessage: SUCCESS');
-    } catch (e, stackTrace) {
-      _log.e('Conversation', 'updateConversationWithMessage ERROR: $e');
-      _log.e('Conversation', 'Stack trace: $stackTrace');
-      rethrow;
-    }
-  }
 
   /// Renomme une conversation
   Future<void> renameConversation(String conversationId, String newName) async {
@@ -144,29 +124,14 @@ class ConversationService {
     // await _conversationsRef.doc(conversationId).update({'name': newName});
   }
 
-  /// Met à jour les bits de clé d'une conversation existante
-  /// Met à jour les bits de clé d'une conversation existante et la marque comme prête
   Future<void> updateConversationKey({
     required String conversationId,
-    required int totalKeyBytes,
-    bool addToExisting = false,
   }) async {
-    _log.d('Conversation', 'updateConversationKey: $conversationId, $totalKeyBytes bytes, addToExisting=$addToExisting');
+    _log.d('Conversation', 'updateConversationKey: $conversationId');
 
-    if (addToExisting) {
-      // Ajouter aux octets existants (extension de clé)
-      await _conversationsRef.doc(conversationId).update({
-        'totalKeyBytes': FieldValue.increment(totalKeyBytes),
-        'state': ConversationState.ready.name,
-      });
-    } else {
-      // Remplacer la clé (premier échange)
-      await _conversationsRef.doc(conversationId).update({
-        'totalKeyBytes': totalKeyBytes,
-        'usedKeyBytes': 0,
-        'state': ConversationState.ready.name,
-      });
-    }
+    await _conversationsRef.doc(conversationId).update({
+      'state': ConversationState.ready.name,
+    });
   }
 
   /// Met à jour les infos de debug de la clé pour un utilisateur
@@ -227,14 +192,6 @@ class ConversationService {
       
       await _messagesRef(conversationId).doc(message.id).set(messageData); // TODO move to message Service ??
       _log.i('Conversation', 'Message added successfully');
-
-      // Mettre à jour la conversation (octets utilisés)
-      _log.d('Conversation', 'Updating conversation...');
-      await updateConversationWithMessage(
-        conversationId: conversationId,
-        bytesUsed: message.totalBytesUsed,
-      );
-      _log.i('Conversation', 'Conversation updated successfully');
     } catch (e, stackTrace) {
       _log.e('Conversation', 'ERROR in sendMessage: $e');
       _log.e('Conversation', 'Stack trace: $stackTrace');

@@ -57,7 +57,6 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
       // Créer la conversation avec seulement le créateur
       final conversation = await conversationService.createConversation(
         peerIds: [], // Vide pour l'instant, les autres rejoindront
-        totalKeyBytes: 0, // Pas de clé pour l'instant
       );
 
       setState(() {

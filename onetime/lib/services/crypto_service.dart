@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:onetime/convo/encrypted_message.dart';
-import 'package:onetime/key_exchange/key_service.dart';
 
 import '../convo/compression_service.dart';
 import '../key_exchange/key_interval.dart';
