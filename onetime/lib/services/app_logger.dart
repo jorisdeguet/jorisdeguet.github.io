@@ -1,4 +1,5 @@
 import 'package:logger/logger.dart';
+import 'package:onetime/config/app_config.dart';
 
 /// Lightweight application logger wrapper around `logger` package.
 /// This wrapper no longer implements tag-based filtering or custom level
@@ -31,9 +32,9 @@ class AppLogger {
 
   // Convenience methods keep the previous signature: (tag, message)
   // They simply forward to the underlying logger with a tag prefix.
-  void v(String tag, String message) => _logger.v('[$tag] $message');
-  void d(String tag, String message) => _logger.d('[$tag] $message');
-  void i(String tag, String message) => _logger.i('[$tag] $message');
-  void w(String tag, String message) => _logger.w('[$tag] $message');
-  void e(String tag, String message) => _logger.e('[$tag] $message');
+  void v(String tag, String message) { if (AppConfig.enabledLogTags.contains(tag)) _logger.v('[$tag] $message');}
+  void d(String tag, String message) { if (AppConfig.enabledLogTags.contains(tag)) _logger.d('[$tag] $message');}
+  void i(String tag, String message) { if (AppConfig.enabledLogTags.contains(tag)) _logger.i('[$tag] $message');}
+  void w(String tag, String message) { if (AppConfig.enabledLogTags.contains(tag)) _logger.w('[$tag] $message');}
+  void e(String tag, String message) { if (AppConfig.enabledLogTags.contains(tag)) _logger.e('[$tag] $message');}
 }
