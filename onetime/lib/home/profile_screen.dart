@@ -6,7 +6,6 @@ import 'package:onetime/l10n/app_localizations.dart';
 import 'package:onetime/services/app_logger.dart';
 import 'package:onetime/services/format_service.dart';
 import 'package:onetime/signin/auth_service.dart';
-import 'package:onetime/signin/pseudo_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 
@@ -24,7 +23,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
   final KeyStorage _keyStorage = KeyStorage();
   final MessageStorageService _messageStorage = MessageStorageService();
-  final PseudoService _pseudoService = PseudoService();
   final MessageService _messageService = MessageService.fromCurrentUserID();
   final _log = AppLogger();
 

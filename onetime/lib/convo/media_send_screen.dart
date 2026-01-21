@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:onetime/convo/encrypted_message.dart';
 import 'package:onetime/convo/lock_service.dart';
 import 'package:onetime/convo/message_service.dart';
-import 'package:onetime/key_exchange/key_service.dart';
 import 'package:onetime/services/format_service.dart';
 import 'package:onetime/services/media_service.dart';
 
