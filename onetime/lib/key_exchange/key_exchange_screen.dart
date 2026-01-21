@@ -16,6 +16,7 @@ import 'package:onetime/services/qr_segment_cache_service.dart';
 import 'package:onetime/signin/auth_service.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:screen_brightness/screen_brightness.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 
 
@@ -76,6 +77,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   @override
   void initState() {
     super.initState();
+    _enableWakelock();
   }
 
   @override
@@ -83,7 +85,28 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     _sessionSubscription?.cancel();
     _torrentRotationTimer?.cancel();
     _restoreBrightness();
+    _disableWakelock();
     super.dispose();
+  }
+
+  /// Active le wakelock pour empêcher l'écran de s'éteindre
+  Future<void> _enableWakelock() async {
+    try {
+      await WakelockPlus.enable();
+      _log.i('KeyExchange', 'Wakelock enabled - screen will stay on');
+    } catch (e) {
+      _log.e('KeyExchange', 'Error enabling wakelock: $e');
+    }
+  }
+
+  /// Désactive le wakelock
+  Future<void> _disableWakelock() async {
+    try {
+      await WakelockPlus.disable();
+      _log.i('KeyExchange', 'Wakelock disabled - screen can dim normally');
+    } catch (e) {
+      _log.e('KeyExchange', 'Error disabling wakelock: $e');
+    }
   }
 
   /// Met la luminosité au maximum pour afficher le QR code
@@ -801,11 +824,8 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           _log.d('KeyExchange', 'Initial key created: ${finalKey.lengthInBytes} bytes');
         }
 
-        // Mettre à jour la conversation avec le nouveau total de bytes
-        await conversationService.updateConversationKey(
-          conversationId: conversationId,
-          totalKeyBytes: finalKey.lengthInBytes,
-        );
+        // Mettre à jour la conversation à Ready
+        await conversationService.updateConversationKey(conversationId: conversationId);
         _log.d('KeyExchange', 'Conversation updated: $conversationId');
       } else {
         // NOUVELLE CONVERSATION: Créer tout de zéro
@@ -817,7 +837,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
         final conversation = await conversationService.createConversation(
           peerIds: _session != null ? _session!.peerIds : widget.peerIds,
-          totalKeyBytes: finalKey.lengthInBytes,
         );
         conversationId = conversation.id;
         _log.d('KeyExchange', 'New conversation created: $conversationId');
