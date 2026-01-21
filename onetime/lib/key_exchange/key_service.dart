@@ -3,7 +3,6 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:onetime/key_exchange/key_storage.dart';
-import 'package:onetime/services/app_logger.dart';
 
 import '../key_exchange/shared_key.dart';
 
