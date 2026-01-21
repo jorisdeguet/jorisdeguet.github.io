@@ -18,9 +18,10 @@ class KeyService {
     => _keyStorage.getKey(conversationId);
 
   Future<void> updateUsedBytes(String conversationId, int startByte, int endByte) async
-    => _keyStorage.updateUsedBits(conversationId, startByte, endByte);
+    => _keyStorage.updateUsedBytes(conversationId, startByte, endByte);
 
   KexSessionSource createSourceSession({
+    required String conversationId,
     required int totalBytes,
     required List<String> peerIds,
     required String sourceId,
@@ -31,6 +32,7 @@ class KeyService {
     final allPeers = [sourceId, ...peerIds]..sort();
 
     final session = KexSessionSource(
+      conversationId: conversationId,
       sessionId: sessionId ?? _generateSessionId(),
       role: KeyExchangeRole.source,
       peerIds: allPeers,
@@ -74,11 +76,13 @@ class KeyService {
   /// [sessionId] - ID de la session partagé par la source
   /// [localPeerId] - ID local de ce lecteur
   KexSessionReader createReaderSession({
+    required String conversationId,
     required String sessionId,
     required String localPeerId,
     required List<String> peerIds,
   }) {
     return KexSessionReader(
+      conversationId: conversationId,
       sessionId: sessionId,
       role: KeyExchangeRole.reader,
       peerIds: peerIds,
@@ -215,6 +219,7 @@ enum KeyExchangeRole {
 
 /// Session en lecture (base pour reader et source)
 class KexSessionReader {
+  final String conversationId;
   final String sessionId;
   final KeyExchangeRole role;
   final List<String> peerIds;
@@ -230,6 +235,7 @@ class KexSessionReader {
   int _currentSegmentIndex = 0;
 
   KexSessionReader({
+    required this.conversationId,
     required this.sessionId,
     required this.role,
     required this.peerIds,
@@ -303,7 +309,7 @@ class KexSessionReader {
     }
 
     return SharedKey(
-      id: sessionId,
+      id: conversationId,
       keyData: keyData,
       peerIds: List.from(peerIds),
     );
@@ -317,6 +323,7 @@ class KexSessionSource extends KexSessionReader {
   final int totalBytes;
 
   KexSessionSource({
+    required super.conversationId,
     required super.sessionId,
     required super.role,
     required super.peerIds,

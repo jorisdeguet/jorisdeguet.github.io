@@ -82,6 +82,7 @@ class KeyPreGenerationService {
     // Créer une session temporaire pour utiliser la logique de génération existante
     // On met des IDs bidons car ils seront remplacés lors de l'utilisation réelle
     final tempSession = KexSessionSource(
+      conversationId: 'placeholder',
       sessionId: sessionId,
       role: KeyExchangeRole.source,
       peerIds: ['placeholder'],

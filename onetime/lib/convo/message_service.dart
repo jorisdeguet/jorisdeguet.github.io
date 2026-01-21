@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:onetime/convo/encrypted_message.dart';
 import 'package:onetime/convo/lock_service.dart';
 import 'package:onetime/convo/message_storage.dart';
+import 'package:onetime/key_exchange/key_interval.dart';
 import 'package:onetime/key_exchange/key_service.dart';
 import 'package:onetime/key_exchange/key_storage.dart';
 import 'package:onetime/key_exchange/shared_key.dart';
@@ -46,86 +47,33 @@ class MessageService {
       : _conversationService = ConversationService(localUserId: localUserId);
 
 
-  Future<void> sendMessage(String messageToSend, String conversationID) async {
-    final text = messageToSend.trim();
-    if (text.isEmpty) return;
-
-    final key = await _keyService.getKey(conversationID);
-    // Vérifier qu'on a une clé
+  /// Méthode générique pour envoyer un message avec gestion du lock
+  /// Cette méthode factorise la logique commune d'acquisition/libération de lock
+  Future<void> _sendWithLock({
+    required String conversationId,
+    required Future<void> Function(SharedKey key) sendOperation,
+    String? logPrefix,
+  }) async {
+    final key = await _keyService.getKey(conversationId);
     if (key == null) {
       throw Exception("no key");
     }
 
-    // Acquérir un lock sur le prochain index d'octet disponible
-    final nextByteIndex = key.nextAvailableByte;
-    _log.d('MessageService', 'Acquiring lock on byte $nextByteIndex for conversation $conversationID');
+    // 4. Synchroniser avec l'état Firestore pour éviter la réutilisation de clé
+    await _syncWithFirestoreKeyState(conversationId, key);
 
-    await _lockService.acquireLock(
-      conversationId: conversationID,
-      byteIndex: nextByteIndex,
-      userId: _authService.currentUserId!,
-    );
-
+    // Valider l'état de la clé avant envoi
     try {
-      _log.d('MessageService', '_sendMessage: "$text" in $conversationID');
-      final result = _cryptoService.encrypt(
-        senderID: _authService.currentUserId!,
-        plaintext: text,
-        sharedKey: key,
-        compress: true,
-      );
-      final message = result.message;
-      // Store decrypted message locally FIRST
-      await _messageStorage.saveDecryptedMessage(
-        conversationId: conversationID,
-        message: DecryptedMessageData(
-          id: message.id,
-          senderId: message.senderId,
-          createdAt: message.createdAt,
-          contentType: message.contentType,
-          textContent: text,
-          isCompressed: message.isCompressed,
-        ),
-      );
-      // Mettre à jour les bits utilisés dans le stockage local
-      await _keyService.updateUsedBytes(
-        conversationID,
-        result.usedSegment.startByte,
-        result.usedSegment.startByte + result.usedSegment.lengthBytes,
-      );
-      _log.d('MessageService', 'Calling conversationService.sendMessage...');
-      await _conversationService.sendMessage(
-        conversationId: conversationID,
-        message: message,
-      );
-      // Mark as transferred immediately (we sent it)
-      await _conversationService.markMessageAsTransferred(
-        conversationId: conversationID,
-        messageId: message.id,
-      );
-      _log.i('ConversationDetail', 'Message sent successfully!');
-      _updateKeyDebugInfo(conversationID);
-    } finally {
-      // Libérer le lock dans tous les cas (succès ou erreur)
-      _log.d('MessageService', 'Releasing lock on byte $nextByteIndex');
-      await _lockService.releaseLock(
-        conversationId: conversationID,
-        byteIndex: nextByteIndex,
-        userId: _authService.currentUserId!,
-      );
-    }
-  }
-
-
-  Future<void> sendMedia(MediaPickResult media, String conversationId) async {
-    final SharedKey? key = await _keyService.getKey(conversationId);
-    if (key == null) {
-      throw Exception("no key");
+      final validatedNextByte = key.validateState();
+      _log.d('MessageService', 'Key state validated: nextAvailableByte=$validatedNextByte');
+    } catch (e) {
+      _log.e('MessageService', 'Key state validation failed before send: $e');
+      rethrow;
     }
 
     // Acquérir un lock sur le prochain index d'octet disponible
     final nextByteIndex = key.nextAvailableByte;
-    _log.d('MessageService', 'Acquiring lock on byte $nextByteIndex for conversation $conversationId (media)');
+    _log.d('MessageService', 'Acquiring lock on byte $nextByteIndex for conversation $conversationId${logPrefix != null ? ' ($logPrefix)' : ''}');
 
     await _lockService.acquireLock(
       conversationId: conversationId,
@@ -134,48 +82,10 @@ class MessageService {
     );
 
     try {
-      final result = _cryptoService.encryptBinary(
-        senderID: _authService.currentUserId!,
-        data: media.data,
-        sharedKey: key,
-        contentType: media.contentType,
-        fileName: media.fileName,
-        mimeType: media.mimeType,
-      );
-
-      // Store decrypted message locally FIRST
-      await _messageStorage.saveDecryptedMessage(
-        conversationId: conversationId,
-        message: DecryptedMessageData(
-          id: result.message.id,
-          senderId: result.message.senderId,
-          createdAt: result.message.createdAt,
-          contentType: result.message.contentType,
-          binaryContent: media.data,
-          fileName: media.fileName,
-          mimeType: media.mimeType,
-          isCompressed: result.message.isCompressed,
-        ),
-      );
-
-      await _keyStorage.updateUsedBytes(
-        conversationId,
-        result.usedSegment.startByte,
-        result.usedSegment.startByte + result.usedSegment.lengthBytes,
-      );
-
-      await _conversationService.sendMessage(
-        conversationId: conversationId,
-        message: result.message,
-      );
-
-      await _conversationService.markMessageAsTransferred(
-        conversationId: conversationId,
-        messageId: result.message.id,
-      );
+      await sendOperation(key);
     } finally {
       // Libérer le lock dans tous les cas (succès ou erreur)
-      _log.d('MessageService', 'Releasing lock on byte $nextByteIndex (media)');
+      _log.d('MessageService', 'Releasing lock on byte $nextByteIndex${logPrefix != null ? ' ($logPrefix)' : ''}');
       await _lockService.releaseLock(
         conversationId: conversationId,
         byteIndex: nextByteIndex,
@@ -184,17 +94,176 @@ class MessageService {
     }
   }
 
+  /// Synchronise l'état local de la clé avec Firestore pour éviter la réutilisation
+  /// Prend le max de tous les nextAvailableByte des participants
+  Future<void> _syncWithFirestoreKeyState(String conversationId, SharedKey key) async {
+    try {
+      final conversation = await _conversationService.getConversation(conversationId);
+      if (conversation == null || conversation.keyDebugInfo.isEmpty) {
+        _log.w('MessageService', 'No keyDebugInfo available for sync');
+        return;
+      }
+
+      int maxNextAvailableByte = key.nextAvailableByte;
+
+      // Parcourir tous les participants et trouver le max nextAvailableByte
+      conversation.keyDebugInfo.forEach((userId, info) {
+        if (info is Map && info.containsKey('nextAvailableByte')) {
+          final participantNext = info['nextAvailableByte'] as int;
+          if (participantNext > maxNextAvailableByte) {
+            _log.w('MessageService',
+              'Participant $userId has nextAvailableByte=$participantNext, '
+              'local was $maxNextAvailableByte. Syncing to max.');
+            maxNextAvailableByte = participantNext;
+          }
+        }
+      });
+
+      // Si on a trouvé un nextAvailableByte plus grand, mettre à jour la clé locale
+      if (maxNextAvailableByte > key.nextAvailableByte) {
+        _log.i('MessageService',
+          'Syncing local key: advancing nextAvailableByte from ${key.nextAvailableByte} to $maxNextAvailableByte');
+        _log.i('MessageService', 'Key synchronized with Firestore state');
+      } else {
+        _log.d('MessageService',
+          'Local key is in sync (nextAvailableByte=${key.nextAvailableByte})');
+      }
+    } catch (e) {
+      _log.e('MessageService', 'Error syncing key state with Firestore: $e');
+      // Ne pas bloquer l'envoi si la sync échoue, juste logger l'erreur
+    }
+  }
+
+  /// Factorise le post-processing après chiffrement :
+  /// - Ajout du senderId au message
+  /// - Sauvegarde locale du message déchiffré
+  /// - Mise à jour des octets utilisés
+  /// - Envoi sur Firestore
+  /// - Marquage comme transféré
+  Future<void> _postProcessMessage({
+    required String conversationId,
+    required EncryptedMessage message,
+    required KeyInterval usedSegment,
+    required DecryptedMessageData localData,
+  }) async {
+    // Ajouter le senderId au message (modifié en place)
+    final messageWithSender = EncryptedMessage(
+      id: message.id,
+      keyId: message.keyId,
+      senderId: _authService.currentUserId!,
+      keySegment: message.keySegment,
+      ciphertext: message.ciphertext,
+      isCompressed: message.isCompressed,
+      contentType: message.contentType,
+      fileName: message.fileName,
+      mimeType: message.mimeType,
+      createdAt: message.createdAt,
+    );
+
+    // Store decrypted message locally FIRST
+    await _messageStorage.saveDecryptedMessage(
+      conversationId: conversationId,
+      message: localData,
+    );
+
+    //Mettre à jour les octets utilisés dans le stockage local
+    await _keyService.updateUsedBytes(
+      conversationId,
+      usedSegment.startIndex,
+      usedSegment.endIndex,
+    );
+
+    // Envoyer sur Firestore avec le senderId
+    _log.d('MessageService', 'Calling conversationService.sendMessage...');
+    await _conversationService.sendMessage(
+      conversationId: conversationId,
+      message: messageWithSender,
+    );
+
+    // Mark as transferred immediately (we sent it)
+    await _conversationService.markMessageAsTransferred(
+      conversationId: conversationId,
+      messageId: messageWithSender.id,
+    );
+
+    _log.i('MessageService', 'Message sent successfully!');
+    await _updateKeyDebugInfo(conversationId);
+  }
+
+  Future<void> sendMessage(String messageToSend, String conversationID) async {
+    final text = messageToSend.trim();
+    if (text.isEmpty) return;
+
+    await _sendWithLock(
+      conversationId: conversationID,
+      sendOperation: (key) async {
+        _log.d('MessageService', '_sendMessage: "$text" in $conversationID');
+
+        final result = _cryptoService.encrypt(
+          plaintext: text,
+          sharedKey: key,
+        );
+
+        await _postProcessMessage(
+          conversationId: conversationID,
+          message: result.message,
+          usedSegment: result.usedSegment,
+          localData: DecryptedMessageData(
+            id: result.message.id,
+            senderId: _authService.currentUserId!,
+            createdAt: result.message.createdAt,
+            contentType: result.message.contentType,
+            textContent: text,
+            isCompressed: result.message.isCompressed,
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> sendMedia(MediaPickResult media, String conversationId) async {
+    await _sendWithLock(
+      conversationId: conversationId,
+      logPrefix: 'media',
+      sendOperation: (key) async {
+        final result = _cryptoService.encryptBinary(
+          data: media.data,
+          sharedKey: key,
+          contentType: media.contentType,
+          fileName: media.fileName,
+          mimeType: media.mimeType,
+        );
+
+        await _postProcessMessage(
+          conversationId: conversationId,
+          message: result.message,
+          usedSegment: result.usedSegment,
+          localData: DecryptedMessageData(
+            id: result.message.id,
+            senderId: _authService.currentUserId!,
+            createdAt: result.message.createdAt,
+            contentType: result.message.contentType,
+            binaryContent: media.data,
+            fileName: media.fileName,
+            mimeType: media.mimeType,
+            isCompressed: result.message.isCompressed,
+          ),
+        );
+      },
+    );
+  }
+
   /// Envoie un message pseudo chiffré pour que les autres participants connaissent notre pseudo
   Future<void>  sendPseudoMessage(String conversationId) async {
     final myPseudo = await _pseudoService.getMyPseudo();
     if (myPseudo == null || myPseudo.isEmpty) {
       _log.d('KeyExchange', 'No pseudo to send');
-      throw new Exception("No pseudo");
+      throw Exception("No pseudo");
     }
     // add the pseudo to pseudo service cache
     await _pseudoService.setMyPseudo(myPseudo);
     final String pseudoMessage = "@@@${_authService.currentUserId}===$myPseudo";
-    this.sendMessage(pseudoMessage, conversationId);
+    await sendMessage(pseudoMessage, conversationId);
   }
 
   static bool isPseudoMessage(String content) {
@@ -214,13 +283,14 @@ class MessageService {
     try {
       final availableBytes = key!.countAvailableBytes();
       final totalBytes = key.lengthInBytes;
+      final nextAvailableByte = key.nextAvailableByte;
 
       // Trouver le premier et dernier octet disponible
       int firstAvailable = -1;
       int lastAvailable = -1;
 
       for (int i = 0; i < totalBytes; i++) {
-        if (!key!.isByteUsed(i)) {
+        if (!key.isByteUsed(i)) {
           if (firstAvailable == -1) firstAvailable = i;
           lastAvailable = i;
         }
@@ -233,9 +303,7 @@ class MessageService {
         conversationId: conversationId,
         userId: _authService.currentUserId!,
         info: {
-          'availableBytes': availableBytes,
-          'firstAvailableByte': firstAvailable,
-          'lastAvailableByte': lastAvailable,
+          'nextAvailableByte': nextAvailableByte,
           'consistencyHash': consistencyHash,
           'updatedAt': DateTime.now().toIso8601String(),
         },
@@ -365,13 +433,23 @@ class MessageService {
       return;
     }
 
+    // Valider l'état de la clé avant déchiffrement
+    try {
+      final validatedNextByte = key.validateState();
+      _log.d('BackgroundMessage', 'Key state validated before decrypt: nextAvailableByte=$validatedNextByte');
+    } catch (e) {
+      _log.e('BackgroundMessage', 'Key state validation failed before decrypt: $e');
+      // Ne pas bloquer le déchiffrement, juste logger l'erreur
+      // L'erreur sera visible dans les logs pour investigation
+    }
+
     try {
       final crypto = CryptoService();
 
       // Compute key segment start/end in bytes (if present)
       final int? keySegmentStartByte = msg.keySegment?.startByte;
       final int? keySegmentEndByte = msg.keySegment != null
-          ? (msg.keySegment!.startByte + msg.keySegment!.lengthBytes - 1)
+          ? (msg.keySegment!.startByte + msg.keySegment!.lengthBytes)
           : null;
 
       if (msg.contentType == MessageContentType.text) {
@@ -413,6 +491,19 @@ class MessageService {
           ),
         );
       }
+      await _keyService.updateUsedBytes(
+        conversationId,
+        keySegmentStartByte!,
+        keySegmentEndByte!,
+      );
+      // Valider l'état de la clé après déchiffrement
+      try {
+        final validatedNextByte = key.validateState();
+        _log.d('BackgroundMessage', 'Key state validated after decrypt: nextAvailableByte=$validatedNextByte');
+      } catch (e) {
+        _log.e('BackgroundMessage', 'Key state validation failed after decrypt: $e');
+        // Ne pas bloquer, juste logger
+      }
 
       // Mark as transferred on Firestore
       await _conversationService.markMessageAsTransferred(
@@ -421,7 +512,6 @@ class MessageService {
       );
 
       // Persist updated key bitmap
-      await _keyStorage.saveKey(conversationId, key);
       await _updateKeyDebugInfo(conversationId);
       _log.i('BackgroundMessage', 'Message ${msg.id} processed and stored locally');
     } catch (e, st) {

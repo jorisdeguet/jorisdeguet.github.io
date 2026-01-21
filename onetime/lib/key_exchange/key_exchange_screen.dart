@@ -168,6 +168,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       // Créer la session locale avec le MÊME ID que Firestore
       // Et injecter les segments pré-générés si disponibles
       _session = _keyService.createSourceSession(
+        conversationId: widget.existingConversationId!,
         totalBytes: _keySizeBytes,
         peerIds: widget.peerIds,
         sourceId: _currentUserId,
@@ -339,34 +340,14 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     _isFinalizing = true;
 
     try {
-      // Récupérer la session mise à jour pour avoir le conversationId
-      final updatedSession = await _syncService.getSession(_firestoreSession!.id);
-      final conversationId = updatedSession?.conversationId;
 
-      _log.d('KeyExchange', 'Reader: conversationId from session: ${_firestoreSession!.id} $conversationId');
-
-      if (conversationId == null || conversationId.isEmpty) {
-        _log.d('KeyExchange', 'Reader: No conversationId found, waiting...');
-        setState(() => _errorMessage = 'En attente de la création de la conversation par la source...');
-        
-        // Reset flag to allow retry
-        _isFinalizing = false;
-
-        // Réessayer dans 2 secondes
-        Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) {
-            _finalizeExchangeForReader();
-          }
-        });
-        return;
-      }
 
       // Récupérer la conversation existante
       final conversationService = ConversationService(localUserId: _currentUserId);
-      final conversation = await conversationService.getConversation(conversationId);
+      final conversation = await conversationService.getConversation(widget.existingConversationId!);
 
       if (conversation == null) {
-        _log.e('KeyExchange', 'Reader: Conversation not found: $conversationId');
+        _log.e('KeyExchange', 'Reader: Conversation not found: ${widget.existingConversationId!}');
         setState(() => _errorMessage = 'Conversation non trouvée. Réessayez.');
         _isFinalizing = false;
         return;
@@ -683,6 +664,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
         // Créer la session locale reader avec les infos de Firestore
         _session = _keyService.createReaderSession(
+          conversationId: widget.existingConversationId!,
           sessionId: segment.sessionId,
           localPeerId: _currentUserId,
           peerIds: _firestoreSession!.participants,

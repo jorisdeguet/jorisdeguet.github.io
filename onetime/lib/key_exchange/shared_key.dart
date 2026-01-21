@@ -70,6 +70,31 @@ class SharedKey {
     }
   }
 
+  // sanity check function that goes through history and ensures that
+  // all consumed segments are one after the other without gaps
+  // and that nextAvailableByte matches the end of the last consumed segment
+  int validateState() {
+    print("validate" + history.format());
+    int expectedNextByte = startOffset;
+    for (final operation in history.operations) {
+      if (operation.type == KeyOperationType.consumption){
+        if (operation.segment.startByte == expectedNextByte) {// This segment is contiguous
+          expectedNextByte = operation.segment.endByte;
+        } else if (operation.segment.startByte > expectedNextByte) {
+          throw StateError('Gap detected in key consumption history at byte index ${expectedNextByte}');
+        } else {
+          // Overlapping segment, should not happen
+          throw StateError('Overlapping segment detected in key consumption history at byte index ${operation.segment.startByte}');
+        }
+      }
+    }
+    if (expectedNextByte != _nextAvailableByte) {
+      throw StateError('nextAvailableByte mismatch: expected $expectedNextByte but found $_nextAvailableByte');
+    }
+    return expectedNextByte;
+  }
+
+
   /// Public getter for next available byte index
   int get nextAvailableByte => _nextAvailableByte;
 
@@ -122,20 +147,25 @@ class SharedKey {
   /// Marque un intervalle d'octets comme utilisé (endByte exclusive)
   /// En mode allocation linéaire, on avance simplement `_nextAvailableByte`.
   void markBytesAsUsed(int startByte, int endByte) {
+    print("Mark" + history.format());
     if (endByte <= startByte) return;
     final e = min(endByte, startOffset + keyData.length);
-    // Advance nextAvailableByte to cover the newly used end
+    // add a consumption record to history
+    final segment = KeyInterval(
+      conversationId: id,
+      startIndex: startByte,
+      endIndex: e,
+    );
+    history.recordConsumption(
+        segment: segment,
+        reason: "message sending",
+        messageId: "TODO"
+    );
     _nextAvailableByte = max(_nextAvailableByte, e);
     // Clamp
-    _nextAvailableByte = _nextAvailableByte.clamp(startOffset, startOffset + keyData.length);
+    //_nextAvailableByte = _nextAvailableByte.clamp(startOffset, startOffset + keyData.length);
   }
 
-  /// Wrapper compatibilité : marque des bits comme utilisés en arrondissant aux octets couvrants
-  void markBitsAsUsed(int startBit, int endBit) {
-    final startByte = (startBit / 8).floor();
-    final endByte = ((endBit + 7) / 8).floor(); // exclusive
-    markBytesAsUsed(startByte, endByte);
-  }
 
   /// Trouve le prochain segment disponible de la taille demandée en bits (compat)
   /// Cette implémentation force une allocation alignée sur octet.
@@ -151,12 +181,17 @@ class SharedKey {
 
   /// Trouve le prochain segment disponible en octets (allocation linéaire simplifiée)
   /// Retourne tuple (startByte, lengthBytes) ou null si pas assez d'octets.
-  ({int startByte, int lengthBytes})? findAvailableSegmentByBytes(int bytesNeeded) {
+  KeyInterval? findAvailableSegmentByBytes(int bytesNeeded) {
     if (bytesNeeded <= 0) return null;
     final firstFree = max(startOffset, _nextAvailableByte);
     final available = keyData.length - (firstFree - startOffset);
     if (available >= bytesNeeded) {
-      return (startByte: firstFree, lengthBytes: bytesNeeded);
+      // return a new KeyInterval with this id (same as conversation) and the found range
+      return KeyInterval(
+        conversationId: id,
+        startIndex: firstFree,
+        endIndex: firstFree + bytesNeeded,
+      );
     }
     return null;
   }
@@ -175,61 +210,10 @@ class SharedKey {
     return Uint8List.fromList(keyData.sublist(startByte, endByte));
   }
 
-  /// Wrapper compatibilité bit -> octet: extrait des bits (peut être non aligned)
-  Uint8List extractKeyBits(int startBit, int endBit) {
-    if (endBit <= startBit) return Uint8List(0);
-    final startByte = startBit ~/ 8;
-    final endByte = ((endBit + 7) ~/ 8);
-    final bytes = extractKeyBytes(startByte, endByte - startByte);
-
-    // If startBit is byte-aligned and length is multiple of 8, return directly
-    if (startBit % 8 == 0 && ((endBit - startBit) % 8) == 0) {
-      return bytes;
-    }
-
-    // Otherwise, we need to shift bits to pack the bit-range starting at bit 0
-    final bitsNeeded = endBit - startBit;
-    final outBytes = Uint8List((bitsNeeded + 7) ~/ 8);
-    for (int i = 0; i < bitsNeeded; i++) {
-      final sourceBitIndex = startBit + i;
-      final rel = sourceBitIndex - (startByte * 8);
-      final srcByte = bytes[rel ~/ 8];
-      final srcBitOff = rel % 8;
-      final bit = (srcByte >> srcBitOff) & 1;
-      if (bit == 1) {
-        final tgtByteIndex = i ~/ 8;
-        final tgtBitOff = i % 8;
-        outBytes[tgtByteIndex] |= (1 << tgtBitOff);
-      }
-    }
-    return outBytes;
-  }
-
   /// Marque des octets comme consommés (tous les bits des octets sont marqués utilisés)
   void consumeBytes(int startByte, int lengthBytes) {
     if (lengthBytes <= 0) return;
     markBytesAsUsed(startByte, startByte + lengthBytes);
-  }
-
-  /// Consomme un segment de clé spécifié par un KeyInterval.
-  /// Équivalent à consumeBytes(segment.startIndex, segment.length).
-  void consume(KeyInterval segment) {
-    consumeBytes(segment.startIndex, segment.length);
-  }
-
-  /// Alloue et consomme un segment de la taille demandée.
-  /// Retourne le KeyInterval du segment alloué, ou null si pas assez d'espace.
-  KeyInterval? allocateAndConsume(int bytesNeeded) {
-    final seg = findAvailableSegmentByBytes(bytesNeeded);
-    if (seg == null) return null;
-
-    final interval = KeyInterval(
-      conversationId: id,
-      startIndex: seg.startByte,
-      endIndex: seg.startByte + seg.lengthBytes,
-    );
-    consume(interval);
-    return interval;
   }
 
   /// Compte les octets disponibles dans toute la clé (allocation linéaire)

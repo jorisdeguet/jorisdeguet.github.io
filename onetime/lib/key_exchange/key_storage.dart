@@ -170,26 +170,12 @@ class KeyStorage {
          return;
        }
        key.markBytesAsUsed(startByte, endByte);
-       // Record consumption in history
-       try {
-         final seg = KeyInterval(conversationId: conversationId, startIndex: startByte, endIndex: endByte);
-         key.history.recordConsumption(segment: seg, reason: 'local-consume');
-       } catch (e) {
-         _log.w('KeyStorage', 'Could not record consumption in history: $e');
-       }
 
        await saveKey(conversationId, key);
        _log.i('KeyStorage', 'updateUsedBytes: SUCCESS');
      } catch (e) {
        _log.e('KeyStorage', 'updateUsedBytes ERROR: $e');
      }
-   }
-
-   /// Wrapper de compatibilité: Met à jour les bits utilisés (converti en octets)
-   Future<void> updateUsedBits(String conversationId, int startBit, int endBit) async {
-     final startByte = (startBit / 8).floor();
-     final endByte = ((endBit + 7) / 8).floor();
-     return updateUsedBytes(conversationId, startByte, endByte);
    }
 
    /// Supprime une clé

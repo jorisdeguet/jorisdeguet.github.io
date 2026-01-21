@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:onetime/convo/encrypted_message.dart';
-import 'package:onetime/signin/auth_service.dart';
+import 'package:onetime/key_exchange/key_service.dart';
 
 import '../convo/compression_service.dart';
 import '../key_exchange/key_interval.dart';
@@ -24,66 +24,18 @@ class CryptoService {
   /// 
   /// Retourne le message chiffré et l'intervalle utilisé pour mise à jour
   ({EncryptedMessage message, KeyInterval usedSegment}) encrypt({
-    required String senderID,
     required String plaintext,
     required SharedKey sharedKey,
-    bool compress = true,
   }) {
-    // Préparer les données à chiffrer
-    Uint8List dataToEncrypt;
-    bool isCompressed = false;
-    
-    if (compress) {
-      final compressed = _compressionService.smartCompress(plaintext);
-      dataToEncrypt = compressed.data;
-      isCompressed = compressed.isCompressed;
-    } else {
-      dataToEncrypt = Uint8List.fromList(utf8.encode(plaintext));
-    }
-    
-    final bytesNeeded = dataToEncrypt.length;
+    // Préparer les données à chiffrer avec compression
+    final compressed = _compressionService.smartCompress(plaintext);
 
-    // Trouver un segment disponible en octets
-    final seg = sharedKey.findAvailableSegmentByBytes(bytesNeeded);
-    if (seg == null) {
-      throw InsufficientKeyException(
-        'Not enough key bytes available. Needed: $bytesNeeded bytes',
-      );
-    }
-
-    // Extract key bytes directly
-    final keyBytes = sharedKey.extractKeyBytes(seg.startByte, seg.lengthBytes).sublist(0, bytesNeeded);
-
-    // XOR des données avec la clé
-    final ciphertext = _xor(dataToEncrypt, keyBytes);
-
-    // Marquer les octets comme utilisés
-    sharedKey.markBytesAsUsed(seg.startByte, seg.startByte + seg.lengthBytes);
-
-    // Compute byte-aligned metadata for message segment
-    final startByte = seg.startByte;
-    final lengthBytes = seg.lengthBytes;
-
-    // Créer le message chiffré
-    final encryptedMessage = EncryptedMessage(
-      id: _generateMessageId(),
-      keyId: sharedKey.id,
-      senderId: senderID,
-      // keySegment now uses bytes: (startByte, lengthBytes)
-      keySegment: (startByte: startByte, lengthBytes: lengthBytes),
-      ciphertext: ciphertext,
-      isCompressed: isCompressed,
+    return _encryptData(
+      dataToEncrypt: compressed.data,
+      sharedKey: sharedKey,
+      isCompressed: compressed.isCompressed,
       contentType: MessageContentType.text,
     );
-
-    // Créer l'intervalle utilisé pour tracking
-    final usedSegment = KeyInterval(
-      conversationId: sharedKey.id,
-      startIndex: startByte,
-      endIndex: startByte + lengthBytes,
-    );
-
-    return (message: encryptedMessage, usedSegment: usedSegment);
   }
 
   /// Chiffre des données binaires (images, fichiers) avec One-Time Pad.
@@ -97,7 +49,6 @@ class CryptoService {
   ///
   /// Retourne le message chiffré et l'intervalle utilisé pour mise à jour
   ({EncryptedMessage message, KeyInterval usedSegment}) encryptBinary({
-    required String senderID,
     required Uint8List data,
     required SharedKey sharedKey,
     required MessageContentType contentType,
@@ -105,48 +56,14 @@ class CryptoService {
     String? mimeType,
     bool deleteAfterRead = false,
   }) {
-    final bytesNeeded = data.length;
-
-    // Find contiguous bytes segment
-    final seg = sharedKey.findAvailableSegmentByBytes(bytesNeeded);
-    if (seg == null) {
-      throw InsufficientKeyException('Not enough key bytes available. Needed: $bytesNeeded bytes');
-    }
-
-    final keyBytes = sharedKey.extractKeyBytes(seg.startByte, seg.lengthBytes).sublist(0, bytesNeeded);
-
-    // XOR des données avec la clé
-    final ciphertext = _xor(data, keyBytes);
-
-    // Marquer les octets comme utilisés
-    sharedKey.markBytesAsUsed(seg.startByte, seg.startByte + seg.lengthBytes);
-
-    // Compute byte-aligned metadata for message segment
-    final startByte = seg.startByte;
-    final lengthBytes = seg.lengthBytes;
-
-    // Créer le message chiffré
-    final encryptedMessage = EncryptedMessage(
-      id: _generateMessageId(),
-      keyId: sharedKey.id,
-      senderId: senderID,
-      // keySegment now uses bytes: (startByte, lengthBytes)
-      keySegment: (startByte: startByte, lengthBytes: lengthBytes),
-      ciphertext: ciphertext,
+    return _encryptData(
+      dataToEncrypt: data,
+      sharedKey: sharedKey,
       isCompressed: false,
       contentType: contentType,
       fileName: fileName,
       mimeType: mimeType,
     );
-    
-    // Créer l'intervalle utilisé pour tracking
-    final usedSegment = KeyInterval(
-      conversationId: sharedKey.id,
-      startIndex: startByte,
-      endIndex: startByte + lengthBytes,
-    );
-    
-    return (message: encryptedMessage, usedSegment: usedSegment);
   }
 
   /// Déchiffre un message binaire et retourne les données brutes
@@ -155,28 +72,11 @@ class CryptoService {
     required SharedKey sharedKey,
     bool markAsUsed = true,
   }) {
-    // Vérifier que la clé correspond
-    if (encryptedMessage.keyId != sharedKey.id) {
-      throw ArgumentError('Key ID mismatch');
-    }
-
-    // Extraire le segment unique
-    if (encryptedMessage.keySegment == null) {
-      // Not encrypted
-      return encryptedMessage.ciphertext;
-    }
-    final seg = encryptedMessage.keySegment!;
-    final keyBytes = sharedKey.extractKeyBytes(seg.startByte, seg.lengthBytes);
-
-    // XOR pour déchiffrer
-    final decryptedData = _xor(encryptedMessage.ciphertext, keyBytes);
-
-    // Marquer comme utilisé si demandé
-    if (markAsUsed) {
-      sharedKey.markBytesAsUsed(seg.startByte, seg.startByte + seg.lengthBytes);
-    }
-
-    return decryptedData;
+    return _decryptData(
+      encryptedMessage: encryptedMessage,
+      sharedKey: sharedKey,
+      markAsUsed: markAsUsed,
+    );
   }
 
   /// Déchiffre un message.
@@ -189,72 +89,24 @@ class CryptoService {
     required SharedKey sharedKey,
     bool markAsUsed = true,
   }) {
-    // Vérifier que la clé correspond
-    if (encryptedMessage.keyId != sharedKey.id) {
-      throw ArgumentError('Key ID mismatch');
-    }
-    
-    // Extract key bytes from the single segment
-    if (encryptedMessage.keySegment == null) {
+    // Déchiffrer les données brutes
+    final decryptedData = _decryptData(
+      encryptedMessage: encryptedMessage,
+      sharedKey: sharedKey,
+      markAsUsed: markAsUsed,
+    );
+
+    // Retourner vide si pas de données
+    if (decryptedData.isEmpty) {
       return '';
     }
-    final seg = encryptedMessage.keySegment!;
-    final keyBytes = sharedKey.extractKeyBytes(seg.startByte, seg.lengthBytes);
-
-    // XOR pour déchiffrer
-    final decryptedData = _xor(encryptedMessage.ciphertext, keyBytes);
 
     // Décompresser si nécessaire
-    String result;
     if (encryptedMessage.isCompressed) {
-      result = _compressionService.smartDecompress(decryptedData, true);
+      return _compressionService.smartDecompress(decryptedData, true);
     } else {
-      result = utf8.decode(decryptedData);
+      return utf8.decode(decryptedData);
     }
-    
-    // Marquer comme utilisé SEULEMENT si le déchiffrement a réussi
-    if (markAsUsed) {
-      sharedKey.markBytesAsUsed(seg.startByte, seg.startByte + seg.lengthBytes);
-    }
-    
-    return result;
-  }
-
-  /// Vérifie si un message peut être déchiffré sans utiliser la clé.
-  /// 
-  /// Retourne true si tous les segments nécessaires sont disponibles.
-  bool canDecrypt(EncryptedMessage message, SharedKey sharedKey) {
-    if (message.keyId != sharedKey.id) return false;
-    final seg = message.keySegment;
-    if (seg == null) return true;
-    for (int i = seg.startByte; i < seg.startByte + seg.lengthBytes; i++) {
-      if (i >= sharedKey.lengthInBytes) return false;
-    }
-    return true;
-  }
-
-  /// Efface les octets de clé utilisés pour un message (mode ultra-secure).
-  ///
-  /// Après cet appel, le message ne pourra plus jamais être déchiffré.
-  void secureDelete(EncryptedMessage message, SharedKey sharedKey) {
-    final seg = message.keySegment;
-    if (seg != null) {
-      for (int i = seg.startByte; i < seg.startByte + seg.lengthBytes; i++) {
-        // Mettre à zéro l'octet
-        sharedKey.keyData[i] = 0;
-      }
-    }
-  }
-
-  /// Calcule le nombre d'octets nécessaires pour un message.
-  ///
-  /// [compress] - Si true, calcule avec compression
-  int calculateBytesNeeded(String plaintext, {bool compress = true}) {
-    if (compress) {
-      final compressed = _compressionService.smartCompress(plaintext);
-      return compressed.data.length;
-    }
-    return utf8.encode(plaintext).length;
   }
 
   /// XOR de deux tableaux d'octets
@@ -266,11 +118,77 @@ class CryptoService {
     return result;
   }
 
-  // TODO change id for message with interval
-  String _generateMessageId() {
-    String myID = AuthService().currentUserId!;
-    return 'msg_${DateTime.now().millisecondsSinceEpoch}_$myID';
+  /// Méthode générique de chiffrement - factorise la logique commune
+  /// Retourne le message chiffré et le segment utilisé
+  ({EncryptedMessage message, KeyInterval usedSegment}) _encryptData({
+    required Uint8List dataToEncrypt,
+    required SharedKey sharedKey,
+    required bool isCompressed,
+    required MessageContentType contentType,
+    String? fileName,
+    String? mimeType,
+  }) {
+    final bytesNeeded = dataToEncrypt.length;
+
+    // Trouver un segment disponible en octets
+    final seg = sharedKey.findAvailableSegmentByBytes(bytesNeeded);
+    if (seg == null) {
+      throw InsufficientKeyException(
+        'Not enough key bytes available. Needed: $bytesNeeded bytes',
+      );
+    }
+    // Extraire les octets de clé
+    final keyBytes = sharedKey.extractKeyBytes(seg.startByte, seg.lengthBytes);
+    // XOR des données avec la clé
+    final ciphertext = _xor(dataToEncrypt, keyBytes);
+    // Créer le message chiffré
+    final encryptedMessage = EncryptedMessage(
+      id: '${seg.startByte}-${seg.endByte}',
+      keyId: sharedKey.id,
+      senderId: '', // Sera remplacé dans _postProcessMessage
+      keySegment: (startByte: seg.startByte, lengthBytes: seg.lengthBytes),
+      ciphertext: ciphertext,
+      isCompressed: isCompressed,
+      contentType: contentType,
+      fileName: fileName,
+      mimeType: mimeType,
+    );
+
+    return (message: encryptedMessage, usedSegment: seg);
   }
+
+  /// Méthode générique de déchiffrement - factorise la logique commune
+  /// Retourne les données déchiffrées brutes
+  Uint8List _decryptData({
+    required EncryptedMessage encryptedMessage,
+    required SharedKey sharedKey,
+    required bool markAsUsed,
+  }) {
+    // Vérifier que la clé correspond
+    if (encryptedMessage.keyId != sharedKey.id) {
+      throw ArgumentError('Key ID mismatch');
+    }
+
+    // Extraire le segment
+    final seg = encryptedMessage.keySegment;
+    if (seg == null) {
+      // Pas chiffré
+      return encryptedMessage.ciphertext;
+    }
+
+    // Extraire les octets de clé
+    final keyBytes = sharedKey.extractKeyBytes(seg.startByte, seg.lengthBytes);
+
+    // XOR pour déchiffrer
+    final decryptedData = _xor(encryptedMessage.ciphertext, keyBytes);
+    return decryptedData;
+  }
+
+  // // TODO change id for message with interval
+  // String _generateMessageId() {
+  //   String myID = AuthService().currentUserId!;
+  //   return 'msg_${DateTime.now().millisecondsSinceEpoch}_$myID';
+  // }
 }
 
 /// Exception levée quand la clé n'a pas assez de bits disponibles
