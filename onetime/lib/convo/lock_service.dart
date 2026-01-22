@@ -19,33 +19,37 @@ class LockService {
   /// Durée maximale d'attente pour acquérir un lock (en millisecondes)
   static const List<int> _retryDelaysMs = [1000, 2000, 4000, 10000];
 
-  /// Collection des locks pour une conversation
-  CollectionReference<Map<String, dynamic>> _locksRef(String conversationId) =>
+  /// ID du lock global pour la conversation (constant pour toutes les tentatives)
+  static const String _globalLockId = 'conversation_lock';
+
+  /// Document du lock global pour une conversation
+  DocumentReference<Map<String, dynamic>> _lockRef(String conversationId) =>
       _firestore.collection('conversations')
           .doc(conversationId)
-          .collection('locks');
+          .collection('locks')
+          .doc(_globalLockId);
 
-  /// Acquiert un lock sur le prochain index d'octet disponible
+  /// Acquiert un lock global sur la conversation
   ///
   /// Stratégie de retry avec délais exponentiels : 1s, 2s, 4s, 10s
   /// Lance une [LockAcquisitionException] si le lock ne peut pas être acquis
+  ///
+  /// Retourne le byteIndex qui était dans le lock (pour information)
   Future<ConversationLock> acquireLock({
     required String conversationId,
-    required int byteIndex,
     required String userId,
   }) async {
-    _log.d('LockService', 'Attempting to acquire lock on byte $byteIndex for conversation $conversationId');
+    _log.d('LockService', 'Attempting to acquire GLOBAL lock for conversation $conversationId');
 
     for (int attempt = 0; attempt < _retryDelaysMs.length; attempt++) {
       try {
         final lock = await _tryAcquireLock(
           conversationId: conversationId,
-          byteIndex: byteIndex,
           userId: userId,
         );
 
         if (lock != null) {
-          _log.i('LockService', 'Lock acquired on byte $byteIndex (attempt ${attempt + 1})');
+          _log.i('LockService', 'Global lock acquired for conversation $conversationId (attempt ${attempt + 1})');
           return lock;
         }
 
@@ -69,15 +73,13 @@ class LockService {
     );
   }
 
-  /// Tente d'acquérir un lock (une seule tentative)
+  /// Tente d'acquérir le lock global (une seule tentative)
   /// Retourne le lock si acquis, null sinon
   Future<ConversationLock?> _tryAcquireLock({
     required String conversationId,
-    required int byteIndex,
     required String userId,
   }) async {
-    final lockDocId = byteIndex.toString();
-    final lockDocRef = _locksRef(conversationId).doc(lockDocId);
+    final lockDocRef = _lockRef(conversationId);
 
     try {
       // Utiliser une transaction pour garantir l'atomicité
@@ -87,29 +89,26 @@ class LockService {
         if (doc.exists) {
           // Un lock existe déjà
           final existingLock = ConversationLock.fromFirestore(
-            byteIndex,
             doc.data()!,
           );
 
           // Vérifier si le lock est expiré
           if (existingLock.isExpired()) {
-            _log.w('LockService', 'Lock on byte $byteIndex expired, stealing it');
+            _log.w('LockService', 'Global lock expired (was held by ${existingLock.lockerId}), stealing it');
             // Le lock est expiré, on peut le prendre
             final newLock = ConversationLock(
-              byteIndex: byteIndex,
               lockerId: userId,
             );
             transaction.set(lockDocRef, newLock.toFirestore());
             return newLock;
           } else {
             // Le lock est toujours valide
-            _log.d('LockService', 'Lock on byte $byteIndex held by ${existingLock.lockerId}');
+            _log.d('LockService', 'Global lock held by ${existingLock.lockerId}');
             return null;
           }
         } else {
           // Aucun lock n'existe, on peut le créer
           final newLock = ConversationLock(
-            byteIndex: byteIndex,
             lockerId: userId,
           );
           transaction.set(lockDocRef, newLock.toFirestore());
@@ -122,33 +121,32 @@ class LockService {
     }
   }
 
-  /// Libère un lock
+  /// Libère le lock global
   Future<void> releaseLock({
     required String conversationId,
     required int byteIndex,
     required String userId,
   }) async {
-    _log.d('LockService', 'Releasing lock on byte $byteIndex for conversation $conversationId');
+    _log.d('LockService', 'Releasing GLOBAL lock for conversation $conversationId');
 
-    final lockDocId = byteIndex.toString();
-    final lockDocRef = _locksRef(conversationId).doc(lockDocId);
+    final lockDocRef = _lockRef(conversationId);
 
     try {
       await _firestore.runTransaction((transaction) async {
         final doc = await transaction.get(lockDocRef);
 
         if (doc.exists) {
-          final lock = ConversationLock.fromFirestore(byteIndex, doc.data()!);
+          final lock = ConversationLock.fromFirestore(doc.data()!);
 
           // Vérifier que c'est bien nous qui détenons le lock
           if (lock.lockerId == userId) {
             transaction.delete(lockDocRef);
-            _log.i('LockService', 'Lock released on byte $byteIndex');
+            _log.i('LockService', 'Global lock released for conversation $conversationId');
           } else {
-            _log.w('LockService', 'Cannot release lock on byte $byteIndex: owned by ${lock.lockerId}, not $userId');
+            _log.w('LockService', 'Cannot release lock: owned by ${lock.lockerId}, not $userId');
           }
         } else {
-          _log.w('LockService', 'Lock on byte $byteIndex does not exist, nothing to release');
+          _log.w('LockService', 'Lock does not exist, nothing to release');
         }
       });
     } catch (e) {
@@ -157,23 +155,23 @@ class LockService {
     }
   }
 
-  /// Nettoie tous les locks expirés d'une conversation
+  /// Nettoie le lock expiré d'une conversation
   /// Utile pour le nettoyage périodique
   Future<void> cleanupExpiredLocks(String conversationId) async {
-    _log.d('LockService', 'Cleaning up expired locks for conversation $conversationId');
+    _log.d('LockService', 'Cleaning up expired lock for conversation $conversationId');
 
     try {
-      final snapshot = await _locksRef(conversationId).get();
+      final lockDocRef = _lockRef(conversationId);
+      final doc = await lockDocRef.get();
 
-      for (final doc in snapshot.docs) {
+      if (doc.exists) {
         final lock = ConversationLock.fromFirestore(
-          int.parse(doc.id),
-          doc.data(),
+          doc.data()!,
         );
 
         if (lock.isExpired()) {
-          await doc.reference.delete();
-          _log.d('LockService', 'Deleted expired lock on byte ${lock.byteIndex}');
+          await lockDocRef.delete();
+          _log.d('LockService', 'Deleted expired lock (was held by ${lock.lockerId})');
         }
       }
 

@@ -1,8 +1,6 @@
 /// Représente un lock sur un index d'octet dans une conversation.
 /// Le lock est identifié par l'index d'octet qu'il verrouille.
 class ConversationLock {
-  /// L'index d'octet verrouillé (utilisé comme ID du document)
-  final int byteIndex;
 
   /// ID de l'utilisateur qui détient le lock
   final String lockerId;
@@ -11,7 +9,6 @@ class ConversationLock {
   final DateTime createdAt;
 
   ConversationLock({
-    required this.byteIndex,
     required this.lockerId,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
@@ -32,9 +29,8 @@ class ConversationLock {
   }
 
   /// Désérialise depuis Firestore
-  factory ConversationLock.fromFirestore(int byteIndex, Map<String, dynamic> data) {
+  factory ConversationLock.fromFirestore(Map<String, dynamic> data) {
     return ConversationLock(
-      byteIndex: byteIndex,
       lockerId: data['lockerId'] as String,
       createdAt: DateTime.parse(data['createdAt'] as String),
     );

@@ -59,33 +59,43 @@ class MessageService {
       throw Exception("no key");
     }
 
-    // 4. Synchroniser avec l'état Firestore pour éviter la réutilisation de clé
-    await _syncWithFirestoreKeyState(conversationId, key);
+    await _lockService.acquireLock(
+      conversationId: conversationId,
+      userId: _authService.currentUserId!,
+    );
 
-    // Valider l'état de la clé avant envoi
+    // ÉTAPE 1: Synchroniser tous les messages Firestore pour avoir les intervalles les plus récents
+    _log.d('MessageService', 'Syncing all Firestore messages before acquiring lock');
+    await rescanConversation(conversationId);
+
+    // Recharger la clé après la synchronisation (elle a pu être mise à jour)
+    final updatedKey = await _keyService.getKey(conversationId);
+    if (updatedKey == null) {
+      throw Exception("key disappeared after sync");
+    }
+
+    // ÉTAPE 2: Synchroniser avec l'état Firestore pour éviter la réutilisation de clé
+    await _syncWithFirestoreKeyState(conversationId, updatedKey);
+
+    // ÉTAPE 3: Valider l'état de la clé avant envoi
     try {
-      final validatedNextByte = key.validateState();
+      final validatedNextByte = updatedKey.validateState();
       _log.d('MessageService', 'Key state validated: nextAvailableByte=$validatedNextByte');
     } catch (e) {
       _log.e('MessageService', 'Key state validation failed before send: $e');
       rethrow;
     }
 
-    // Acquérir un lock sur le prochain index d'octet disponible
-    final nextByteIndex = key.nextAvailableByte;
-    _log.d('MessageService', 'Acquiring lock on byte $nextByteIndex for conversation $conversationId${logPrefix != null ? ' ($logPrefix)' : ''}');
-
-    await _lockService.acquireLock(
-      conversationId: conversationId,
-      byteIndex: nextByteIndex,
-      userId: _authService.currentUserId!,
-    );
+    // ÉTAPE 4: Acquérir un lock GLOBAL sur la conversation
+    final nextByteIndex = updatedKey.nextAvailableByte;
+    _log.d('MessageService', 'Acquiring GLOBAL lock for conversation $conversationId (nextByte=$nextByteIndex)${logPrefix != null ? ' ($logPrefix)' : ''}');
 
     try {
-      await sendOperation(key);
+      // ÉTAPE 5: Exécuter l'opération d'envoi
+      await sendOperation(updatedKey);
     } finally {
-      // Libérer le lock dans tous les cas (succès ou erreur)
-      _log.d('MessageService', 'Releasing lock on byte $nextByteIndex${logPrefix != null ? ' ($logPrefix)' : ''}');
+      // ÉTAPE 6: Libérer le lock dans tous les cas (succès ou erreur)
+      _log.d('MessageService', 'Releasing GLOBAL lock for conversation $conversationId${logPrefix != null ? ' ($logPrefix)' : ''}');
       await _lockService.releaseLock(
         conversationId: conversationId,
         byteIndex: nextByteIndex,
