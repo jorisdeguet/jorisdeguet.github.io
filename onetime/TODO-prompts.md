@@ -19,9 +19,3 @@
 - s'assurer d'avoir idempotence sur tout
 - merger les services comme key_service qui regroupe stockage et manipulation des clés
 - centraliser les service dans des singletons gérés par getit 
-- revoir le truc d'encryption à l'envoi
-  1. calculer la taille en octet compression_service
-  2. réserver le segment sur la clé dans le firestore en obtenant un lock
-  3. encrypter le message
-  4. le déposer sur firestore
-  5. mettre à jour 
