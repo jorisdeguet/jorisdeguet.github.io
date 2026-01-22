@@ -79,7 +79,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   final AuthService _authService = AuthService();
   final AppLogger _log = AppLogger();
   final MediaService _mediaService = MediaService();
-  final MessageStorageService _messageStorage = MessageStorageService();
   final PseudoService _pseudoService = PseudoService();
   final MessageService _messageService = MessageService.fromCurrentUserID();
   late final FirestoreService _conversationService;
@@ -137,7 +136,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
 
   /// Check if user has already sent their pseudo in this conversation
   Future<void> _checkIfPseudoSent() async {
-    final messages = await _messageStorage.getConversationMessages(widget.conversation.id);
+    final messages = await _messageService.getConversationMessages(widget.conversation.id);
 
     // Check if any message from current user is a pseudo message
     for (final msg in messages) {
@@ -154,7 +153,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     }
   }
 
-  /// Charge les noms d'affichage des participants
   Future<void> _loadDisplayNames() async {
     _displayNames = await _pseudoService.getDisplayNames(widget.conversation.peerIds);
     if (mounted) {
@@ -164,17 +162,9 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     }
   }
 
-
-
-  /// Combine local decrypted messages with Firestore messages
   Stream<List<_DisplayMessage>> _getCombinedMessagesStream() async* {
-    // Now the UI only listens to local decrypted messages which are produced
-    // by the BackgroundMessageService. This decouples decryption from UI.
     try {
-      // Rely on MessageStorageService.watchConversationMessages to emit an
-      // initial snapshot per-subscriber. Convert each emitted list into
-      // _DisplayMessage and yield it.
-      await for (final localMessages in _messageStorage.watchConversationMessages(widget.conversation.id)) {
+      await for (final localMessages in _messageService.watchConversationMessages(widget.conversation.id)) {
         final combined = <_DisplayMessage>[];
         for (final local in localMessages) {
           combined.add(_DisplayMessage.fromLocal(local));
@@ -231,7 +221,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
     );
 
     if (shouldDeleteLocal == true) {
-      await _messageStorage.deleteConversationMessages(widget.conversation.id);
+      await _messageService.deleteConversationMessages(widget.conversation.id);
     }
 
     if (mounted) {

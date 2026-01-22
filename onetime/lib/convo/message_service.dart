@@ -27,7 +27,7 @@ class MessageService {
   final KeyService _keyService = KeyService();
   final CryptoService _cryptoService = CryptoService();
   final PseudoService _pseudoService = PseudoService();
-  final MessageStorageService _messageStorage = MessageStorageService();
+  final MessageStorage _messageStorage = MessageStorage();
   final LockService _lockService = LockService();
   static const String _readMessagesPrefix = 'read_msg_ids_';
   final AppLogger _log = AppLogger();
@@ -594,7 +594,7 @@ class MessageService {
   }
 
   /// Récupère le nombre de messages non lus (excluant les messages de l'utilisateur)
-  Future<int> getUnreadCountExcludingUser(String conversationId, String userId) async {
+  Future<int> getUnreadCountExcludingUser(String conversationId) async {
     try {
       // Get all local decrypted messages
       final allMessages = await _messageStorage.getConversationMessages(conversationId);
@@ -604,7 +604,7 @@ class MessageService {
 
       // Count unread = messages not in read set and not sent by me
       final unreadCount = allMessages.where((msg) =>
-      !readIds.contains(msg.id) && msg.senderId != userId
+      !readIds.contains(msg.id) && msg.senderId != localUserId
       ).length;
 
       return unreadCount;
@@ -672,4 +672,16 @@ class MessageService {
       return [];
     }
   }
+
+  Future<int> getConversationSize(String convId) async =>
+      _messageStorage.getConversationSize(convId);
+
+  Stream<List<DecryptedMessageData>> watchConversationMessages(String conversationId) =>
+      _messageStorage.watchConversationMessages(conversationId);
+
+  Future<void> deleteConversationMessages(String convId) async =>
+      _messageStorage.deleteConversationMessages(convId);
+
+  Future<List<DecryptedMessageData>> getConversationMessages(String id) async =>
+      _messageStorage.getConversationMessages(id);
 }

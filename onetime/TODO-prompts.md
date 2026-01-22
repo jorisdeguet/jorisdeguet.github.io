@@ -8,11 +8,7 @@
 - solliciter un don de temps en temps genre tous les 100 messages envoyés
 
 
-# TODO core 
-- acquerir un lock simple sur un index dans une conversation.
-- dans l'accueil écouter les mises à jour des conversations en temps réel
-- dans la conversation mettre à jour en temps réel les pseudos dans le titre.
-- réfléchir aux identifiants 1) conversation a un id généré, la clé partagée a le même id 3) l'id de l'échange de clé est généré 4) l'id du message dans une conversation est son interval start-end
+# TODO core
 - s'assurer qu'on peut créer supprimer des conversations et qu'on retourne à l'accueil
 - implement a sanity check on start up that 1. once signed in 2. get all the local convos 3. get all the remote convos 4. validate remote versus local key interval 5. possible other validations
 - marquer correctement les messages / intervalles lus

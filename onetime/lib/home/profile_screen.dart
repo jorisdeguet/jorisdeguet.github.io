@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:onetime/convo/message_service.dart';
-import 'package:onetime/convo/message_storage.dart';
 import 'package:onetime/key_exchange/key_service.dart';
 import 'package:onetime/l10n/app_localizations.dart';
 import 'package:onetime/services/app_logger.dart';
@@ -22,7 +21,6 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
   final KeyService _keyService = KeyService();
-  final MessageStorageService _messageStorage = MessageStorageService();
   final MessageService _messageService = MessageService.fromCurrentUserID();
   final _log = AppLogger();
 
@@ -67,7 +65,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       for (final convId in conversationIds) {
 
         // Calculate message size (approximate)
-        final messagesSize = await _messageStorage.getConversationSize(convId);
+        final messagesSize = await _messageService.getConversationSize(convId);
         messageBytes += messagesSize;
       }
       if (mounted) {
@@ -119,7 +117,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         
         for (final convId in conversationIds) {
           await _keyService.deleteKey(convId);
-          await _messageStorage.deleteConversationMessages(convId);
+          await _messageService.deleteConversationMessages(convId);
           await _messageService.deleteUnreadCount(convId);
         }
         

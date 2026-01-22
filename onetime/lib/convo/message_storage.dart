@@ -83,10 +83,10 @@ class DecryptedMessageData {
 }
 
 /// Service pour stocker localement les messages déchiffrés
-class MessageStorageService {
-  static final MessageStorageService _instance = MessageStorageService._internal();
-  factory MessageStorageService() => _instance;
-  MessageStorageService._internal();
+class MessageStorage {
+  static final MessageStorage _instance = MessageStorage._internal();
+  factory MessageStorage() => _instance;
+  MessageStorage._internal();
 
   static const String _messagePrefix = 'decrypted_msg_';
   final _log = AppLogger();
@@ -100,13 +100,7 @@ class MessageStorageService {
       _log.d('MessageStorage', 'Creating stream controller for conversation $conversationId');
       _controllers[conversationId] = StreamController<List<DecryptedMessageData>>.broadcast();
     }
-
     _log.d('MessageStorage', 'watchConversationMessages subscribed (wrapper) for $conversationId');
-
-    // Return a per-subscriber stream that first emits the current stored messages
-    // and then forwards updates from the shared broadcast controller. Using
-    // Stream.multi ensures each subscriber receives the initial snapshot even
-    // if other subscribers are already present.
     return Stream.multi((subscriber) async {
       // Emit initial snapshot
       try {
@@ -166,10 +160,7 @@ class MessageStorageService {
         await _emitConversationMessages(conversationId);
         return;
       }
-
       await prefs.setString(key, jsonEncode(message.toJson()));
-      
-      // Maintenir une liste des IDs de messages pour cette conversation
       await _addMessageIdToConversation(conversationId, message.id);
       
       // Notify listeners

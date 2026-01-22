@@ -165,11 +165,7 @@ class _ConversationsListScreenState extends State<ConversationsListScreen> {
           getIt.registerSingleton<MessageService>(svc);
           svc.startWatchingUserConversations();
         }
-
         final svc = GetIt.instance.get<MessageService>();
-
-        // One-shot: fetch current conversations and ask the background service
-        // to rescan them so any pending messages are processed immediately.
         _conversationService = FirestoreService(localUserId: widget.userId);
         _conversationService.watchUserConversations().first.then((convs) {
           for (final c in convs) {
@@ -182,68 +178,10 @@ class _ConversationsListScreenState extends State<ConversationsListScreen> {
     }
   }
 
-  // @override
-  // void didUpdateWidget(covariant ConversationsListScreen oldWidget) {
-  //   super.didUpdateWidget(oldWidget);
-  //
-  //   // If userId changed, recreate or stop the background service accordingly
-  //   if (oldWidget.userId != widget.userId) {
-  //     // If we registered a singleton, stop it on disposal of widget tree
-  //     try {
-  //       final getIt = GetIt.instance;
-  //       if (getIt.isRegistered<BackgroundMessageService>()) {
-  //         final svc = getIt.get<BackgroundMessageService>();
-  //         svc.stopWatchingUserConversations();
-  //         svc.stopAll();
-  //         getIt.unregister<BackgroundMessageService>();
-  //       }
-  //     } catch (_) {}
-  //
-  //     if (widget.userId.isNotEmpty) {
-  //       try {
-  //         final getIt = GetIt.instance;
-  //         if (!getIt.isRegistered<BackgroundMessageService>()) {
-  //           final svc = BackgroundMessageService(localUserId: widget.userId);
-  //           getIt.registerSingleton<BackgroundMessageService>(svc);
-  //           svc.startWatchingUserConversations();
-  //         }
-  //
-  //         final svc = GetIt.instance.get<BackgroundMessageService>();
-  //
-  //         // One-shot: fetch current conversations and ask the background service
-  //         // to rescan them so any pending messages are processed immediately.
-  //         _conversationService = ConversationService(localUserId: widget.userId);
-  //         _conversationService.watchUserConversations().first.then((convs) {
-  //           for (final c in convs) {
-  //             svc.startForConversation(c.id);
-  //           }
-  //         }).catchError((_) {});
-  //       } catch (e) {
-  //         // Do not crash UI if background init fails
-  //       }
-  //     }
-  //   }
-  // }
-
-  // @override
-  // void dispose() {
-  //   // If we registered a singleton, stop it on disposal of widget tree
-  //   try {
-  //     final getIt = GetIt.instance;
-  //     if (getIt.isRegistered<BackgroundMessageService>()) {
-  //       final svc = getIt.get<BackgroundMessageService>();
-  //       svc.stopWatchingUserConversations();
-  //       svc.stopAll();
-  //       getIt.unregister<BackgroundMessageService>();
-  //     }
-  //   } catch (_) {}
-  //   super.dispose();
-  // }
-
   void _initService() {
     _conversationService = FirestoreService(localUserId: widget.userId);
     _conversationsStream = _conversationService.watchUserConversations().asyncMap((conversations) async {
-      final messageStorage = MessageStorageService();
+      final messageStorage = MessageStorage();
       
       final withTimes = await Future.wait(conversations.map((c) async {
         final lastTime = await messageStorage.getLastMessageTimestamp(c.id);
@@ -382,18 +320,21 @@ class _ConversationTile extends StatefulWidget {
 
 class _ConversationTileState extends State<_ConversationTile> {
   final PseudoService _convPseudoService = PseudoService();
-  final MessageStorageService _messageStorage = MessageStorageService();
   final MessageService _messageService = MessageService.fromCurrentUserID();
   String _displayName = '';
+  StreamSubscription<String>? _pseudoSubscription;
+  StreamSubscription<List<DecryptedMessageData>>? _messagesSubscription;
+  
+  // Real-time message data
   String _lastMessageText = '';
   DateTime? _lastMessageTime;
   int _unreadCount = 0;
-  StreamSubscription<String>? _pseudoSubscription;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _loadDisplayName();
+    _startListeningToMessages();
     
     // Listen for pseudo updates
     _pseudoSubscription = _convPseudoService.pseudoUpdates.listen((conversationId) {
@@ -406,24 +347,74 @@ class _ConversationTileState extends State<_ConversationTile> {
   @override
   void didUpdateWidget(_ConversationTile oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.conversation.id != widget.conversation.id ||
-        oldWidget.conversation.state != widget.conversation.state) {
-      _loadData();
+    if (oldWidget.conversation.id != widget.conversation.id) {
+      _messagesSubscription?.cancel();
+      _loadDisplayName();
+      _startListeningToMessages();
+    } else if (oldWidget.conversation.state != widget.conversation.state) {
+      _loadDisplayName();
     }
   }
 
   @override
   void dispose() {
     _pseudoSubscription?.cancel();
+    _messagesSubscription?.cancel();
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    await Future.wait([
-      _loadDisplayName(),
-      _loadLastMessage(),
-      _loadUnreadCount(),
-    ]);
+  /// Start listening to message updates in real-time
+  void _startListeningToMessages() {
+    _messagesSubscription?.cancel();
+    _messagesSubscription = _messageService
+        .watchConversationMessages(widget.conversation.id)
+        .listen((messages) {
+      if (!mounted) return;
+      
+      _updateMessageData(messages);
+    }, onError: (error) {
+      // Log error but don't crash
+      print('Error watching messages for ${widget.conversation.id}: $error');
+    });
+  }
+
+  /// Update UI with latest message data
+  void _updateMessageData(List<DecryptedMessageData> messages) async {
+    if (messages.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _lastMessageText = 'Aucun message';
+          _lastMessageTime = null;
+          _unreadCount = 0;
+        });
+      }
+      return;
+    }
+
+    // Sort by timestamp descending
+    final sortedMessages = List<DecryptedMessageData>.from(messages);
+    sortedMessages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    
+    final lastMessage = sortedMessages.first;
+    
+    // Compute unread count (messages not sent by me)
+    int unread = await _messageService.getUnreadCountExcludingUser(widget.conversation.id);
+    String messagePreview;
+    if (MessageService.isPseudoMessage(lastMessage.textContent ?? '')) {
+      messagePreview = '🔐 Échange de pseudo';
+    } else if (lastMessage.contentType == MessageContentType.text) {
+      messagePreview = lastMessage.textContent ?? '';
+    } else {
+      messagePreview = '📎 ${lastMessage.fileName ?? 'Fichier'}';
+    }
+
+    if (mounted) {
+      setState(() {
+        _lastMessageText = messagePreview;
+        _lastMessageTime = lastMessage.createdAt;
+        _unreadCount = unread;
+      });
+    }
   }
 
   Future<void> _loadDisplayName() async {
@@ -441,59 +432,6 @@ class _ConversationTileState extends State<_ConversationTile> {
         _displayName = displayNames.isEmpty 
             ? widget.conversation.displayName 
             : displayNames.join(', ');
-      });
-    }
-  }
-
-  Future<void> _loadLastMessage() async {
-    final messages = await _messageStorage.getConversationMessages(widget.conversation.id);
-    
-    if (messages.isNotEmpty) {
-      final lastMsg = messages.last;
-      String text;
-      
-      if (lastMsg.contentType == MessageContentType.text) {
-        text = lastMsg.textContent ?? '';
-        
-        // Check if it's a pseudo exchange message - don't show it
-        if (MessageService.isPseudoMessage(text)) {
-          // Don't show pseudo messages as last message
-          if (mounted) {
-            setState(() {
-              _lastMessageText = '';
-              _lastMessageTime = null;
-            });
-          }
-          return;
-        }
-        
-        // Limiter à 50 caractères
-        if (text.length > 50) {
-          text = '${text.substring(0, 47)}...';
-        }
-      } else if (lastMsg.contentType == MessageContentType.image) {
-        text = '📷 Image';
-      } else {
-        text = '📎 ${lastMsg.fileName ?? "Fichier"}';
-      }
-      
-      if (mounted) {
-        setState(() {
-          _lastMessageText = text;
-          _lastMessageTime = lastMsg.createdAt;
-        });
-      }
-    }
-  }
-
-  Future<void> _loadUnreadCount() async {
-    final count = await _messageService.getUnreadCountExcludingUser(
-      widget.conversation.id,
-      widget.currentUserId,
-    );
-    if (mounted) {
-      setState(() {
-        _unreadCount = count;
       });
     }
   }
