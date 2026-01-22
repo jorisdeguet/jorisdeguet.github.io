@@ -5,7 +5,6 @@ import 'package:onetime/convo/lock_service.dart';
 import 'package:onetime/convo/message_storage.dart';
 import 'package:onetime/key_exchange/key_interval.dart';
 import 'package:onetime/key_exchange/key_service.dart';
-import 'package:onetime/key_exchange/key_storage.dart';
 import 'package:onetime/key_exchange/shared_key.dart';
 import 'package:onetime/services/app_logger.dart';
 import 'package:onetime/services/firestore_service.dart';
@@ -24,7 +23,7 @@ class MessageService {
   late final String localUserId;
   late final ConversationService _conversationService;
   final AuthService _authService = AuthService();
-  final KeyStorage _keyStorage = KeyStorage();
+  // final KeyStorage _keyStorage = KeyStorage();
   final KeyService _keyService = KeyService();
   final CryptoService _cryptoService = CryptoService();
   final PseudoService _pseudoService = PseudoService();
@@ -54,11 +53,6 @@ class MessageService {
     required Future<void> Function(SharedKey key) sendOperation,
     String? logPrefix,
   }) async {
-    final key = await _keyService.getKey(conversationId);
-    if (key == null) {
-      throw Exception("no key");
-    }
-
     await _lockService.acquireLock(
       conversationId: conversationId,
       userId: _authService.currentUserId!,
@@ -70,10 +64,6 @@ class MessageService {
 
     // Recharger la clé après la synchronisation (elle a pu être mise à jour)
     final updatedKey = await _keyService.getKey(conversationId);
-    if (updatedKey == null) {
-      throw Exception("key disappeared after sync");
-    }
-
     // ÉTAPE 2: Synchroniser avec l'état Firestore pour éviter la réutilisation de clé
     await _syncWithFirestoreKeyState(conversationId, updatedKey);
 
@@ -288,10 +278,10 @@ class MessageService {
 
   // after each key update, update debug info in Firestore
   Future<void> _updateKeyDebugInfo(String conversationId) async {
-    final SharedKey? key = await _keyService.getKey(conversationId);
+    final SharedKey key = await _keyService.getKey(conversationId);
 
     try {
-      final availableBytes = key!.countAvailableBytes();
+      final availableBytes = key.countAvailableBytes();
       final totalBytes = key.lengthInBytes;
       final nextAvailableByte = key.nextAvailableByte;
 
@@ -435,14 +425,7 @@ class MessageService {
 
   Future<void> _receiveMessage(String conversationId, EncryptedMessage msg) async {
     _log.d('BackgroundMessage', 'Processing message ${msg.id} in $conversationId');
-
-    // Load the key
-    final key = await _keyStorage.getKey(conversationId);
-    if (key == null) {
-      _log.w('BackgroundMessage', 'No key for $conversationId; will retry later');
-      return;
-    }
-
+    final key = await _keyService.getKey(conversationId);
     // Valider l'état de la clé avant déchiffrement
     try {
       final validatedNextByte = key.validateState();

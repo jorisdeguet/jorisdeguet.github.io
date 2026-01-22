@@ -29,7 +29,7 @@ class _MediaSendScreenState extends State<MediaSendScreen> {
   ImageQuality _selectedQuality = ImageQuality.medium;
   MediaPickResult? _currentResult;
 
-  MessageService _messageService = MessageService.fromCurrentUserID();
+  final MessageService _messageService = MessageService.fromCurrentUserID();
 
   @override
   void initState() {

@@ -11,7 +11,6 @@ import 'shared_key.dart';
 /// Screen showing detailed summary of a key exchange
 class KeyExchangeSummaryScreen extends StatelessWidget {
   final KexSessionModel session;
-  final SharedKey? previousKey;
   final SharedKey newKey;
   final Conversation conversation;
   final String currentUserId;
@@ -19,7 +18,6 @@ class KeyExchangeSummaryScreen extends StatelessWidget {
   const KeyExchangeSummaryScreen({
     super.key,
     required this.session,
-    required this.previousKey,
     required this.newKey,
     required this.conversation,
     required this.currentUserId,
@@ -133,16 +131,9 @@ class KeyExchangeSummaryScreen extends StatelessWidget {
     // Key sizes
     buffer.writeln('🔑 TAILLE DES CLÉS');
     buffer.writeln('───────────────────────────────────────────────────');
-    if (previousKey != null) {
-      final prevBytes = previousKey!.lengthInBytes;
-      final addedBytes = newKey.lengthInBytes - prevBytes;
-      buffer.writeln('Clé avant échange:     ${FormatService.formatBytes(prevBytes)}');
-      buffer.writeln('Nouvelle clé ajoutée:  ${FormatService.formatBytes(addedBytes)}');
-      buffer.writeln('Clé totale après:      ${FormatService.formatBytes(newKey.lengthInBytes)}');
-    } else {
-      buffer.writeln('Clé avant échange:     0 B (nouvelle conversation)');
-      buffer.writeln('Nouvelle clé créée:    ${FormatService.formatBytes(newKey.lengthInBytes)}');
-    }
+
+    buffer.writeln('Nouvelle clé créée:    ${FormatService.formatBytes(newKey.lengthInBytes)}');
+
     
     // Calculate actually available bytes for current user
     final availableBytes = newKey.countAvailableBytes();

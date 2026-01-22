@@ -24,7 +24,6 @@ class Conversation {
   final DateTime createdAt;
 
   /// Infos de debug sur la clé locale des pairs
-  /// Map<UserId, Map<String, dynamic>>
   final Map<String, dynamic> keyDebugInfo;
   
   Conversation({

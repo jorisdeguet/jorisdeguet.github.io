@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:onetime/convo/message_service.dart';
 import 'package:onetime/convo/message_storage.dart';
-import 'package:onetime/key_exchange/key_storage.dart';
+import 'package:onetime/key_exchange/key_service.dart';
 import 'package:onetime/l10n/app_localizations.dart';
 import 'package:onetime/services/app_logger.dart';
 import 'package:onetime/services/format_service.dart';
@@ -21,7 +21,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
-  final KeyStorage _keyStorage = KeyStorage();
+  final KeyService _keyService = KeyService();
   final MessageStorageService _messageStorage = MessageStorageService();
   final MessageService _messageService = MessageService.fromCurrentUserID();
   final _log = AppLogger();
@@ -60,29 +60,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _calculateStorageUsage() async {
     try {
-      final conversationIds = await _keyStorage.listConversationsWithKeys();
-      int keyBytes = 0;
+      int keyBytes  = await _keyService.getTotalKeyStorageUsedBytes();
       int messageBytes = 0;
+      final conversationIds = await _keyService.listConversations();
       
       for (final convId in conversationIds) {
-        // Calculate key size
-        final key = await _keyStorage.getKey(convId);
-        if (key != null) {
-          keyBytes += key.lengthInBytes;
-        }
-        
+
         // Calculate message size (approximate)
-        final messages = await _messageStorage.getConversationMessages(convId);
-        for (final msg in messages) {
-          if (msg.textContent != null) {
-            messageBytes += msg.textContent!.length;
-          }
-          if (msg.binaryContent != null) {
-            messageBytes += msg.binaryContent!.lengthInBytes;
-          }
-        }
+        final messagesSize = await _messageStorage.getConversationSize(convId);
+        messageBytes += messagesSize;
       }
-      
       if (mounted) {
         setState(() {
           _totalKeyBytes = keyBytes;
@@ -128,10 +115,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() => _isLoading = true);
       try {
         // Delete all local storage
-        final conversationIds = await _keyStorage.listConversationsWithKeys();
+        final conversationIds = await _keyService.listConversations();
         
         for (final convId in conversationIds) {
-          await _keyStorage.deleteKey(convId);
+          await _keyService.deleteKey(convId);
           await _messageStorage.deleteConversationMessages(convId);
           await _messageService.deleteUnreadCount(convId);
         }
