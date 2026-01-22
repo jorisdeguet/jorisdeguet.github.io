@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:onetime/key_exchange/key_storage.dart';
+import 'package:onetime/key_exchange/key_service.dart';
 import 'package:onetime/services/firestore_service.dart';
 import 'package:onetime/services/format_service.dart';
 import 'package:onetime/signin/auth_service.dart';
@@ -26,7 +26,7 @@ class ConversationInfoScreen extends StatefulWidget {
 
 class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
   final PseudoService _pseudoService = PseudoService();
-  final KeyStorage _keyStorageService = KeyStorage();
+  final KeyService _keyService = KeyService();
   final AuthService _authService = AuthService();
   late final ConversationService _conversationService;
   
@@ -232,7 +232,7 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
       await _conversationService.deleteConversation(widget.conversation.id);
 
       // Supprimer la clé locale si elle existe
-      await _keyStorageService.deleteKey(widget.conversation.id);
+      await _keyService.deleteKey(widget.conversation.id);
 
       if (mounted) {
         Navigator.pop(context); // Close info screen

@@ -346,4 +346,17 @@ class MessageStorageService {
       _controllers.remove(conversationId);
     }
   }
+
+  Future<int> getConversationSize(String convId) async {
+    final messages = await getConversationMessages(convId);
+    int totalSize = 0;
+    for (final msg in messages) {
+      if (msg.contentType == MessageContentType.text && msg.textContent != null) {
+        totalSize += utf8.encode(msg.textContent!).length;
+      } else if (msg.binaryContent != null) {
+        totalSize += msg.binaryContent!.length;
+      }
+    }
+    return totalSize;
+  }
 }

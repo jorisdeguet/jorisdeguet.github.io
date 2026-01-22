@@ -26,8 +26,8 @@ class KeyStorage {
         _conversationService = localUserId != null ? ConversationService(localUserId: localUserId) : null;
 
   /// Sauvegarde une clé partagée pour une conversation
-  Future<void> saveKey(String conversationId, SharedKey key, {String? lastKexId}) async {
-     _log.i('KeyStorage', 'saveKey: conversationId=$conversationId, keyLength=${key.lengthInBits} bits, lastKexId=$lastKexId');
+  Future<void> saveKey(String conversationId, SharedKey key) async {
+     _log.i('KeyStorage', 'saveKey: conversationId=$conversationId, keyLength=${key.lengthInBits} bits');
 
      try {
        final prefs = await SharedPreferences.getInstance();
@@ -37,20 +37,6 @@ class KeyStorage {
 
        // Ensure the stored id is the conversationId (legacy keys may contain other ids)
        keyJson['id'] = conversationId;
-
-       // Ajouter lastKexId si fourni
-       if (lastKexId != null) {
-         keyJson['lastKexId'] = lastKexId;
-       } else {
-         // Préserver le lastKexId existant si présent
-         final existingMeta = prefs.getString('${_keyPrefix}meta_$conversationId');
-         if (existingMeta != null) {
-           try {
-             final existingJson = jsonDecode(existingMeta) as Map<String, dynamic>;
-             keyJson['lastKexId'] = existingJson['lastKexId'];
-           } catch (_) {}
-         }
-       }
 
        // Sauvegarder les données de la clé
        await prefs.setString('$_keyPrefix$conversationId', base64Encode(key.keyData));
@@ -84,7 +70,7 @@ class KeyStorage {
    }
 
    /// Récupère une clé partagée pour une conversation
-   Future<SharedKey?> getKey(String conversationId) async {
+   Future<SharedKey> getKey(String conversationId) async {
      _log.i('KeyStorage', 'getKey: conversationId=$conversationId');
 
      try {
@@ -94,14 +80,14 @@ class KeyStorage {
        final keyDataStr = prefs.getString('$_keyPrefix$conversationId');
        if (keyDataStr == null) {
          _log.i('KeyStorage', 'getKey: NOT FOUND');
-         return null;
+         throw Exception('Key not found for conversation $conversationId');
        }
 
        // Récupérer les métadonnées
        final metadataStr = prefs.getString('${_keyPrefix}meta_$conversationId');
        if (metadataStr == null) {
          _log.i('KeyStorage', 'getKey: metadata NOT FOUND');
-         return null;
+         throw Exception('Key metadata not found for conversation $conversationId');
        }
 
        final keyData = base64Decode(keyDataStr);
@@ -154,7 +140,7 @@ class KeyStorage {
        return key;
      } catch (e) {
        _log.e('KeyStorage', 'getKey ERROR: $e');
-       return null;
+       rethrow;
      }
    }
 
@@ -164,12 +150,7 @@ class KeyStorage {
 
      try {
        final key = await getKey(conversationId);
-       if (key == null) {
-         _log.w('KeyStorage', 'updateUsedBytes: Key not found');
-         return;
-       }
        key.markBytesAsUsed(startByte, endByte);
-
        await saveKey(conversationId, key);
        _log.i('KeyStorage', 'updateUsedBytes: SUCCESS');
      } catch (e) {
@@ -207,4 +188,14 @@ class KeyStorage {
          .map((k) => k.substring(_keyPrefix.length))
          .toList();
    }
+
+  Future<int> getTotalUsedBytes() async {
+    int totalUsed = 0;
+    final conversationIds = await listConversationsWithKeys();
+    for (final convoId in conversationIds) {
+      final key = await getKey(convoId);
+      totalUsed += key.keyData.length;
+    }
+    return totalUsed;
+  }
  }

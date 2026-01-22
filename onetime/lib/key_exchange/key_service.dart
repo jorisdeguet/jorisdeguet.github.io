@@ -14,7 +14,7 @@ class KeyService {
 
   KeyService();
 
-  Future<SharedKey?> getKey(String conversationId) async
+  Future<SharedKey> getKey(String conversationId) async
     => _keyStorage.getKey(conversationId);
 
   Future<void> updateUsedBytes(String conversationId, int startByte, int endByte) async
@@ -64,6 +64,11 @@ class KeyService {
     }
 
     return session;
+  }
+
+  // Get the total key storage used bytes for this user
+  Future<int> getTotalKeyStorageUsedBytes() async {
+    return _keyStorage.getTotalUsedBytes();
   }
 
   /// Injecte un segment manuellement dans la session (usage interne pour pré-génération)
@@ -204,20 +209,20 @@ class KeyService {
     return Uint8List.fromList(bytes);
   }
 
-  int min(int a, int b) => a < b ? a : b;
+  Future<List<String>> listConversations() async =>
+      _keyStorage.listConversationsWithKeys();
 
+  Future<void> deleteKey(String convId) async =>
+      _keyStorage.deleteKey(convId);
+
+  Future<void> saveKey(String conversationId, SharedKey finalKey) async {
+    return _keyStorage.saveKey(conversationId, finalKey);
+  }
 }
 
-/// Rôle dans l'échange de clé
-enum KeyExchangeRole {
-  /// Source qui génère et affiche les QR codes
-  source,
-  
-  /// Lecteur qui scanne les QR codes
-  reader,
-}
+/// Source shows QR codes, reader scans them
+enum KeyExchangeRole { source,reader, }
 
-/// Session en lecture (base pour reader et source)
 class KexSessionReader {
   final String conversationId;
   final String sessionId;
@@ -279,13 +284,6 @@ class KexSessionReader {
 
   void markPeerHasSegment(String peerId, int segmentIndex) {
     _peerReadSegments[peerId]?.add(segmentIndex);
-  }
-
-  /// Retourne les peers qui n'ont pas encore confirmé un segment
-  List<String> getPeersMissingSegment(int segmentIndex) {
-    return peerIds.where((peer) {
-      return !(_peerReadSegments[peer]?.contains(segmentIndex) ?? false);
-    }).toList();
   }
 
   /// Construit la clé partagée finale (fonctionne pour reader et source)

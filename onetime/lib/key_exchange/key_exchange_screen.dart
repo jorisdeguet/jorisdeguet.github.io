@@ -8,7 +8,6 @@ import 'package:onetime/key_exchange/key_exchange_summary_screen.dart';
 import 'package:onetime/key_exchange/key_exchange_sync_service.dart';
 import 'package:onetime/key_exchange/key_pre_generation_service.dart';
 import 'package:onetime/key_exchange/key_service.dart';
-import 'package:onetime/key_exchange/key_storage.dart';
 import 'package:onetime/key_exchange/shared_key.dart';
 import 'package:onetime/services/app_logger.dart';
 import 'package:onetime/services/firestore_service.dart';
@@ -17,8 +16,6 @@ import 'package:onetime/signin/auth_service.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-
-
 
 /// Écran d'échange de clé via QR codes.
 class KeyExchangeScreen extends StatefulWidget {
@@ -38,7 +35,6 @@ class KeyExchangeScreen extends StatefulWidget {
 class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   final AuthService _authService = AuthService();
   final KeyExchangeSyncService _syncService = KeyExchangeSyncService();
-  final KeyStorage _keyStorageService = KeyStorage();
   final QrSegmentCacheService _cacheService = QrSegmentCacheService();
   late final KeyService _keyService = KeyService();
   final _log = AppLogger();
@@ -378,51 +374,30 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
       SharedKey finalKey;
       
-      // Vérifier si c'est une extension de clé
-      final existingKey = await _keyStorageService.getKey(conversation.id);
-
-      if (existingKey != null) {
-        // KEY EXTENSION: Étendre la clé existante
-        _log.d('KeyExchange', 'Reader: Loading existing key for extension...');
+      try {
+        final existingKey = await _keyService.getKey(conversation.id);
         _log.d('KeyExchange', 'Reader: Existing key: ${existingKey.lengthInBytes} bytes');
-
-        final newKeyData = _keyService.finalizeExchange(
-          _session!,
-          force: true,
-        );
-        
+        final newKeyData = _keyService.finalizeExchange(_session!, force: true,);
         _log.d('KeyExchange', 'Reader: New key data: ${newKeyData.lengthInBytes} bytes');
-
-        // Étendre la clé existante
         finalKey = existingKey.extend(newKeyData.keyData);
-        
         _log.d('KeyExchange', 'Reader: Extended key: ${finalKey.lengthInBytes} bytes');
-      } else {
-        // NOUVELLE CLÉ
+      }
+      catch(e) {
         finalKey = _keyService.finalizeExchange(
           _session!,
           force: true,
         );
-        
         _log.d('KeyExchange', 'Reader: New key: ${finalKey.lengthInBytes} bytes');
       }
-
       // Sauvegarder la clé localement avec le même conversationId
       _log.d('KeyExchange', 'Reader: Saving shared key locally for conversation ${conversation.id}');
-      await _keyStorageService.saveKey(conversation.id, finalKey, lastKexId: _firestoreSession?.id);
+      await _keyService.saveKey(conversation.id, finalKey);
       _log.i('KeyExchange', 'Reader: Shared key saved successfully');
-
       // Update Firestore keyDebugInfo immediately with the new key size
       _log.d('KeyExchange', 'Reader: Updating Firestore keyDebugInfo');
       await _updateKeyDebugInfoForConversation(conversation.id, finalKey);
-
-      // Envoyer le message pseudo chiffré
-      //await MessageService.fromCurrentUserID().sendPseudoMessage(conversation.id);
-
       // NE PAS supprimer la session - c'est la source qui s'en charge
-      // await _sync_service.deleteSession(_firestore_session!.id);
       _log.d('KeyExchange', 'Reader: Key exchange completed (session cleanup by source)');
-
       if (mounted) {
         // Navigate to summary screen
         Navigator.pushReplacement(
@@ -430,7 +405,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           MaterialPageRoute(
             builder: (_) => KeyExchangeSummaryScreen(
               session: _firestoreSession!,
-              previousKey: existingKey,
               newKey: finalKey,
               conversation: conversation,
               currentUserId: _currentUserId,
@@ -779,51 +753,28 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
     try {
       if (_currentUserId.isEmpty) return;
-
       final conversationService = ConversationService(localUserId: _currentUserId);
-      
       // Utiliser la conversation existante ou en créer une nouvelle
       String conversationId;
       SharedKey finalKey;
       SharedKey? existingKey; // Track existing key for summary
-      
       if (widget.existingConversationId != null) {
         // Conversation existante : vérifier si c'est une extension ou une création initiale
         conversationId = widget.existingConversationId!;
-        
-        _log.d('KeyExchange', 'Checking for existing key...');
-        existingKey = await _keyStorageService.getKey(conversationId);
-
-        if (existingKey != null) {
-          // KEY EXTENSION: La conversation a déjà une clé
+        try {
+          existingKey = await _keyService.getKey(conversationId);
           _log.d('KeyExchange', 'Existing key found: ${existingKey.lengthInBytes} bytes - extending...');
-
           // Forcer la finalisation pour obtenir les nouveaux segments
-          final newKeyData = _keyService.finalizeExchange(
-            (_session as KexSessionSource),
-            force: true,
-          );
-
+          final newKeyData = _keyService.finalizeExchange((_session as KexSessionSource), force: true,);
           _log.d('KeyExchange', 'New key data: ${newKeyData.lengthInBytes} bytes');
-
           // Étendre la clé existante avec les nouveaux bits
           finalKey = existingKey.extend(newKeyData.keyData);
-
           _log.d('KeyExchange', 'Extended key: ${finalKey.lengthInBytes} bytes');
-        } else {
-          // CRÉATION INITIALE: La conversation existe mais sans clé encore
+        } catch(e){
           _log.d('KeyExchange', 'No existing key - creating initial key for conversation');
-          _log.w('KeyExchange', 'WARNING: Extension requested but no existing key found!');
-          _log.d('KeyExchange', 'This may cause decryption errors. Delete conversation and restart.');
-
-          finalKey = _keyService.finalizeExchange(
-            (_session as KexSessionSource),
-            force: true,
-          );
-
+          finalKey = _keyService.finalizeExchange((_session as KexSessionSource), force: true,);
           _log.d('KeyExchange', 'Initial key created: ${finalKey.lengthInBytes} bytes');
         }
-
         // Mettre à jour la conversation à Ready
         await conversationService.updateConversationKey(conversationId: conversationId);
         _log.d('KeyExchange', 'Conversation updated: $conversationId');
@@ -859,7 +810,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
       // Sauvegarder la clé localement
       _log.d('KeyExchange', 'Saving shared key locally for conversation $conversationId');
-      await _keyStorageService.saveKey(conversationId, finalKey, lastKexId: _firestoreSession?.id);
+      await _keyService.saveKey(conversationId, finalKey);
       _log.i('KeyExchange', 'Shared key saved successfully');
 
       // Update Firestore keyDebugInfo immediately with the new key size
@@ -899,7 +850,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           MaterialPageRoute(
             builder: (_) => KeyExchangeSummaryScreen(
               session: _firestoreSession!,
-              previousKey: existingKey,
               newKey: finalKey,
               conversation: conversation,
               currentUserId: _currentUserId,
