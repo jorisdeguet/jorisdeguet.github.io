@@ -465,31 +465,38 @@ class _ConversationTileState extends State<_ConversationTile> {
               ),
             ),
           ),
-          if (_unreadCount > 0) ...[
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                _unreadCount.toString(),
-                style: const TextStyle(
+          const SizedBox(width: 8),
+          // Badge (au-dessus) et time (en dessous)
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (_unreadCount > 0) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).primaryColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _unreadCount.toString(),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+              ],
+              Text(
+                FormatService.formatTimeRemaining(_lastMessageTime ?? widget.conversation.createdAt),
+                style: TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: Colors.grey[500],
                 ),
               ),
-            ),
-          ],
-          const SizedBox(width: 4),
-          Text(
-            FormatService.formatTimeRemaining(_lastMessageTime ?? widget.conversation.createdAt),
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[500],
-            ),
+            ],
           ),
         ],
       ),
