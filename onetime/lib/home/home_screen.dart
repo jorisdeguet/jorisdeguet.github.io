@@ -147,7 +147,7 @@ class ConversationsListScreen extends StatefulWidget {
 }
 
 class _ConversationsListScreenState extends State<ConversationsListScreen> {
-  late ConversationService _conversationService;
+  late FirestoreService _conversationService;
   Stream<List<Conversation>>? _conversationsStream;
 
 
@@ -170,7 +170,7 @@ class _ConversationsListScreenState extends State<ConversationsListScreen> {
 
         // One-shot: fetch current conversations and ask the background service
         // to rescan them so any pending messages are processed immediately.
-        _conversationService = ConversationService(localUserId: widget.userId);
+        _conversationService = FirestoreService(localUserId: widget.userId);
         _conversationService.watchUserConversations().first.then((convs) {
           for (final c in convs) {
             svc.startForConversation(c.id);
@@ -241,7 +241,7 @@ class _ConversationsListScreenState extends State<ConversationsListScreen> {
   // }
 
   void _initService() {
-    _conversationService = ConversationService(localUserId: widget.userId);
+    _conversationService = FirestoreService(localUserId: widget.userId);
     _conversationsStream = _conversationService.watchUserConversations().asyncMap((conversations) async {
       final messageStorage = MessageStorageService();
       

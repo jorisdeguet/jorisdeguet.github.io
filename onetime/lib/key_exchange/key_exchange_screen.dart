@@ -362,7 +362,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
 
       // Récupérer la conversation existante
-      final conversationService = ConversationService(localUserId: _currentUserId);
+      final conversationService = FirestoreService(localUserId: _currentUserId);
       final conversation = await conversationService.getConversation(widget.existingConversationId!);
 
       if (conversation == null) {
@@ -753,7 +753,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
     try {
       if (_currentUserId.isEmpty) return;
-      final conversationService = ConversationService(localUserId: _currentUserId);
+      final conversationService = FirestoreService(localUserId: _currentUserId);
       // Utiliser la conversation existante ou en créer une nouvelle
       String conversationId;
       SharedKey finalKey;
@@ -1499,7 +1499,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       // Generate consistency hash
       final consistencyHash = '$firstAvailable|$lastAvailable|$availableBytes';
 
-      final conversationService = ConversationService(localUserId: _currentUserId);
+      final conversationService = FirestoreService(localUserId: _currentUserId);
       await conversationService.updateKeyDebugInfo(
         conversationId: conversationId,
         userId: _currentUserId,

@@ -28,7 +28,7 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
   final PseudoService _pseudoService = PseudoService();
   final KeyService _keyService = KeyService();
   final AuthService _authService = AuthService();
-  late final ConversationService _conversationService;
+  late final FirestoreService _conversationService;
   
   Map<String, String> _displayNames = {};
   bool _isLoading = false;
@@ -38,7 +38,7 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
   void initState() {
     super.initState();
     _currentUserId = _authService.currentUserId ?? '';
-    _conversationService = ConversationService(localUserId: _currentUserId);
+    _conversationService = FirestoreService(localUserId: _currentUserId);
     _loadDisplayNames();
   }
 

@@ -21,7 +21,7 @@ import 'conversation.dart';
 /// MessageStorageService et marque les messages transférés sur Firestore.
 class MessageService {
   late final String localUserId;
-  late final ConversationService _conversationService;
+  late final FirestoreService _conversationService;
   final AuthService _authService = AuthService();
   // final KeyStorage _keyStorage = KeyStorage();
   final KeyService _keyService = KeyService();
@@ -39,11 +39,11 @@ class MessageService {
 
   MessageService.fromCurrentUserID() {
     localUserId = _authService.currentUserId!;
-    _conversationService = ConversationService(localUserId: localUserId);
+    _conversationService = FirestoreService(localUserId: localUserId);
   }
 
   MessageService({required this.localUserId})
-      : _conversationService = ConversationService(localUserId: localUserId);
+      : _conversationService = FirestoreService(localUserId: localUserId);
 
 
   /// Méthode générique pour envoyer un message avec gestion du lock

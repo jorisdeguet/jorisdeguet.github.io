@@ -8,12 +8,12 @@ import '../key_exchange/key_pre_generation_service.dart';
 import 'app_logger.dart';
 
 /// Service de gestion des conversations sur Firebase.
-class ConversationService {
+class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final String localUserId;
   final _log = AppLogger();
 
-  ConversationService({required this.localUserId});
+  FirestoreService({required this.localUserId});
 
   /// Collection des conversations
   CollectionReference<Map<String, dynamic>> get _conversationsRef =>

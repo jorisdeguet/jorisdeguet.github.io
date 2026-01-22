@@ -52,7 +52,7 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
     });
 
     try {
-      final conversationService = ConversationService(localUserId: _currentUserId);
+      final conversationService = FirestoreService(localUserId: _currentUserId);
       
       // Créer la conversation avec seulement le créateur
       final conversation = await conversationService.createConversation(
@@ -130,7 +130,7 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
       }
 
       // Mettre la conversation en état "exchanging" pour notifier les autres participants
-      final conversationService = ConversationService(localUserId: _currentUserId);
+      final conversationService = FirestoreService(localUserId: _currentUserId);
       await conversationService.startKeyExchange(_conversationId!);
       _log.d('NewConversation', 'Conversation state set to exchanging');
 

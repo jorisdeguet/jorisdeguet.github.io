@@ -19,11 +19,11 @@ class KeyStorage {
 
   // Optional local user id used to report key debug info to Firestore
   final String _localUserId;
-  final ConversationService? _conversationService;
+  final FirestoreService? _conversationService;
 
   KeyStorage({String? localUserId})
       : _localUserId = localUserId ?? '',
-        _conversationService = localUserId != null ? ConversationService(localUserId: localUserId) : null;
+        _conversationService = localUserId != null ? FirestoreService(localUserId: localUserId) : null;
 
   /// Sauvegarde une clé partagée pour une conversation
   Future<void> saveKey(String conversationId, SharedKey key) async {

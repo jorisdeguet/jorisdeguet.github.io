@@ -82,7 +82,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   final MessageStorageService _messageStorage = MessageStorageService();
   final PseudoService _pseudoService = PseudoService();
   final MessageService _messageService = MessageService.fromCurrentUserID();
-  late final ConversationService _conversationService;
+  late final FirestoreService _conversationService;
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
 
@@ -98,7 +98,7 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   void initState() {
     super.initState();
     final userId = _authService.currentUserId ?? '';
-    _conversationService = ConversationService(localUserId: userId);
+    _conversationService = FirestoreService(localUserId: userId);
     _loadDisplayNames();
     _checkIfPseudoSent().whenComplete(() {
       // _loadSharedKey();
