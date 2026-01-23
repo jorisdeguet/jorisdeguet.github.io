@@ -124,8 +124,9 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
       final data = doc.data()!;
       final peerIds = List<String>.from(data['peerIds'] as List? ?? []);
 
-      if (peerIds.length < 2) {
-        setState(() => _errorMessage = 'Il faut au moins 2 participants');
+      // Allow finalizing with a single participant (the creator) — user requested solo conversations.
+      if (peerIds.isEmpty) {
+        setState(() => _errorMessage = 'Il faut au moins 1 participant');
         return;
       }
 
@@ -191,8 +192,9 @@ class _NewConversationScreenState extends State<NewConversationScreen> {
             stream: _watchParticipants(),
             builder: (context, snapshot) {
               final participants = snapshot.data ?? [];
-              final canFinalize = participants.length >= 2;
-              
+              // Allow finalizing even if only the creator is present (single-participant convo)
+              final canFinalize = participants.length >= 1;
+
               return Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
