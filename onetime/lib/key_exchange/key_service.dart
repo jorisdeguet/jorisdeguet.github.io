@@ -310,6 +310,7 @@ class KexSessionReader {
       id: conversationId,
       keyData: keyData,
       peerIds: List.from(peerIds),
+      nextAvailableByte: 0
     );
   }
 

@@ -21,16 +21,12 @@ class SharedKey {
   /// Liste des IDs des pairs partageant cette clé (triés par ordre croissante)
   final List<String> peerIds;
 
-  /// Index du premier octet libre (relatif à `keyData`, 0-based).
-  /// Tous les octets < _nextAvailableByte sont considérés comme consommés.
+  // index of the next available byte in the keyData
+  // also the offset since key inception
   int _nextAvailableByte;
 
   /// Date de création de la clé
   final DateTime createdAt;
-
-  /// Offset de départ de la clé (en octets)
-  /// Indique combien d'octets ont été tronqués au début de la clé.
-  final int startOffset;
 
   /// Historique des opérations sur la clé (extensions et consommations)
   final KeyHistory history;
@@ -40,10 +36,9 @@ class SharedKey {
     required this.keyData,
     required this.peerIds,
     DateTime? createdAt,
-    this.startOffset = 0,
     KeyHistory? history,
-    int? nextAvailableByte,
-  })  : _nextAvailableByte = nextAvailableByte ?? startOffset,
+    required int nextAvailableByte,
+  })  : _nextAvailableByte = nextAvailableByte,
         history = history ?? KeyHistory(conversationId: id),
         createdAt = createdAt ?? DateTime.now() {
     // S'assurer que les peers sont triés
@@ -52,14 +47,11 @@ class SharedKey {
     // Normaliser _nextAvailableByte
     final int maxIndex = keyData.length;
 
-    // Ensure within bounds
-    _nextAvailableByte = _nextAvailableByte.clamp(startOffset, startOffset + maxIndex);
-
-    // If we loade State matches the actual stored key size. This
+    // If we load State matches the actual stored key size. This
     // avoids inconsistencies where the key bytes are non-empty but history
     // is empty which would make operators like + fail due to mismatched bounds.
     if (this.history.isEmpty) {
-      final totalEnd = startOffset + keyData.length;
+      final totalEnd = _nextAvailableByte + keyData.length;
       if (totalEnd > 0) {
         // record an initial extension from 0 to totalEnd
         this.history.recordExtension(
@@ -104,44 +96,18 @@ class SharedKey {
   KeyInterval get interval => KeyInterval(
     conversationId: id,
     startIndex: _nextAvailableByte,
-    endIndex: startOffset + keyData.length,
+    endIndex: _nextAvailableByte + keyData.length,
   );
 
-  /// Retourne l'intervalle total de la clé (depuis startOffset jusqu'à la fin)
-  KeyInterval get totalInterval => KeyInterval(
-    conversationId: id,
-    startIndex: startOffset,
-    endIndex: startOffset + keyData.length,
-  );
+  // total length since inception already used + actually available
+  int get lengthInBytes => _nextAvailableByte + keyData.length;
 
-  /// Longueur totale logique de la clé en octets (incluant l'offset)
-  int get lengthInBytes => startOffset + keyData.length;
 
-  /// Longueur totale logique en bits (compatibilité)
-  int get lengthInBits => lengthInBytes * 8;
-
-  /// Nombre de pairs partageant cette clé
-  int get peerCount => peerIds.length;
-
-  void _checkByteIndex(int byteIndex) {
+  bool isByteUsed(int byteIndex) {
     if (byteIndex < 0 || byteIndex >= keyData.length) {
       throw StateError('Byte index out of range: $byteIndex (keyData length=${keyData.length})');
     }
-  }
-
-  /// Vérifie si un octet est déjà utilisé
-  bool isByteUsed(int byteIndex) {
-    // If requested index is logically before the available data region, consider used
-    if (byteIndex < startOffset) return true;
-    _checkByteIndex(byteIndex);
-    // Compare against nextAvailableByte (which is absolute relative to keyData)
     return byteIndex < _nextAvailableByte;
-  }
-
-  /// Wrapper compatibilité : vérifie si un bit est utilisé en regardant l'octet contenant le bit.
-  bool isBitUsed(int bitIndex) {
-    final byteIndex = bitIndex ~/ 8;
-    return isByteUsed(byteIndex);
   }
 
   /// Marque un intervalle d'octets comme utilisé (endByte exclusive)
@@ -149,7 +115,7 @@ class SharedKey {
   void markBytesAsUsed(int startByte, int endByte) {
     print("Mark" + history.format());
     if (endByte <= startByte) return;
-    final e = min(endByte, startOffset + keyData.length);
+    final e = min(endByte, _nextAvailableByte + keyData.length);
     // add a consumption record to history
     final segment = KeyInterval(
       conversationId: id,
@@ -166,25 +132,12 @@ class SharedKey {
     //_nextAvailableByte = _nextAvailableByte.clamp(startOffset, startOffset + keyData.length);
   }
 
-
-  /// Trouve le prochain segment disponible de la taille demandée en bits (compat)
-  /// Cette implémentation force une allocation alignée sur octet.
-  ({int startBit, int endBit})? findAvailableSegment(int bitsNeeded) {
-    if (bitsNeeded <= 0) return null;
-    final bytesNeeded = ((bitsNeeded + 7) ~/ 8);
-    final res = findAvailableSegmentByBytes(bytesNeeded);
-    if (res == null) return null;
-    final startBit = res.startByte * 8;
-    final endBit = (res.startByte + res.lengthBytes) * 8;
-    return (startBit: startBit, endBit: endBit);
-  }
-
   /// Trouve le prochain segment disponible en octets (allocation linéaire simplifiée)
   /// Retourne tuple (startByte, lengthBytes) ou null si pas assez d'octets.
   KeyInterval? findAvailableSegmentByBytes(int bytesNeeded) {
     if (bytesNeeded <= 0) return null;
-    final firstFree = max(startOffset, _nextAvailableByte);
-    final available = keyData.length - (firstFree - startOffset);
+    final firstFree = _nextAvailableByte;
+    final available = keyData.length;
     if (available >= bytesNeeded) {
       // return a new KeyInterval with this id (same as conversation) and the found range
       return KeyInterval(
@@ -200,7 +153,7 @@ class SharedKey {
   /// [startByte] est l'index d'octet relatif au keyData (0-based)
   Uint8List extractKeyBytes(int startByte, int lengthBytes) {
     if (startByte < 0 || lengthBytes <= 0) throw RangeError('Invalid byte range');
-    if (startByte < startOffset) {
+    if (startByte < _nextAvailableByte) {
       throw StateError('Cannot extract bytes from truncated part of key');
     }
     final endByte = startByte + lengthBytes;
@@ -210,20 +163,9 @@ class SharedKey {
     return Uint8List.fromList(keyData.sublist(startByte, endByte));
   }
 
-  /// Marque des octets comme consommés (tous les bits des octets sont marqués utilisés)
-  void consumeBytes(int startByte, int lengthBytes) {
-    if (lengthBytes <= 0) return;
-    markBytesAsUsed(startByte, startByte + lengthBytes);
-  }
+  int countAvailableBytes() => keyData.length;
 
-  /// Compte les octets disponibles dans toute la clé (allocation linéaire)
-  int countAvailableBytes() {
-    final firstFree = max(startOffset, _nextAvailableByte);
-    return keyData.length - (firstFree - startOffset);
-  }
-
-  /// Ajoute des octets à la fin de la clé (pour l'agrandissement)
-  /// [kexId] - ID de la session d'échange pour l'historique (optionnel)
+  // extends key after key expansion IRL
   SharedKey extend(Uint8List additionalKeyData, {String? kexId}) {
     if (additionalKeyData.isEmpty) return this;
 
@@ -255,70 +197,8 @@ class SharedKey {
       keyData: newKeyData,
       peerIds: List.from(peerIds),
       createdAt: createdAt,
-      startOffset: startOffset,
       history: newHistory,
       nextAvailableByte: _nextAvailableByte,
-    );
-  }
-
-  /// Tronque le début de la clé jusqu'à l'index donné (exclus)
-  /// [newStartOffset] doit être > startOffset et < lengthInBytes
-  SharedKey truncate(int newStartOffset) {
-    if (newStartOffset <= startOffset) return this;
-    if (newStartOffset >= lengthInBytes) {
-      // Tout supprimer
-      return SharedKey(
-        id: id,
-        keyData: Uint8List(0),
-        peerIds: List.from(peerIds),
-        createdAt: createdAt,
-        startOffset: newStartOffset,
-        history: history.copy(),
-        nextAvailableByte: newStartOffset,
-      );
-    }
-
-    final bytesToRemove = newStartOffset - startOffset;
-    final actualNewOffset = startOffset + bytesToRemove;
-
-    final newKeyData = keyData.sublist(bytesToRemove);
-
-    // Adjust nextAvailableByte relative to removed bytes
-    int newNextAvailable = (_nextAvailableByte - bytesToRemove).clamp(0, newKeyData.length);
-
-    return SharedKey(
-      id: id,
-      keyData: newKeyData,
-      peerIds: List.from(peerIds),
-      createdAt: createdAt,
-      startOffset: actualNewOffset,
-      history: history.copy(),
-      nextAvailableByte: actualNewOffset + newNextAvailable,
-    );
-  }
-
-  /// Compacte la clé en supprimant les octets utilisés et réindexant
-  SharedKey compact() {
-    final availableBytes = <int>[];
-    for (int b = startOffset; b < keyData.length; b++) {
-      if (b >= _nextAvailableByte) availableBytes.add(b - startOffset);
-    }
-
-    final newBytesNeeded = availableBytes.length;
-    final newKeyData = Uint8List(newBytesNeeded);
-    for (int i = 0; i < availableBytes.length; i++) {
-      final srcIndex = availableBytes[i] + startOffset;
-      newKeyData[i] = keyData[srcIndex];
-    }
-
-    return SharedKey(
-      id: id,
-      keyData: newKeyData,
-      peerIds: List.from(peerIds),
-      createdAt: createdAt,
-      startOffset: 0,
-      history: history.copy(),
-      nextAvailableByte: 0,
     );
   }
 
@@ -329,7 +209,6 @@ class SharedKey {
       'peerIds': peerIds,
       'nextAvailableByte': _nextAvailableByte,
       'createdAt': createdAt.toIso8601String(),
-      'startOffset': startOffset,
       'history': history.toJson(),
     };
   }
@@ -353,7 +232,6 @@ class SharedKey {
       keyData: Uint8List(0), // placeholder; caller must replace by reading file
       peerIds: List<String>.from(json['peerIds'] as List),
       createdAt: DateTime.parse(json['createdAt'] as String),
-      startOffset: startOffset,
       history: history,
       nextAvailableByte: nextAvail,
     );

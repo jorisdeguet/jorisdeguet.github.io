@@ -110,7 +110,6 @@ class KeyStorage {
          keyData: Uint8List.fromList(keyData),
          peerIds: List<String>.from(metadata['peerIds'] as List),
          createdAt: DateTime.parse(metadata['createdAt'] as String),
-         startOffset: startOffset,
          history: history,
          nextAvailableByte: nextAvail,
        );
@@ -153,43 +152,36 @@ class KeyStorage {
 
      try {
        final key = await getKey(conversationId);
+       int oldNextAvailableByte = key.nextAvailableByte;
        key.markBytesAsUsed(startByte, endByte);
 
       // Compute how many bytes should be removed from the local file
-      final bytesToRemove = key.nextAvailableByte - key.startOffset;
+      final bytesToRemove = key.nextAvailableByte - oldNextAvailableByte;
       if (bytesToRemove > 0) {
         // Truncate the file prefix
-        await KeyStorage.instance.truncatePrefix(conversationId, bytesToRemove);
-
+        await truncatePrefix(conversationId, bytesToRemove);
         // Read remaining bytes and construct a new SharedKey with updated startOffset
         final remainingBytes = await readKeyBytes(conversationId);
-
-        final newStartOffset = key.startOffset + bytesToRemove;
-
         final newKey = SharedKey(
           id: conversationId,
           keyData: Uint8List.fromList(remainingBytes),
           peerIds: List.from(key.peerIds),
           createdAt: key.createdAt,
-          startOffset: newStartOffset,
           history: key.history.copy(),
           nextAvailableByte: key.nextAvailableByte,
         );
-
         // Persist the new state (this will overwrite meta and file with same bytes)
         await saveKey(conversationId, newKey);
       } else {
         // No bytes removed, but metadata/history changed (likely only history/nextAvailableByte)
         await saveKey(conversationId, key);
       }
-
        _log.i('KeyStorage', 'updateUsedBytes: SUCCESS');
      } catch (e) {
        _log.e('KeyStorage', 'updateUsedBytes ERROR: $e');
      }
    }
 
-   /// Supprime une clé
    Future<void> deleteKey(String conversationId) async {
      _log.i('KeyStorage', 'deleteKey: $conversationId');
 
@@ -201,12 +193,6 @@ class KeyStorage {
      } catch (e) {
        _log.e('KeyStorage', 'deleteKey ERROR: $e');
      }
-   }
-
-   /// Vérifie si une clé existe pour une conversation
-   Future<bool> hasKey(String conversationId) async {
-     // check file existence
-     return exists(conversationId);
    }
 
    /// Liste toutes les conversations qui ont une clé
