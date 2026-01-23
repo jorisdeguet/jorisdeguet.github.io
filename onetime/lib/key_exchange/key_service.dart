@@ -10,7 +10,7 @@ import '../key_exchange/shared_key.dart';
 class KeyService {
   static const int segmentSizeBytes = 1024;
 
-  final _keyStorage = KeyStorage();
+  final _keyStorage = KeyStorage.instance;
 
   KeyService();
 

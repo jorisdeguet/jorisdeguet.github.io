@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -1508,7 +1509,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
           'firstAvailableByte': firstAvailable,
           'lastAvailableByte': lastAvailable,
           'consistencyHash': consistencyHash,
-          'updatedAt': DateTime.now().toIso8601String(),
+          'updatedAt': FieldValue.serverTimestamp(),
         },
       );
       
@@ -1519,6 +1520,8 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
     }
   }
 }
+
+
 
 
 

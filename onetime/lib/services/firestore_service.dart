@@ -209,7 +209,7 @@ class FirestoreService {
         .orderBy('createdAt', descending: true);
 
     if (before != null) {
-      query = query.where('createdAt', isLessThan: before.toIso8601String());
+      query = query.where('createdAt', isLessThan: Timestamp.fromDate(before));
     }
     
     if (limit != null) {

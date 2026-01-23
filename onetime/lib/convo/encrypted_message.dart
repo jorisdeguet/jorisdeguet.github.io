@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 /// Type de contenu d'un message
 enum MessageContentType {
   text,
@@ -127,7 +129,8 @@ class EncryptedMessage {
       // store single key segment as object for simplicity
       'keySegment': keySegment != null ? {'startByte': keySegment!.startByte, 'lengthBytes': keySegment!.lengthBytes} : null,
       'ciphertext': base64Encode(ciphertext),
-      'createdAt': createdAt.toIso8601String(),
+      // Use server timestamp so Firestore sets an authoritative creation time
+      'createdAt': FieldValue.serverTimestamp(),
       'readBy': readBy,
       'transferredBy': transferredBy,
       'isCompressed': isCompressed,
@@ -148,13 +151,26 @@ class EncryptedMessage {
       parsedSeg = null;
     }
 
+    // createdAt is expected to be a Firestore Timestamp
+    final createdRaw = json['createdAt'];
+    DateTime created;
+    if (createdRaw is Timestamp) {
+      created = createdRaw.toDate();
+    } else if (createdRaw is Map && createdRaw['_seconds'] != null) {
+      // sometimes during local emulation/serialization it may be a map
+      created = Timestamp(createdRaw['_seconds'] as int, (createdRaw['_nanoseconds'] as int?) ?? 0).toDate();
+    } else {
+      // As a fallback (should not happen in production since DB is reset), use now
+      created = DateTime.now();
+    }
+
     return EncryptedMessage(
       id: json['id'] as String,
       keyId: json['keyId'] as String,
       senderId: json['senderId'] as String,
       keySegment: parsedSeg,
       ciphertext: base64Decode(json['ciphertext'] as String),
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      createdAt: created,
       readBy: List<String>.from(json['readBy'] as List? ?? [json['senderId']]),
       transferredBy: List<String>.from(json['transferredBy'] as List? ?? [json['senderId']]),
       isCompressed: json['isCompressed'] as bool? ?? false,
@@ -165,8 +181,8 @@ class EncryptedMessage {
       fileName: json['fileName'] as String?,
       mimeType: json['mimeType'] as String?,
     );
-  }
+   }
 
-  @override
-  String toString() => 'EncryptedMessage($id from $senderId, ${ciphertext.length} bytes, ${contentType.name}${isCompressed ? ', compressed' : ''})';
-}
+   @override
+   String toString() => 'EncryptedMessage($id from $senderId, ${ciphertext.length} bytes, ${contentType.name}${isCompressed ? ', compressed' : ''})';
+ }

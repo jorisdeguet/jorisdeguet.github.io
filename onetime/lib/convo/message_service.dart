@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:onetime/convo/encrypted_message.dart';
 import 'package:onetime/convo/lock_service.dart';
 import 'package:onetime/convo/message_storage.dart';
@@ -305,7 +306,7 @@ class MessageService {
         info: {
           'nextAvailableByte': nextAvailableByte,
           'consistencyHash': consistencyHash,
-          'updatedAt': DateTime.now().toIso8601String(),
+          'updatedAt': FieldValue.serverTimestamp(),
         },
       );
       _log.d('ConversationDetail', 'Key debug info updated in Firestore');

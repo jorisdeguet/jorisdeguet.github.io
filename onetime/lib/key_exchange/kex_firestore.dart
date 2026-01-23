@@ -1,4 +1,5 @@
 import 'package:onetime/key_exchange/key_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Modèle représentant une session d'échange de clé dans Firestore.
 ///
@@ -126,9 +127,8 @@ class KexSessionModel {
      return {
        'segmentsByPeer': normalized.map((k, v) => MapEntry(k.toString(), v)),
        'participants': normalized.keys.toList(),
-      // use ISO strings for timestamps to keep storage consistent and
-      // allow the factory to accept String or Timestamp when reading
-      'updatedAt': DateTime.now().toIso8601String(),
+       // use server timestamp for authoritative update time
+       'updatedAt': FieldValue.serverTimestamp(),
        // inclure la tentative courante (start/end) pour que les listeners puissent éviter
        // de sauvegarder deux fois la même clé si plusieurs updates arrivent.
        'startIndex': startIndex,
@@ -186,9 +186,9 @@ class KexSessionModel {
       'totalKeyBytes': (segmentsNormalized[sourceId]?.length ?? 0) * KeyService.segmentSizeBytes,
        'startIndex': startIndex,
        'endIndex': endIndex,
-       // store dates as ISO strings for readability and cross-platform parsing
-       'createdAt': createdAt.toIso8601String(),
-       'updatedAt': DateTime.now().toIso8601String(),
+       // server timestamps for authoritative times
+       'createdAt': FieldValue.serverTimestamp(),
+       'updatedAt': FieldValue.serverTimestamp(),
      };
   }
 

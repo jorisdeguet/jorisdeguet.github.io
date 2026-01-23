@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// État d'une conversation
 enum ConversationState {
@@ -62,13 +63,22 @@ class Conversation {
       'id': id,
       'peerIds': peerIds,
       'state': state.name,
-      'createdAt': createdAt.toIso8601String(),
+      'createdAt': FieldValue.serverTimestamp(),
       'keyDebugInfo': keyDebugInfo,
     };
   }
 
   /// Désérialise depuis Firebase
   factory Conversation.fromFirestore(Map<String, dynamic> data) {
+    // createdAt is expected to be a Firestore Timestamp
+    final createdRaw = data['createdAt'];
+    DateTime created;
+    if (createdRaw is Timestamp) {
+      created = createdRaw.toDate();
+    } else {
+      created = DateTime.now();
+    }
+
     return Conversation(
       id: data['id'] as String,
       peerIds: List<String>.from(data['peerIds'] as List),
@@ -76,7 +86,7 @@ class Conversation {
         (s) => s.name == data['state'],
         orElse: () => ConversationState.joining,
       ),
-      createdAt: DateTime.parse(data['createdAt'] as String),
+      createdAt: created,
       keyDebugInfo: data['keyDebugInfo'] as Map<String, dynamic>? ?? {},
     );
   }

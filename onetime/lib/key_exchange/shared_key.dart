@@ -75,7 +75,7 @@ class SharedKey {
   // and that nextAvailableByte matches the end of the last consumed segment
   int validateState() {
     print("validate" + history.format());
-    int expectedNextByte = startOffset;
+    int expectedNextByte = 0;
     for (final operation in history.operations) {
       if (operation.type == KeyOperationType.consumption){
         if (operation.segment.startByte == expectedNextByte) {// This segment is contiguous
@@ -326,7 +326,6 @@ class SharedKey {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'keyData': base64Encode(keyData),
       'peerIds': peerIds,
       'nextAvailableByte': _nextAvailableByte,
       'createdAt': createdAt.toIso8601String(),
@@ -337,7 +336,6 @@ class SharedKey {
 
   /// Désérialise une clé depuis le stockage local
   factory SharedKey.fromJson(Map<String, dynamic> json) {
-    final keyData = base64Decode(json['keyData'] as String);
     final startOffset = json['startOffset'] as int? ?? 0;
     final id = json['id'] as String;
 
@@ -349,9 +347,10 @@ class SharedKey {
 
     int? nextAvail = json['nextAvailableByte'] as int? ?? startOffset;
 
+    // Note: keyData bytes must be read from KeyFileStorage after constructing the object.
     return SharedKey(
       id: id,
-      keyData: Uint8List.fromList(keyData),
+      keyData: Uint8List(0), // placeholder; caller must replace by reading file
       peerIds: List<String>.from(json['peerIds'] as List),
       createdAt: DateTime.parse(json['createdAt'] as String),
       startOffset: startOffset,
