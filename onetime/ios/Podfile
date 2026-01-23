@@ -35,7 +35,7 @@ target 'Runner' do
 
   # Use precompiled Firestore iOS SDK to avoid compiling the large C++ sources locally
   # Firebase/Firestore version detected in ios/Podfile.lock: 12.6.0
-  pod 'FirebaseFirestore', :git => 'https://github.com/invertase/firestore-ios-sdk-frameworks.git', :tag => '12.6.0'
+  pod 'FirebaseFirestore', :git => 'https://github.com/invertase/firestore-ios-sdk-frameworks.git', :tag => '12.8.0'
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 

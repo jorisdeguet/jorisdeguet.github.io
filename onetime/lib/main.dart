@@ -1,28 +1,24 @@
 import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'services/auth_service.dart';
-import 'services/key_pre_generation_service.dart';
-import 'services/pseudo_storage_service.dart';
-import 'screens/login_screen.dart';
-import 'screens/home_screen.dart';
-import 'l10n/app_localizations.dart';
-
 // Ajout : options générées par FlutterFire CLI
-import 'firebase_options.dart';
+import 'config/firebase_options.dart';
+import 'home/home_screen.dart';
+import 'l10n/app_localizations.dart';
+import 'signin/auth_service.dart';
+import 'signin/login_screen.dart';
+import 'signin/pseudo_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Utiliser les options générées pour initialiser Firebase (évite le besoin du plist dans le projet iOS)
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Initialiser le service de pré-génération de clés
-  KeyPreGenerationService().initialize();
-  
   runApp(const MyApp());
 }
 
@@ -115,8 +111,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void initState() {
     super.initState();
     _checkAuth();
-    // Écouter les changements d'état d'authentification (ex: suppression de compte)
-    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((_) => _checkAuth());
   }
 
   @override
@@ -127,14 +121,15 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   Future<void> _checkAuth() async {
     final isSignedIn = await _authService.initialize();
-    final myPseudo = await PseudoStorageService().getMyPseudo();
+    final myPseudo = await PseudoService().getMyPseudo();
     
     if (mounted) {
       setState(() {
-        // On considère connecté seulement si Auth Firebase OK ET Pseudo défini
         _isSignedIn = isSignedIn && myPseudo != null && myPseudo.isNotEmpty;
         _isLoading = false;
       });
+
+      // Note: BackgroundMessageService lifecycle moved to ConversationsListScreen
     }
   }
 
