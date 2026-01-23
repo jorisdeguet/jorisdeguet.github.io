@@ -183,7 +183,6 @@ class _ConversationDetailScreenState extends State<ConversationDetailScreen> {
   @override
   void dispose() {
     _pseudoSubscription?.cancel();
-    // Sauvegarder la clé avant de quitter pour persister les bits utilisés
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
