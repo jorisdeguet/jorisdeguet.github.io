@@ -188,7 +188,7 @@ class MessageService {
     );
 
     _log.i('MessageService', 'Message sent successfully!');
-    await _updateKeyDebugInfo(conversationId);
+    await updateKeyDebugInfo(conversationId);
   }
 
   Future<void> sendMessage(String messageToSend, String conversationID) async {
@@ -278,7 +278,7 @@ class MessageService {
       content.split('===')[1];
 
   // after each key update, update debug info in Firestore
-  Future<void> _updateKeyDebugInfo(String conversationId) async {
+  Future<void> updateKeyDebugInfo(String conversationId) async {
     final SharedKey key = await _keyService.getKey(conversationId);
 
     try {
@@ -506,7 +506,7 @@ class MessageService {
       );
 
       // Persist updated key bitmap
-      await _updateKeyDebugInfo(conversationId);
+      await updateKeyDebugInfo(conversationId);
       _log.i('BackgroundMessage', 'Message ${msg.id} processed and stored locally');
     } catch (e, st) {
       _log.e('BackgroundMessage', 'Error decrypting message ${msg.id}: $e');

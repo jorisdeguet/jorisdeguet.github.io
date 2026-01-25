@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:onetime/convo/message_service.dart';
 import 'package:onetime/key_exchange/kex_firestore.dart';
 import 'package:onetime/key_exchange/key_exchange_summary_screen.dart';
 import 'package:onetime/key_exchange/key_exchange_sync_service.dart';
@@ -36,6 +37,7 @@ class KeyExchangeScreen extends StatefulWidget {
 class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
   final AuthService _authService = AuthService();
   final KeyExchangeSyncService _syncService = KeyExchangeSyncService();
+  final MessageService _messageService = MessageService.fromCurrentUserID();
   final QrSegmentCacheService _cacheService = QrSegmentCacheService();
   late final KeyService _keyService = KeyService();
   final _log = AppLogger();
@@ -396,7 +398,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
       _log.i('KeyExchange', 'Reader: Shared key saved successfully');
       // Update Firestore keyDebugInfo immediately with the new key size
       _log.d('KeyExchange', 'Reader: Updating Firestore keyDebugInfo');
-      await _updateKeyDebugInfoForConversation(conversation.id, finalKey);
+      await _messageService.updateKeyDebugInfo(conversation.id);
       // NE PAS supprimer la session - c'est la source qui s'en charge
       _log.d('KeyExchange', 'Reader: Key exchange completed (session cleanup by source)');
       if (mounted) {
@@ -816,7 +818,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
 
       // Update Firestore keyDebugInfo immediately with the new key size
       _log.d('KeyExchange', 'Source: Updating Firestore keyDebugInfo');
-      await _updateKeyDebugInfoForConversation(conversationId, finalKey);
+      await _messageService.updateKeyDebugInfo(conversationId);
 
       // Envoyer le message pseudo chiffré
       //await MessageService.fromCurrentUserID().sendPseudoMessage(conversationId);
@@ -1479,45 +1481,6 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen> {
         ),
       );
     }).toList();
-  }
-
-  /// Updates Firestore keyDebugInfo for a conversation
-  Future<void> _updateKeyDebugInfoForConversation(String conversationId, SharedKey key) async {
-    try {
-      final availableBytes = key.countAvailableBytes();
-      final totalBytes = key.lengthInBytes;
-
-      // Find first and last available byte index
-      int firstAvailable = -1;
-      int lastAvailable = -1;
-      for (int i = 0; i < totalBytes; i++) {
-        if (!key.isByteUsed(i)) {
-          if (firstAvailable == -1) firstAvailable = i;
-          lastAvailable = i;
-        }
-      }
-      
-      // Generate consistency hash
-      final consistencyHash = '$firstAvailable|$lastAvailable|$availableBytes';
-
-      final conversationService = FirestoreService(localUserId: _currentUserId);
-      await conversationService.updateKeyDebugInfo(
-        conversationId: conversationId,
-        userId: _currentUserId,
-        info: {
-          'availableBytes': availableBytes,
-          'firstAvailableByte': firstAvailable,
-          'lastAvailableByte': lastAvailable,
-          'consistencyHash': consistencyHash,
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-      );
-      
-      _log.d('KeyExchange', 'KeyDebugInfo updated for user $_currentUserId: $availableBytes bytes available');
-      _log.d('KeyExchange', '  First available byte: $firstAvailable last available byte: $lastAvailable consistencyHash: $consistencyHash');
-    } catch (e) {
-      _log.e('KeyExchange', 'Error updating keyDebugInfo: $e');
-    }
   }
 }
 

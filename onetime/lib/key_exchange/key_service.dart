@@ -218,6 +218,7 @@ class KeyService {
   Future<void> saveKey(String conversationId, SharedKey finalKey) async {
     return _keyStorage.saveKey(conversationId, finalKey);
   }
+
 }
 
 /// Source shows QR codes, reader scans them
