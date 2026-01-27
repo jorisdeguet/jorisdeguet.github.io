@@ -140,46 +140,7 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-            //
-            // // Actions
-            // if (widget.conversation.hasKey && widget.conversation.isKeyLow || !widget.conversation.hasKey)
-            //   SizedBox(
-            //     width: double.infinity,
-            //     child: ElevatedButton.icon(
-            //       onPressed: () {
-            //         Navigator.pop(context); // Close info screen
-            //         widget.onExtendKey?.call();
-            //       },
-            //       icon: Icon(widget.conversation.hasKey ? Icons.add : Icons.key),
-            //       label: Text(
-            //         widget.conversation.hasKey
-            //             ? 'Étendre la clé (${keyRemainingPercent.toStringAsFixed(0)}% restant)'
-            //             : 'Créer une clé de chiffrement',
-            //       ),
-            //       style: ElevatedButton.styleFrom(
-            //         padding: const EdgeInsets.all(16),
-            //         backgroundColor: Colors.green,
-            //         foregroundColor: Colors.white,
-            //       ),
-            //     ),
-            //   ),
-            //
-            // if (widget.conversation.hasKey && !widget.conversation.isKeyLow)
-            //   SizedBox(
-            //     width: double.infinity,
-            //     child: OutlinedButton.icon(
-            //       onPressed: () {
-            //         Navigator.pop(context); // Close info screen
-            //         widget.onExtendKey?.call();
-            //       },
-            //       icon: const Icon(Icons.add_link),
-            //       label: const Text('Allonger la clé de chiffrement'),
-            //       style: OutlinedButton.styleFrom(padding: const EdgeInsets.all(16)),
-            //     ),
-            //   ),
-            //
 
-            
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
@@ -230,14 +191,10 @@ class _ConversationInfoScreenState extends State<ConversationInfoScreen> {
     
     try {
       await _conversationService.deleteConversation(widget.conversation.id);
-
-      // Supprimer la clé locale si elle existe
       await _keyService.deleteKey(widget.conversation.id);
-
       if (mounted) {
         Navigator.pop(context); // Close info screen
         widget.onDelete?.call(); // Callback to close detail screen
-        
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Conversation supprimée')),
         );
