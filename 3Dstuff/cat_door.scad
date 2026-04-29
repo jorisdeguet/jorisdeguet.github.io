@@ -33,7 +33,7 @@ screen_web_mm = 0.5;
 // Hinge-axis hole controls.
 alignment_hole_diameter_mm = 3;
 alignment_hole_top_margin_mm = 4;
-alignment_hole_z_offset_mm = 10;
+alignment_hole_z_offset_mm = 7;
 
 // Separate rod.
 hinge_rod_length_mm = 250;
@@ -80,7 +80,8 @@ frame_opening_top_y_mm = door_center_y_mm + frame_opening_half_height_mm;
 alignment_hole_radius_mm = alignment_hole_diameter_mm / 2;
 alignment_hole_local_y_mm = door_top_local_y_mm - alignment_hole_radius_mm - alignment_hole_top_margin_mm;
 alignment_hole_global_y_mm = door_center_y_mm + alignment_hole_local_y_mm;
-alignment_hole_z_mm = (door_thickness_mm / 2) + alignment_hole_z_offset_mm;
+alignment_hole_local_z_mm = door_thickness_mm / 2;
+alignment_hole_global_z_mm = alignment_hole_local_z_mm + alignment_hole_z_offset_mm;
 
 door_hole_half_width_mm = door_radius_mm - (abs(alignment_hole_local_y_mm) / sqrt3);
 frame_opening_half_width_mm = frame_opening_radius_mm - (abs(alignment_hole_local_y_mm) / sqrt3);
@@ -121,15 +122,15 @@ assert(screen_hole_mm > 0, "screen_hole_mm must be positive.");
 assert(screen_web_mm >= 0, "screen_web_mm must be zero or positive.");
 assert(alignment_hole_diameter_mm > 0, "alignment_hole_diameter_mm must be positive.");
 assert(
-    alignment_hole_z_offset_mm >= -(door_thickness_mm / 2) + alignment_hole_radius_mm,
-    "alignment_hole_z_offset_mm places the hole below the door thickness."
+    alignment_hole_diameter_mm <= door_thickness_mm,
+    "alignment_hole_diameter_mm must fit within the door thickness."
 );
 assert(
-    alignment_hole_z_mm + alignment_hole_radius_mm <= door_thickness_mm,
-    "alignment_hole_z_offset_mm places the hole above the door thickness."
+    alignment_hole_global_z_mm - alignment_hole_radius_mm >= 0,
+    "alignment_hole_z_offset_mm places the hole below the frame front face."
 );
 assert(
-    alignment_hole_z_mm + alignment_hole_radius_mm <= frame_depth_at_y(alignment_hole_global_y_mm),
+    alignment_hole_global_z_mm + alignment_hole_radius_mm <= frame_depth_at_y(alignment_hole_global_y_mm),
     "alignment_hole_z_offset_mm places the hole outside the frame thickness at the hinge-axis height."
 );
 assert(
@@ -216,16 +217,16 @@ module door_screen_region_2d() {
 }
 
 module door_alignment_hole_cut() {
-    translate([0, alignment_hole_local_y_mm, alignment_hole_z_mm])
+    translate([0, alignment_hole_local_y_mm, alignment_hole_local_z_mm])
         x_cylinder((2 * door_hole_half_width_mm) + (2 * eps), alignment_hole_diameter_mm);
 }
 
 module frame_alignment_hole_cut() {
     union() {
-        translate([-frame_side_hole_center_x_mm, alignment_hole_global_y_mm, alignment_hole_z_mm])
+        translate([-frame_side_hole_center_x_mm, alignment_hole_global_y_mm, alignment_hole_global_z_mm])
             x_cylinder(frame_side_hole_length_mm + (2 * eps), alignment_hole_diameter_mm);
 
-        translate([ frame_side_hole_center_x_mm, alignment_hole_global_y_mm, alignment_hole_z_mm])
+        translate([ frame_side_hole_center_x_mm, alignment_hole_global_y_mm, alignment_hole_global_z_mm])
             x_cylinder(frame_side_hole_length_mm + (2 * eps), alignment_hole_diameter_mm);
     }
 }
@@ -290,7 +291,7 @@ module bottom_extension_part() {
 
 module door_part() {
     color([0.78, 0.80, 0.84])
-        translate([0, door_center_y_mm, 0])
+        translate([0, door_center_y_mm, alignment_hole_z_offset_mm])
             difference() {
                 linear_extrude(height = door_thickness_mm, convexity = 10)
                     door_panel_2d();
@@ -322,7 +323,7 @@ module assembled_view() {
     door_part();
 
     if (show_hinge_rod)
-        translate([0, alignment_hole_global_y_mm, alignment_hole_z_mm])
+        translate([0, alignment_hole_global_y_mm, alignment_hole_global_z_mm])
             hinge_rod_part();
 }
 
