@@ -16,6 +16,7 @@ door_thickness_in = 0.2;
 frame_border_mm = 18;
 door_edge_frame_mm = 10;
 clearance_mm = 5;
+hex_corner_radius_mm = 6;
 
 // Screen pattern controls.
 disable_hex_grid = true;
@@ -64,6 +65,11 @@ assert(
     door_edge_frame_mm < ((sqrt(3) / 2) * door_radius_mm),
     "door_edge_frame_mm is too large for the hexagonal door."
 );
+assert(hex_corner_radius_mm >= 0, "hex_corner_radius_mm must be zero or positive.");
+assert(
+    hex_corner_radius_mm < ((sqrt(3) / 2) * door_radius_mm),
+    "hex_corner_radius_mm is too large for the hexagon size."
+);
 assert(screen_hole_mm > 0, "screen_hole_mm must be positive.");
 assert(screen_web_mm >= 0, "screen_web_mm must be zero or positive.");
 assert(alignment_hole_diameter_mm > 0, "alignment_hole_diameter_mm must be positive.");
@@ -94,6 +100,15 @@ module hexagon_2d(radius) {
         [-radius / 2, -(sqrt(3) / 2) * radius],
         [ radius / 2, -(sqrt(3) / 2) * radius]
     ]);
+}
+
+module rounded_hexagon_2d(radius, corner_radius_mm) {
+    if (corner_radius_mm > 0)
+        offset(r = corner_radius_mm)
+            offset(delta = -corner_radius_mm)
+                hexagon_2d(radius);
+    else
+        hexagon_2d(radius);
 }
 
 module honeycomb_holes_2d(bounds_radius, hole_flat_mm, web_mm) {
@@ -132,11 +147,11 @@ module outer_frame_body() {
 }
 
 module frame_opening_2d() {
-    hexagon_2d(frame_opening_radius_mm);
+    rounded_hexagon_2d(frame_opening_radius_mm, hex_corner_radius_mm);
 }
 
 module door_panel_2d() {
-    hexagon_2d(door_radius_mm);
+    rounded_hexagon_2d(door_radius_mm, hex_corner_radius_mm);
 }
 
 module door_screen_region_2d() {
