@@ -35,6 +35,11 @@ alignment_hole_diameter_mm = 3;
 alignment_hole_top_margin_mm = 4;
 alignment_hole_z_offset_mm = 7;
 
+// Swept clearance cut for the swinging door in the top frame.
+swing_clearance_angle_deg = 85;
+swing_clearance_step_deg = 5;
+swing_clearance_extra_mm = clearance_mm;
+
 // Separate rod.
 hinge_rod_length_mm = 250;
 hinge_rod_diameter_mm = 2.5;
@@ -138,6 +143,10 @@ assert(
     "alignment hole is above the top side of the hex door."
 );
 assert(door_hole_half_width_mm > 0, "alignment hole is too high for the hex door.");
+assert(swing_clearance_angle_deg >= 0, "swing_clearance_angle_deg must be zero or positive.");
+assert(swing_clearance_angle_deg < 180, "swing_clearance_angle_deg must stay below 180 degrees.");
+assert(swing_clearance_step_deg > 0, "swing_clearance_step_deg must be positive.");
+assert(swing_clearance_extra_mm >= 0, "swing_clearance_extra_mm must be zero or positive.");
 assert(frame_side_hole_length_mm > 0, "alignment hole does not intersect the frame sides.");
 assert(joint_tongue_width_mm > 0, "joint_tongue_width_mm must be positive.");
 assert(joint_tongue_height_mm > 0, "joint_tongue_height_mm must be positive.");
@@ -216,6 +225,11 @@ module door_screen_region_2d() {
         door_panel_2d();
 }
 
+module door_swing_clearance_2d() {
+    offset(delta = swing_clearance_extra_mm)
+        door_panel_2d();
+}
+
 module door_alignment_hole_cut() {
     translate([0, alignment_hole_local_y_mm, alignment_hole_local_z_mm])
         x_cylinder((2 * door_hole_half_width_mm) + (2 * eps), alignment_hole_diameter_mm);
@@ -228,6 +242,25 @@ module frame_alignment_hole_cut() {
 
         translate([ frame_side_hole_center_x_mm, alignment_hole_global_y_mm, alignment_hole_global_z_mm])
             x_cylinder(frame_side_hole_length_mm + (2 * eps), alignment_hole_diameter_mm);
+    }
+}
+
+module door_swing_clearance_cut() {
+    union() {
+        for (angle_deg = [-swing_clearance_angle_deg : swing_clearance_step_deg : swing_clearance_angle_deg]) {
+            translate([0, alignment_hole_global_y_mm, alignment_hole_global_z_mm])
+                rotate([angle_deg, 0, 0])
+                    translate([
+                        0,
+                        -alignment_hole_local_y_mm,
+                        -alignment_hole_local_z_mm - swing_clearance_extra_mm
+                    ])
+                        linear_extrude(
+                            height = door_thickness_mm + (2 * swing_clearance_extra_mm),
+                            convexity = 10
+                        )
+                            door_swing_clearance_2d();
+        }
     }
 }
 
@@ -276,6 +309,7 @@ module top_frame_part() {
                 linear_extrude(height = max_frame_depth_mm + (2 * eps), convexity = 10)
                     frame_opening_2d();
 
+            door_swing_clearance_cut();
             frame_alignment_hole_cut();
             top_section_grooves();
         }
