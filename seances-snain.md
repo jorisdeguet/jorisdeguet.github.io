@@ -37,13 +37,15 @@ print(a)
 
 # R3
 calendrier
-
 10 minutes sur controle. Feuille de notes recto-verso.
 
-
+Premier résolution de problèmes : impot fédéral
 
 # R4
 calendrier 
+
+Second résolution de problème : calculer la racine d'un nombre avec mes maths du secondaire
+
 exercices de cette semaine
 formatif pour
 
