@@ -28,6 +28,7 @@ print(a)
 print(b)
 ```
 
+Dans le débogueur pour bloquer sur print(a)
 ```python
 a = 100
 a = a**2
