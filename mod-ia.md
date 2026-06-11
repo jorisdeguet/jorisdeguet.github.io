@@ -67,3 +67,22 @@ Principe de base:
 
 ### **420-4G3-EM - Méthodologie et gestion de projet**
 
+# SN
+
+
+# Réseau
+
+| Session 1 | Session 2 | Session 3 | Session 4 | Session 5 |
+| :--- | :--- | :--- | :--- | :--- |
+| **Intro prog.**<br>🛑 *IA Interdite*<br>Logique de base. | **Prog. OO**<br>⚠️ *IA Limitée*<br>Génération de tests unitaires. | **Web trans. (3W6)**<br>🚀 *IA Accélérateur*<br>Génération HTML/CSS par plugin. | **Méthodologie**<br>📋 *IA Norme*<br>Fichiers `copilot.md`. | **Mobile Avancé**<br>⚙️ *IA Optimisation*<br>Minimiser les tokens. |
+| **Bureautique**<br>💬 *Sensibilisation*<br>Bases du prompt. | **Web serveur**<br>🛑 *IA Interdite*<br>Écriture pure HTTP. | **Prog. Mobile**<br>💡 *IA Aide*<br>Interface UI Flutter via invites. | **Solutions app.**<br>🔍 *IA Exploration*<br>Dompter un stack inconnu. | **Web Avancé**<br>🤖 *IA Architecture*<br>Créer des agents web. |
+
+# Prog
+
+| Session 1 | Session 2 | Session 3 | Session 4 | Session 5 |
+| :--- | :--- | :--- | :--- | :--- |
+| **Intro prog.**<br>🛑 *IA Interdite*<br>Logique de base. | **Prog. OO**<br>⚠️ *IA Limitée*<br>Génération de tests unitaires. | **Web trans. (3W6)**<br>🚀 *IA Accélérateur*<br>Génération HTML/CSS par plugin. | **Méthodologie**<br>📋 *IA Norme*<br>Fichiers `copilot.md`. | **Mobile Avancé**<br>⚙️ *IA Optimisation*<br>Minimiser les tokens. |
+|  |  | **3M5**<br>🚀 *IA Accélérateur*<br>Génération HTML/CSS par plugin. | **4M6**<br>📋 *IA Norme*<br>Fichiers `copilot.md`. | **5M6**<br>⚙️ *IA Optimisation*<br>Minimiser les tokens. |
+|  |  | **3W6**<br>🚀 *IA Accélérateur*<br>Génération HTML/CSS par plugin. | **4W6**<br>📋 *IA Norme*<br>Fichiers `copilot.md`. | **5W6**<br>⚙️ *IA Optimisation*<br>Minimiser les tokens. |
+| **Bureautique**<br>💬 *Sensibilisation*<br>Bases du prompt. | **Web serveur**<br>🛑 *IA Interdite*<br>Écriture pure HTTP. | **Prog. Mobile**<br>💡 *IA Aide*<br>Interface UI Flutter via invites. | **Solutions app.**<br>🔍 *IA Exploration*<br>Dompter un stack inconnu. | **Web Avancé**<br>🤖 *IA Architecture*<br>Créer des agents web. |
+
