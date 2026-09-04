@@ -214,22 +214,9 @@ def inject_signatures_in_directory(dir_path: str, student_id: str):
                 with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
                     content = f.read()
                 
-                # Append watermark at the end of the first line AND at the end of the file
-                lines = content.split('\n')
-                if len(lines) > 0 and lines[0].strip():
-                    if lines[0].endswith('\r'):
-                        lines[0] = lines[0][:-1] + watermark + '\r'
-                    else:
-                        lines[0] = lines[0] + watermark
-                else:
-                    lines = [watermark] + lines
+                # Add watermark as the first line of the file, followed by a newline
+                new_content = watermark + '\n' + content
                 
-                new_content = '\n'.join(lines)
-                
-                # Append watermark to the end of the file as well
-                if not new_content.endswith(watermark):
-                    new_content += "\n" + watermark
-                    
                 with open(full_path, 'w', encoding='utf-8') as f:
                     f.write(new_content)
             except Exception:
