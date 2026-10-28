@@ -5,7 +5,7 @@ import { bracketMatching, HighlightStyle, indentOnInput, indentUnit, StreamLangu
 import { tags } from '@lezer/highlight'
 import { csharp, dart } from '@codemirror/legacy-modes/mode/clike'
 import { Compartment, EditorState, StateEffect, StateField, type Extension } from '@codemirror/state'
-import { Decoration, EditorView, GutterMarker, gutter, keymap, lineNumbers, type DecorationSet } from '@codemirror/view'
+import { Decoration, EditorView, GutterMarker, WidgetType, gutter, keymap, lineNumbers, type DecorationSet } from '@codemirror/view'
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import type { Lang, Step } from '../engine'
 
@@ -23,6 +23,7 @@ const props = defineProps<{
   readonly?: boolean
   step?: Step | null
   diags: EditorDiag[]
+  note?: { line: number; text: string } | null // commentaire affiché en fin de ligne (valeur renvoyée)
 }>()
 const emit = defineEmits<{ 'update:modelValue': [string]; ready: [EditorView] }>()
 
@@ -48,6 +49,21 @@ const highlight = HighlightStyle.define([
 ])
 
 // ----- décorations : pas courant + erreurs -----
+class NoteWidget extends WidgetType {
+  constructor(readonly text: string) {
+    super()
+  }
+  eq(o: NoteWidget) {
+    return o.text === this.text
+  }
+  toDOM() {
+    const el = document.createElement('span')
+    el.className = 'cm-ret-note'
+    el.textContent = this.text
+    return el
+  }
+}
+
 const setDecos = StateEffect.define<DecorationSet>()
 const decoField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
@@ -94,6 +110,11 @@ function buildDecos(): DecorationSet {
     const from = clamp(s.span.start)
     const to = clamp(s.span.end)
     if (from < to && s.kind !== 'loopBack' && s.kind !== 'end') ranges.push({ from, to, deco: Decoration.mark({ class: 'cm-step-span' }) })
+  }
+  const n = props.note
+  if (n && n.line >= 1 && n.line <= doc.lines) {
+    const ln = doc.line(n.line)
+    ranges.push({ from: ln.to, to: ln.to, deco: Decoration.widget({ widget: new NoteWidget(n.text), side: 1 }) })
   }
   return Decoration.set(
     ranges.map((r) => r.deco.range(r.from, r.to)),
@@ -156,7 +177,7 @@ watch(
   () => props.readonly,
   (r) => view.value?.dispatch({ effects: roConf.reconfigure(EditorState.readOnly.of(!!r)) }),
 )
-watch(() => [props.step, props.diags], refresh)
+watch(() => [props.step, props.diags, props.note], refresh)
 
 /** Déplace le curseur sur une ligne (clic sur une erreur). */
 function focusLine(line: number) {

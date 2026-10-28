@@ -131,7 +131,6 @@ export default {
   steps: {
     'start.top': 'Le programme démarre : on exécute les instructions **de haut en bas**, en commençant par la ligne {line}.',
     'start.main': 'Le programme démarre toujours par la fonction `{name}` : on crée son contexte sur la pile.',
-    def: '`def {name}({params})` **enregistre** la fonction `{name}` sans exécuter son corps. Le corps ne s’exécutera qu’au moment d’un appel.',
     'decl.init': 'Déclaration de la variable `{name}` de type `{type}`, initialisée avec la valeur `{value}`.',
     'decl.noinit': 'Déclaration de la variable `{name}` de type `{type}` sans valeur : elle existe, mais il faut lui donner une valeur avant de la lire.',
     assign: 'Affectation : on calcule la partie droite, puis on range la valeur `{value}` dans `{name}` (l’ancienne valeur `{old}` est remplacée).',

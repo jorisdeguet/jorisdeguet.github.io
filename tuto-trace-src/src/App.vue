@@ -92,6 +92,18 @@ watch(code, () => {
 })
 
 const step = computed<Step | null>(() => (cur.value >= 0 ? (steps.value[cur.value] ?? null) : null))
+// Au retour d'une fonction, commentaire en fin de ligne d'appel : `a = carre(3)  # carre(3) → 9`.
+// Il reste affiché au pas suivant s'il se passe sur la même ligne (l'affectation qui utilise la valeur).
+const retNote = computed(() => {
+  const at = (i: number) => {
+    const s = steps.value[i]
+    return s?.kind === 'return' && s.key === 'return.value' ? s : undefined
+  }
+  const s = step.value
+  const r = at(cur.value) ?? (s && at(cur.value - 1)?.params.line === s.line && s.kind !== 'return' ? at(cur.value - 1) : undefined)
+  if (!r) return null
+  return { line: Number(r.params.line), text: `${lang.value === 'python' ? '#' : '//'} ${r.params.call} → ${r.params.value}` }
+})
 
 const diags = computed<EditorDiag[]>(() => {
   void locale.value
@@ -273,7 +285,7 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <div ref="wrap" class="editor-wrap">
-            <CodeEditor ref="editor" :model-value="code" :lang="lang" :readonly="readonly" :step="step" :diags="diags" @update:model-value="onCodeEdit" @ready="(v) => (view = v)" />
+            <CodeEditor ref="editor" :model-value="code" :lang="lang" :readonly="readonly" :step="step" :diags="diags" :note="retNote" @update:model-value="onCodeEdit" @ready="(v) => (view = v)" />
             <FlowOverlay :view="view" :wrap="wrap" :flow="analysis.flow" :step="step" />
           </div>
           <PlayControls

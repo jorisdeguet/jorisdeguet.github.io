@@ -130,7 +130,6 @@ const en: typeof fr = {
   steps: {
     'start.top': 'The program starts: instructions run **from top to bottom**, beginning with line {line}.',
     'start.main': 'The program always starts with the `{name}` function: its context is pushed on the stack.',
-    def: '`def {name}({params})` **registers** the function `{name}` without running its body. The body only runs when the function is called.',
     'decl.init': 'Declaration of variable `{name}` of type `{type}`, initialized with `{value}`.',
     'decl.noinit': 'Declaration of variable `{name}` of type `{type}` without a value: it exists, but it must get a value before being read.',
     assign: 'Assignment: the right side is evaluated, then `{value}` is stored in `{name}` (the old value `{old}` is replaced).',

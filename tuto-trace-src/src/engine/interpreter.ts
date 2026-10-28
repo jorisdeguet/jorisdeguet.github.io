@@ -4,7 +4,7 @@ import { LineMap } from './tokenizer'
 import { NULL, bool, dbl, display, int, list, rangeLen, repr, str, truthy, typeName, valueEquals, type Value } from './values'
 
 export type StepKind =
-  | 'start' | 'def' | 'decl' | 'assign' | 'incdec' | 'cond' | 'loopBack' | 'forNext' | 'forUpdate'
+  | 'start' | 'decl' | 'assign' | 'incdec' | 'cond' | 'loopBack' | 'forNext' | 'forUpdate'
   | 'call' | 'return' | 'print' | 'mutate' | 'expr' | 'break' | 'continue' | 'error' | 'end' | 'limit'
 
 export interface VarView {
@@ -200,7 +200,8 @@ export class Interpreter {
     this.frames.push(g)
     try {
       if (p.entry === 'top') {
-        const first = p.body[0]
+        // le programme commence à la première instruction exécutée (les `def` ne sont pas des pas)
+        const first = p.body.find((s) => s.k !== 'func')
         if (first) yield this.emit({ kind: 'start', span: first.span.line === first.span.endLine ? first.span : this.lineSpan(first.span.line), key: 'start.top', params: { line: first.span.line } })
         yield* this.execBlock(p.body, false)
       } else {
@@ -403,16 +404,8 @@ export class Interpreter {
       case 'block':
         return yield* this.execBlock(s.body)
       case 'func':
-        if (this.lang === 'python') {
-          this.definedFuncs.add(s.name)
-          yield this.emit({
-            kind: 'def',
-            span: s.headSpan,
-            key: 'def',
-            params: { name: s.name, params: s.params.map((p) => p.name).join(', ') },
-            construct: s.id,
-          })
-        }
+        // la ligne `def` ne produit pas de pas : on se concentre sur l'exécution des instructions
+        if (this.lang === 'python') this.definedFuncs.add(s.name)
         return
     }
   }
@@ -639,7 +632,7 @@ export class Interpreter {
       kind: 'return',
       span,
       key: retStmt ? (isVoid ? 'return.void' : 'return.value') : 'return.implicit',
-      params: { name: f.name, value: this.repr(value), line: callSpan.line },
+      params: { name: f.name, value: this.repr(value), line: callSpan.line, call: this.text(callSpan) },
       construct: f.id,
       jump: { from: span.line, to: callSpan.line, kind: 'return' },
       flies: !isVoid && retStmt?.e ? [{ from: retStmt.e.span, text: this.repr(value), to: { span: callSpan } }] : undefined,

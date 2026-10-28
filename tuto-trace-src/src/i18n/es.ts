@@ -130,7 +130,6 @@ const es: typeof fr = {
   steps: {
     'start.top': 'El programa arranca: las instrucciones se ejecutan **de arriba abajo**, empezando por la línea {line}.',
     'start.main': 'El programa siempre empieza por la función `{name}`: se crea su contexto en la pila.',
-    def: '`def {name}({params})` **registra** la función `{name}` sin ejecutar su cuerpo. El cuerpo solo se ejecuta cuando se la llama.',
     'decl.init': 'Declaración de la variable `{name}` de tipo `{type}`, inicializada con `{value}`.',
     'decl.noinit': 'Declaración de la variable `{name}` de tipo `{type}` sin valor: existe, pero hay que darle un valor antes de leerla.',
     assign: 'Asignación: se calcula la parte derecha y se guarda `{value}` en `{name}` (el valor anterior `{old}` se reemplaza).',

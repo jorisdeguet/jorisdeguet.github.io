@@ -6,8 +6,6 @@ export function summary(s: Step): string {
   switch (s.kind) {
     case 'start':
       return p.name ? `▶ ${p.name}()` : '▶'
-    case 'def':
-      return `def ${p.name}(${p.params})`
     case 'decl':
       return p.value === '?' ? `${p.type} ${p.name}` : `${p.type} ${p.name} = ${p.value}`
     case 'assign':

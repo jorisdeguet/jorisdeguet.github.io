@@ -92,7 +92,7 @@ const rows = computed<Row[]>(() => {
 })
 const hidden = computed(() => Math.max(0, shown.value.length - MAX_ROWS))
 
-const NOTE_KINDS = new Set(['cond', 'call', 'return', 'loopBack', 'break', 'continue', 'error', 'end', 'start', 'def', 'limit', 'expr'])
+const NOTE_KINDS = new Set(['cond', 'call', 'return', 'loopBack', 'break', 'continue', 'error', 'end', 'start', 'limit', 'expr'])
 const note = (s: Step) => (NOTE_KINDS.has(s.kind) ? summary(s) : '')
 const output = (s: Step) => (s.kind === 'print' ? JSON.parse(String(s.params.text)) : '')
 
