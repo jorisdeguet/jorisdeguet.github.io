@@ -1,0 +1,162 @@
+{
+ "python/err-indent.py": {
+  "out": "",
+  "err": "IndentationError: expected an indented block after 'while' statement on line 2"
+ },
+ "python/err-runtime.py": {
+  "out": "1\n2\n3\n",
+  "err": "IndexError: list index out of range"
+ },
+ "python/err-type.py": {
+  "out": "Bonjour\n",
+  "err": "TypeError: can only concatenate str (not \"int\") to str"
+ },
+ "python/err-undeclared.py": {
+  "out": "",
+  "err": "NameError: name 'totale' is not defined. Did you mean: 'total'?"
+ },
+ "python/for-each.py": {
+  "out": "pomme\nkiwi\npoire\n",
+  "err": ""
+ },
+ "python/for-nested.py": {
+  "out": "1\n2\n3\n2\n4\n6\n",
+  "err": ""
+ },
+ "python/for-range.py": {
+  "out": "0\n1\n2\nFin\n",
+  "err": ""
+ },
+ "python/func-chain.py": {
+  "out": "20\n",
+  "err": ""
+ },
+ "python/func-recursion.py": {
+  "out": "24\n",
+  "err": ""
+ },
+ "python/func-simple.py": {
+  "out": "9\n",
+  "err": ""
+ },
+ "python/if-elif.py": {
+  "out": "Doux\n",
+  "err": ""
+ },
+ "python/if-else.py": {
+  "out": "Mineur\nFin\n",
+  "err": ""
+ },
+ "python/if-simple.py": {
+  "out": "Réussi\nFin\n",
+  "err": ""
+ },
+ "python/list-ops.py": {
+  "out": "83.33333333333333\n",
+  "err": ""
+ },
+ "python/swap.py": {
+  "out": "8 5\n",
+  "err": ""
+ },
+ "python/variables.py": {
+  "out": "36\nTotal : 41\n",
+  "err": ""
+ },
+ "python/while-counter.py": {
+  "out": "0\n1\n2\nFin\n",
+  "err": ""
+ },
+ "python/while-search.py": {
+  "out": "Trouvé à l'indice 2\n",
+  "err": ""
+ },
+ "python/while-sum.py": {
+  "out": "10\n",
+  "err": ""
+ },
+ "dart/err-runtime.dart": {
+  "out": "1\n2\n3\n",
+  "err": "Unhandled exception:"
+ },
+ "dart/err-semicolon.dart": {
+  "out": "",
+  "err": "src/examples/dart/err-semicolon.dart:2:11: Error: Expected ';' after this."
+ },
+ "dart/err-type.dart": {
+  "out": "",
+  "err": "src/examples/dart/err-type.dart:2:13: Error: A value of type 'String' can't be assigned to a variable of type 'int'."
+ },
+ "dart/err-undeclared.dart": {
+  "out": "",
+  "err": "src/examples/dart/err-undeclared.dart:3:9: Error: Undefined name 'totale'."
+ },
+ "dart/for-each.dart": {
+  "out": "pomme\nkiwi\npoire\n",
+  "err": ""
+ },
+ "dart/for-nested.dart": {
+  "out": "1\n2\n3\n2\n4\n6\n",
+  "err": ""
+ },
+ "dart/for-range.dart": {
+  "out": "0\n1\n2\nFin\n",
+  "err": ""
+ },
+ "dart/func-chain.dart": {
+  "out": "20\n",
+  "err": ""
+ },
+ "dart/func-recursion.dart": {
+  "out": "24\n",
+  "err": ""
+ },
+ "dart/func-simple.dart": {
+  "out": "9\n",
+  "err": ""
+ },
+ "dart/if-elif.dart": {
+  "out": "Doux\n",
+  "err": ""
+ },
+ "dart/if-else.dart": {
+  "out": "Mineur\nFin\n",
+  "err": ""
+ },
+ "dart/if-simple.dart": {
+  "out": "Réussi\nFin\n",
+  "err": ""
+ },
+ "dart/list-ops.dart": {
+  "out": "83.33333333333333\n",
+  "err": ""
+ },
+ "dart/swap.dart": {
+  "out": "8 5\n",
+  "err": ""
+ },
+ "dart/variables.dart": {
+  "out": "36\nTotal : 41\n",
+  "err": ""
+ },
+ "dart/while-counter.dart": {
+  "out": "0\n1\n2\nFin\n",
+  "err": ""
+ },
+ "dart/while-search.dart": {
+  "out": "Trouvé à l'indice 2\n",
+  "err": ""
+ },
+ "dart/while-sum.dart": {
+  "out": "10\n",
+  "err": ""
+ },
+ "python/fact-loop.py": {
+  "out": "120\n",
+  "err": ""
+ },
+ "dart/fact-loop.dart": {
+  "out": "120\n",
+  "err": ""
+ }
+}

@@ -1,0 +1,97 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`csharp > fact-loop.cs 1`] = `
+"120
+"
+`;
+
+exports[`csharp > for-each.cs 1`] = `
+"pomme
+kiwi
+poire
+"
+`;
+
+exports[`csharp > for-nested.cs 1`] = `
+"1
+2
+3
+2
+4
+6
+"
+`;
+
+exports[`csharp > for-range.cs 1`] = `
+"0
+1
+2
+Fin
+"
+`;
+
+exports[`csharp > func-chain.cs 1`] = `
+"20
+"
+`;
+
+exports[`csharp > func-recursion.cs 1`] = `
+"24
+"
+`;
+
+exports[`csharp > func-simple.cs 1`] = `
+"9
+"
+`;
+
+exports[`csharp > if-elif.cs 1`] = `
+"Doux
+"
+`;
+
+exports[`csharp > if-else.cs 1`] = `
+"Mineur
+Fin
+"
+`;
+
+exports[`csharp > if-simple.cs 1`] = `
+"Réussi
+Fin
+"
+`;
+
+exports[`csharp > list-ops.cs 1`] = `
+"83
+"
+`;
+
+exports[`csharp > swap.cs 1`] = `
+"8 5
+"
+`;
+
+exports[`csharp > variables.cs 1`] = `
+"36
+Total : 41
+"
+`;
+
+exports[`csharp > while-counter.cs 1`] = `
+"0
+1
+2
+Fin
+"
+`;
+
+exports[`csharp > while-search.cs 1`] = `
+"Trouvé à l'indice 2
+"
+`;
+
+exports[`csharp > while-sum.cs 1`] = `
+"10
+"
+`;

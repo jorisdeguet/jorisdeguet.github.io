@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>tuto-trace — démo d'intégration</title>
+    <style>
+      body { max-width: 1100px; margin: 0 auto; padding: 16px; font: 16px/1.5 system-ui, sans-serif; }
+      pre.src { background: #f1f3f5; padding: 12px; border-radius: 8px; overflow: auto; }
+    </style>
+    <script src="embed.js" defer></script>
+  </head>
+  <body>
+    <h1>Intégrer tuto-trace dans une page</h1>
+    <p>Ajoutez le script une fois, puis un bloc <code>&lt;pre data-tuto-trace&gt;</code> par exemple :</p>
+    <pre class="src">&lt;script src="https://jorisdeguet.github.io/tuto-trace/embed.js" defer&gt;&lt;/script&gt;
+&lt;pre data-tuto-trace data-lang="python" data-ui="fr"&gt;
+i = 0
+while i &lt; 3:
+    print(i)
+    i = i + 1
+&lt;/pre&gt;</pre>
+
+    <h2>Python : boucle while</h2>
+    <pre data-tuto-trace data-lang="python" data-ui="fr">
+i = 0
+while i < 3:
+    print(i)
+    i = i + 1
+print("Fin")
+</pre>
+
+    <h2>Dart : exemple de la bibliothèque (<code>data-ex</code>)</h2>
+    <pre data-tuto-trace data-lang="dart" data-ui="fr" data-ex="func-recursion"></pre>
+  </body>
+</html>
