@@ -43,6 +43,7 @@ export interface Step {
   arc?: 'true' | 'false' | 'back'
   jump?: { from: number; to: number; kind: 'call' | 'return' }
   flies?: Fly[]
+  links?: { from: Span; to: Span }[] // argument (appel) → paramètre (définition)
   changed?: { frameId: number; name: string }
   error?: { code: string; params: Record<string, string | number> }
   frameId: number
@@ -611,6 +612,7 @@ export class Interpreter {
       construct: f.id,
       jump: { from: callSpan.line, to: f.headSpan.line, kind: 'call' },
       flies: argExprs.map((a, i) => ({ from: a.span, text: this.repr(args[i]), to: { var: { frameId: fr.id, name: f.params[i].name } } })),
+      links: argExprs.map((a, i) => ({ from: a.span, to: f.params[i].span })),
     })
     let value: Value = NULL
     let retStmt: Extract<Stmt, { k: 'return' }> | null = null

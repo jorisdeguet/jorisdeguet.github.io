@@ -85,7 +85,15 @@ const geometry = computed(() => {
     const c = v.coordsAtPos(l.from + l.text.trimEnd().length)
     return c ? c.left - wr.left : null
   }
-  return { left: gr.left - wr.left, right: gr.right - wr.left, top: sr.top - wr.top, height: sr.height, width: wr.width, yOf, xIndent, xEnd, lh, cw: v.defaultCharacterWidth }
+  // boîte d'une plage du source (null si elle n'est pas affichée)
+  const box = (sp: { start: number; end: number }) => {
+    const n = doc.length
+    const a = v.coordsAtPos(Math.min(sp.start, n), 1)
+    const b = v.coordsAtPos(Math.min(sp.end, n), -1)
+    if (!a || !b) return null
+    return { left: a.left - wr.left, right: (b.top === a.top ? b.right : a.right) - wr.left, top: a.top - wr.top, bottom: a.bottom - wr.top }
+  }
+  return { box, left: gr.left - wr.left, right: gr.right - wr.left, top: sr.top - wr.top, height: sr.height, width: wr.width, yOf, xIndent, xEnd, lh, cw: v.defaultCharacterWidth }
 })
 
 function arcPath(x1: number, y1: number, xl: number, y2: number, x2: number): string {
@@ -167,6 +175,24 @@ const drawn = computed<Drawn[]>(() => {
       cls: `arc arc-jump arc-${s.jump.kind} active`,
       d: arcPath(R, y1, xl, y2, R),
       label: { x: xl - 3, y: (y1 + y2) / 2, text: t('legend.' + s.jump.kind), rotate: true },
+    })
+  }
+  // appel : une flèche par argument, de l'expression dans l'appel vers le paramètre de la définition
+  for (const [k, l] of (s.links ?? []).entries()) {
+    const a = geo.box(l.from)
+    const p = geo.box(l.to)
+    if (!a || !p) continue
+    const up = p.top < a.top
+    const ax = (a.left + a.right) / 2
+    const px = (p.left + p.right) / 2
+    const ay = up ? a.top : a.bottom
+    const py = up ? p.bottom + 2 : p.top - 2
+    const k2 = Math.max(18, Math.abs(ay - py) * 0.45) * (up ? -1 : 1)
+    out.push({
+      key: `link-${s.i}-${k}`,
+      cls: 'arc arc-jump arc-link active',
+      // la valeur est affichée en commentaire sur la ligne de définition (# x = 3)
+      d: `M ${ax} ${ay} C ${ax} ${ay + k2} ${px} ${py - k2} ${px} ${py}`,
     })
   }
   return out

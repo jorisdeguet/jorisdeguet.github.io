@@ -92,9 +92,14 @@ watch(code, () => {
 })
 
 const step = computed<Step | null>(() => (cur.value >= 0 ? (steps.value[cur.value] ?? null) : null))
-// Au retour d'une fonction, commentaire en fin de ligne d'appel : `a = carre(3)  # carre(3) → 9`.
-// Il reste affiché au pas suivant s'il se passe sur la même ligne (l'affectation qui utilise la valeur).
+// Commentaire en fin de ligne :
+// - à l'appel, sur la ligne de définition : `def carre(x):  # x = 3`
+// - au retour, sur la ligne d'appel : `a = carre(3)  # carre(3) → 9` ; il reste affiché au pas suivant
+//   s'il se passe sur la même ligne (l'affectation qui utilise la valeur).
 const retNote = computed(() => {
+  const s0 = step.value
+  const com = lang.value === 'python' ? '#' : '//'
+  if (s0?.kind === 'call' && s0.params.bindings) return { line: s0.line, text: `${com} ${s0.params.bindings}` }
   const at = (i: number) => {
     const s = steps.value[i]
     return s?.kind === 'return' && s.key === 'return.value' ? s : undefined
@@ -102,7 +107,7 @@ const retNote = computed(() => {
   const s = step.value
   const r = at(cur.value) ?? (s && at(cur.value - 1)?.params.line === s.line && s.kind !== 'return' ? at(cur.value - 1) : undefined)
   if (!r) return null
-  return { line: Number(r.params.line), text: `${lang.value === 'python' ? '#' : '//'} ${r.params.call} → ${r.params.value}` }
+  return { line: Number(r.params.line), text: `${com} ${r.params.call} → ${r.params.value}` }
 })
 
 const diags = computed<EditorDiag[]>(() => {
