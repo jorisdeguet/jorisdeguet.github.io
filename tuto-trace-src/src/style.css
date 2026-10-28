@@ -974,6 +974,10 @@ tr.changed .vname {
   color: var(--muted);
   pointer-events: none;
 }
+.embed .vibed {
+  position: static;
+  padding-top: 6px;
+}
 .fab {
   position: relative;
   display: inline-flex;

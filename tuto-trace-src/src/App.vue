@@ -188,6 +188,15 @@ const uiModel = computed({ get: () => locale.value, set: (v: string) => (locale.
 watch(locale, (l) => (document.documentElement.lang = l), { immediate: true })
 
 // ---------- lien toujours à jour ----------
+// en mode intégré, la page parente reçoit aussi le code courant (bouton « partager » côté page, via embed.js)
+watch(
+  [lang, locale, code],
+  () => {
+    if (embed && window.parent !== window)
+      window.parent.postMessage({ type: 'tuto-trace:code', id: url.id, lang: lang.value, ui: locale.value, code: code.value }, '*')
+  },
+  { immediate: true },
+)
 watch([lang, locale, exId, code, speed], () => {
   writeUrl({
     lang: lang.value,

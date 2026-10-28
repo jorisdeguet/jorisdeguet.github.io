@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>tuto-trace — intégrer et partager</title>
+    <style>
+      :root {
+        --bg: #0f1218;
+        --panel: #171b23;
+        --line: #2a303c;
+        --text: #e6e9ef;
+        --muted: #9aa3b2;
+        --accent: #6b8cff;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, sans-serif; }
+      main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 64px; }
+      h1 { margin: 0 0 4px; font-size: 1.6rem; }
+      h2 { font-size: 1.1rem; margin: 32px 0 8px; }
+      p { color: var(--muted); margin: 0 0 12px; }
+      code { font: 0.9em ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); }
+      .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 24px 0 8px; }
+      button {
+        font: inherit; font-size: 0.95rem; cursor: pointer; border-radius: 8px; padding: 8px 14px;
+        border: 1px solid var(--line); background: var(--panel); color: var(--text);
+      }
+      button:hover { border-color: var(--accent); }
+      button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+      .frame { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+      #share { display: none; margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+      #share.open { display: block; }
+      .field { margin-top: 14px; }
+      .field header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+      .field h3 { margin: 0; font-size: 0.95rem; }
+      .field button { padding: 4px 10px; font-size: 0.85rem; }
+      textarea {
+        width: 100%; resize: vertical; min-height: 4.5em; padding: 10px; border-radius: 8px;
+        border: 1px solid var(--line); background: var(--bg); color: var(--text);
+        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+    </style>
+    <script src="embed.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <h1>Intégrer et partager un exemple</h1>
+      <p>
+        Exemple Python intégré avec <code>embed.js</code>, en français et en thème sombre
+        (<code>data-ui="fr"</code>, <code>data-theme="dark"</code>). Modifiez le code dans l’éditeur,
+        puis cliquez sur <strong>Partager</strong> : le code d’intégration reprend le code actuel.
+      </p>
+
+      <div class="bar">
+        <h2 style="margin: 0">Moyenne de notes</h2>
+        <button id="share-btn" class="primary" type="button">Partager</button>
+      </div>
+
+      <div class="frame">
+<pre id="demo" data-tuto-trace data-lang="python" data-ui="fr" data-theme="dark">
+notes = [12, 15, 9, 18]
+total = 0
+for n in notes:
+    total = total + n
+moyenne = total / len(notes)
+if moyenne &gt;= 12:
+    print("Réussi :", moyenne)
+else:
+    print("Échec :", moyenne)
+</pre>
+      </div>
+
+      <section id="share" aria-live="polite">
+        <div class="field">
+          <header><h3>Code à coller dans une page (hauteur automatique)</h3><button type="button" data-copy="snippet">Copier</button></header>
+          <textarea id="snippet" rows="10" readonly></textarea>
+        </div>
+        <div class="field">
+          <header><h3>Iframe seule</h3><button type="button" data-copy="iframe">Copier</button></header>
+          <textarea id="iframe" rows="4" readonly></textarea>
+        </div>
+        <div class="field">
+          <header><h3>Lien direct</h3><button type="button" data-copy="link">Copier</button></header>
+          <textarea id="link" rows="3" readonly></textarea>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      // Le code courant de l'iframe est fourni par embed.js (événement « tuto-trace:change »).
+      var THEME = 'dark'
+      var share = document.getElementById('share')
+
+      function escText(s) {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      }
+      function esc(s) {
+        return escText(s).replace(/"/g, '&quot;')
+      }
+
+      function hash(st, embed) {
+        var p = new URLSearchParams()
+        p.set('lang', st.lang)
+        if (st.ui) p.set('ui', st.ui)
+        p.set('src', st.code)
+        p.set('theme', THEME)
+        if (embed) p.set('embed', '1')
+        return '#' + p.toString()
+      }
+
+      function render() {
+        var frame = document.getElementById('demo')
+        var st = window.tutoTrace && window.tutoTrace.state(frame)
+        if (!st) return
+        var base = window.tutoTrace.base
+        document.getElementById('snippet').value =
+          '<script src="' + base + 'embed.js" defer><\/script>\n' +
+          '<pre data-tuto-trace data-lang="' + st.lang + '" data-ui="' + st.ui + '" data-theme="' + THEME + '">\n' +
+          escText(st.code) + '</pre>'
+        document.getElementById('iframe').value =
+          '<iframe src="' + esc(base + 'index.html' + hash(st, true)) + '" width="100%" height="720" style="border:0" loading="lazy" title="tuto-trace"></iframe>'
+        document.getElementById('link').value = base + 'index.html' + hash(st, false)
+      }
+
+      document.getElementById('share-btn').addEventListener('click', function () {
+        render()
+        share.classList.toggle('open')
+      })
+      // garde le partage à jour si le code change pendant que le panneau est ouvert
+      document.addEventListener('tuto-trace:change', function () {
+        if (share.classList.contains('open')) render()
+      })
+      document.querySelectorAll('[data-copy]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var text = document.getElementById(b.getAttribute('data-copy')).value
+          navigator.clipboard.writeText(text).then(function () {
+            b.textContent = 'Copié ✓'
+            setTimeout(function () { b.textContent = 'Copier' }, 1500)
+          })
+        })
+      })
+    </script>
+  </body>
+</html>

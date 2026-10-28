@@ -9,6 +9,9 @@
  * Chaque bloc est remplacé par une iframe (mode compact) dont la hauteur s'ajuste au contenu.
  * Attributs : data-lang (python | csharp | dart), data-ui (fr | en | es), data-ex (exemple de la
  * bibliothèque, au lieu du code), data-readonly, data-autoplay, data-speed, data-theme (light | dark), data-height (hauteur initiale).
+ *
+ * Code courant (après modification par le visiteur) : chaque iframe reçoit l'événement
+ * « tuto-trace:change » (detail = { lang, ui, code }) et window.tutoTrace.state(iframe) le renvoie.
  */
 (function () {
   var script = document.currentScript
@@ -51,18 +54,31 @@
     var iframe = document.createElement('iframe')
     iframe.src = base + 'index.html' + hashFor(el, id)
     iframe.title = 'tuto-trace'
+    if (el.id) iframe.id = el.id
     iframe.loading = 'lazy'
     iframe.style.cssText = 'width:100%;border:0;display:block;height:' + (el.getAttribute('data-height') || '640') + 'px'
     frames[id] = iframe
+    iframe.tutoTrace = { lang: el.getAttribute('data-lang') || 'python', ui: el.getAttribute('data-ui') || '', code: dedent(el.textContent || '') }
     el.replaceWith(iframe)
   }
 
   window.addEventListener('message', function (e) {
     var d = e.data
-    if (!d || d.type !== 'tuto-trace:height' || !frames[d.id]) return
-    if (frames[d.id].contentWindow !== e.source) return
-    frames[d.id].style.height = d.height + 'px'
+    if (!d || !frames[d.id] || frames[d.id].contentWindow !== e.source) return
+    var f = frames[d.id]
+    if (d.type === 'tuto-trace:height') f.style.height = d.height + 'px'
+    else if (d.type === 'tuto-trace:code') {
+      f.tutoTrace = { lang: d.lang, ui: d.ui, code: d.code }
+      f.dispatchEvent(new CustomEvent('tuto-trace:change', { detail: f.tutoTrace, bubbles: true }))
+    }
   })
+
+  window.tutoTrace = {
+    base: base,
+    state: function (iframe) {
+      return iframe && iframe.tutoTrace
+    },
+  }
 
   function init() {
     document.querySelectorAll('[data-tuto-trace]').forEach(mount)
