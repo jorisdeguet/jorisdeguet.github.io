@@ -35,7 +35,7 @@ const ctx = computed(() => {
   if (!s) return null
   const py = props.lang === 'python'
   if (s.kind === 'call' || s.kind === 'return') {
-    return { fig: 'func' as const, concept: s.key === 'call.recursive' || s.depth > 1 ? 'recursion' : 'func', active: s.kind }
+    return { fig: 'func' as const, concept: s.key === 'call.recursive' || s.depth > (s.kind === 'call' ? 0 : 1) ? 'recursion' : 'func', active: s.kind }
   }
   const c = (s.construct !== undefined ? props.flow.get(s.construct) : undefined) ?? constructAt(props.flow, s.line)
   if (!c || c.kind === 'func') return { fig: null, concept: 'sequence', active: undefined }

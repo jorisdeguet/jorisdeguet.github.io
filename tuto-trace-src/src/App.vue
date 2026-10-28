@@ -99,7 +99,7 @@ const step = computed<Step | null>(() => (cur.value >= 0 ? (steps.value[cur.valu
 const retNote = computed(() => {
   const s0 = step.value
   const com = lang.value === 'python' ? '#' : '//'
-  if (s0?.kind === 'call' && s0.params.bindings) return { line: s0.line, text: `${com} ${s0.params.bindings}` }
+  if (s0?.kind === 'call' && s0.params.bindings) return { line: Number(s0.params.defLine), text: `${com} ${s0.params.bindings}` }
   const at = (i: number) => {
     const s = steps.value[i]
     return s?.kind === 'return' && s.key === 'return.value' ? s : undefined

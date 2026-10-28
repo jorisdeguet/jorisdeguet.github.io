@@ -23,7 +23,7 @@ export function summary(s: Step): string {
     case 'loopBack':
       return `↩ L${p.line}`
     case 'call':
-      return `→ ${p.name}(${p.args})`
+      return `→ ${p.name}(${p.passing ?? p.args})`
     case 'return':
       return s.key === 'return.value' ? `← ${p.value}` : `← ${p.name}`
     case 'print':

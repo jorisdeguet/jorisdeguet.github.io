@@ -178,14 +178,17 @@ export class Interpreter {
     })
   }
 
-  emit(s: Omit<Step, 'i' | 'frames' | 'out' | 'frameId' | 'depth' | 'line'> & { line?: number }): Step {
+  emit(s: Omit<Step, 'i' | 'frames' | 'out' | 'frameId' | 'depth' | 'line'> & { line?: number; caller?: boolean }): Step {
+    const { caller, ...rest } = s
+    // caller : le pas appartient au contexte appelant (l'appel, alors que le nouveau contexte est déjà empilé)
+    const owner = caller ? this.frames.length - 2 : this.frames.length - 1
     if (this.steps >= MAX_STEPS) throw new LimitSig()
     const step: Step = {
-      ...s,
+      ...rest,
       line: s.line ?? s.span.line,
       i: this.steps++,
-      frameId: this.frame?.id ?? 0,
-      depth: Math.max(0, this.frames.length - 1),
+      frameId: this.frames[owner]?.id ?? 0,
+      depth: Math.max(0, owner),
       frames: this.snapshot(),
       out: this.out,
     }
@@ -598,14 +601,18 @@ export class Interpreter {
     f.params.forEach((p, i) => fr.scopes[0].set(p.name, { v: this.coerce(args[i], p.type), type: p.type, final: false }))
     this.frames.push(fr)
     const recursive = this.frames.filter((x) => x.fn === f.name).length > 1
+    // le pas d'appel est sur la ligne qui appelle (dans la trace : `a = carre(3)` puis le corps de carre)
     yield this.emit({
       kind: 'call',
-      span: f.headSpan,
+      span: callSpan,
+      caller: true,
       key: recursive ? 'call.recursive' : f.params.length ? 'call' : 'call.noargs',
       params: {
         name: f.name,
         args: args.map((a) => this.repr(a)).join(', '),
         bindings: f.params.map((p, i) => `${p.name} = ${this.repr(args[i])}`).join(', '),
+        passing: f.params.map((p, i) => `${this.repr(args[i])} → ${p.name}`).join(', '),
+        defLine: f.headSpan.line,
         line: callSpan.line,
         depth: this.frames.length - 1,
       },
