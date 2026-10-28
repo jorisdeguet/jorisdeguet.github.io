@@ -235,8 +235,8 @@ button {
 /* ---------- mise en page ---------- */
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: minmax(0, var(--split, 40%)) 16px minmax(0, 1fr);
+  gap: 0;
   padding: 16px 20px 96px;
   max-width: 1500px;
   margin: 0 auto;
@@ -248,9 +248,53 @@ button {
   gap: 16px;
   min-width: 0;
 }
+.splitter {
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+.splitter::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 2px;
+  background: transparent;
+  transition: background 0.15s;
+}
+.splitter::after {
+  content: '';
+  position: absolute;
+  top: 120px;
+  left: 50%;
+  width: 6px;
+  height: 36px;
+  margin-left: -3px;
+  border-radius: 3px;
+  background: var(--border);
+  transition: background 0.15s;
+}
+.splitter:hover::before,
+.splitter:focus-visible::before,
+.layout.dragging .splitter::before {
+  background: var(--accent);
+}
+.splitter:hover::after,
+.splitter:focus-visible::after,
+.layout.dragging .splitter::after {
+  background: var(--accent);
+}
+.layout.dragging {
+  cursor: col-resize;
+  user-select: none;
+}
 .app.embed .layout {
   padding: 8px;
-  gap: 8px;
+  gap: 0;
 }
 .app.embed .col-code,
 .app.embed .col-trace {
@@ -259,7 +303,11 @@ button {
 @media (max-width: 900px) {
   .layout {
     grid-template-columns: 1fr;
+    gap: 16px;
     padding: 12px 16px;
+  }
+  .splitter {
+    display: none;
   }
   .tagline {
     display: none;

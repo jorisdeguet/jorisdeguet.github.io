@@ -41,6 +41,59 @@ const showShare = ref(false)
 useEmbedResize(embed, url.id)
 if (url.theme) forceTheme(url.theme)
 
+// ---------- séparateur réglable entre le code et la trace ----------
+const SPLIT_KEY = 'tuto-trace:split'
+const SPLIT_DEFAULT = 40
+const clampSplit = (v: number) => Math.min(75, Math.max(25, v))
+function storedSplit(): number {
+  try {
+    const v = Number(localStorage.getItem(SPLIT_KEY))
+    return v ? clampSplit(v) : SPLIT_DEFAULT
+  } catch {
+    return SPLIT_DEFAULT
+  }
+}
+const split = ref(storedSplit())
+const layoutEl = ref<HTMLElement>()
+const dragging = ref(false)
+watch(split, (v) => {
+  try {
+    localStorage.setItem(SPLIT_KEY, String(Math.round(v)))
+  } catch {
+    /* stockage indisponible */
+  }
+})
+function splitAt(clientX: number) {
+  const el = layoutEl.value
+  if (!el) return
+  const r = el.getBoundingClientRect()
+  const cs = getComputedStyle(el)
+  const left = r.left + parseFloat(cs.paddingLeft)
+  const width = r.width - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)
+  split.value = clampSplit(((clientX - left) / width) * 100)
+}
+function startSplit(e: PointerEvent) {
+  const handle = e.currentTarget as HTMLElement
+  handle.setPointerCapture(e.pointerId)
+  dragging.value = true
+  const move = (ev: PointerEvent) => splitAt(ev.clientX)
+  const up = () => {
+    dragging.value = false
+    handle.removeEventListener('pointermove', move)
+    handle.removeEventListener('pointerup', up)
+    handle.removeEventListener('pointercancel', up)
+  }
+  handle.addEventListener('pointermove', move)
+  handle.addEventListener('pointerup', up)
+  handle.addEventListener('pointercancel', up)
+}
+function splitKey(e: KeyboardEvent) {
+  const d = e.key === 'ArrowLeft' ? -2 : e.key === 'ArrowRight' ? 2 : 0
+  if (!d) return
+  e.preventDefault()
+  split.value = clampSplit(split.value + d)
+}
+
 // ---------- panneaux flottants (explication, pile, console) ----------
 type PanelId = 'explain' | 'stack' | 'console'
 const PANELS_KEY = 'tuto-trace:panels'
@@ -276,7 +329,7 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <main class="layout">
+    <main ref="layoutEl" class="layout" :class="{ dragging }" :style="{ '--split': split + '%' }">
       <div class="col-code">
         <section class="panel code-panel">
           <div class="code-toolbar">
@@ -316,6 +369,20 @@ onBeforeUnmount(() => {
         </section>
         <CompileErrors :errors="analysis.errors" :lang="lang" @goto="(l) => editor?.focusLine(l)" />
       </div>
+      <div
+        class="splitter"
+        role="separator"
+        aria-orientation="vertical"
+        :aria-label="t('split')"
+        :title="t('split')"
+        :aria-valuenow="Math.round(split)"
+        aria-valuemin="25"
+        aria-valuemax="75"
+        tabindex="0"
+        @pointerdown.prevent="startSplit"
+        @dblclick="split = SPLIT_DEFAULT"
+        @keydown="splitKey"
+      ></div>
       <div class="col-trace">
         <TraceTable :steps="steps" :cur="cur" @goto="(i) => (stop(), goto(i))" />
       </div>

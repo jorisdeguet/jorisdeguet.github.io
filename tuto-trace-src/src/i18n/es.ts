@@ -6,6 +6,7 @@ const es: typeof fr = {
   theme: { toLight: 'Cambiar al tema claro', toDark: 'Cambiar al tema oscuro' },
   dock: { toggle: 'Mostrar / ocultar' },
   vibed: 'Hecho con IA generativa',
+  split: 'Arrastrar para redimensionar (doble clic: 40 / 60)',
   ctl: {
     reset: 'Reiniciar',
     back: 'Paso anterior',

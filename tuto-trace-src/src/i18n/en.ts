@@ -6,6 +6,7 @@ const en: typeof fr = {
   theme: { toLight: 'Switch to light theme', toDark: 'Switch to dark theme' },
   dock: { toggle: 'Show / hide' },
   vibed: 'Vibe-coded with GenAI',
+  split: 'Drag to resize (double-click: 40 / 60)',
   ctl: {
     reset: 'Restart',
     back: 'Previous step',

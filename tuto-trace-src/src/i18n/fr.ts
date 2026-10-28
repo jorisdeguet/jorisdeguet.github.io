@@ -7,6 +7,7 @@ export default {
   theme: { toLight: 'Passer au thème clair', toDark: 'Passer au thème sombre' },
   dock: { toggle: 'Afficher / masquer' },
   vibed: 'Vibé avec de l’IAG',
+  split: 'Glisser pour redimensionner (double-clic : 40 / 60)',
   ctl: {
     reset: 'Recommencer',
     back: 'Pas précédent',
