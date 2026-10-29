@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Tideman method</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.17.0/vis.min.css" rel="stylesheet" type="text/css" />
+  <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+  <style>
+    .dimmed {
+      opacity: 0.3;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.17.0/vis.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.6.0/angular.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/angular-translate/2.13.1/angular-translate.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-smooth-scroll/2.0.0/jquery.smooth-scroll.min.js"></script>
+  <script src="tideman.js"></script>
+</head>
+<body ng-app="PreferentialDemo" ng-controller="PrefController" style="position:relative;padding-bottom:50px;" data-spy="scroll" data-offset="70" data-target=".navbar">
+  <nav class="navbar navbar-inverse navbar-fixed-bottom" id="navb">
+    <div class="container-fluid">
+      <div class="navbar-header">
+        <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navnav" aria-expanded="false">
+          <span class="sr-only">Toggle navigation</span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+        </button>
+        <a href="https://en.wikipedia.org/wiki/Ranked_pairs" class="navbar-brand">Tideman</a>
+      </div>
+      <div class="collapse navbar-collapse" id="navnav">
+        <ul class="nav navbar-nav">
+          <li><a href="#input">{{'DATA'|translate}}</a></li>
+          <li><a href="#votes">{{'VOTES'|translate}}</a></li>
+          <li><a href="#scores">{{'SCORES'|translate}}</a></li>
+          <li><a href="#graph">{{'GRAPH'|translate}}</a></li>
+          <li><a href="#result">{{'RESULT'|translate}}</a></li>
+        </ul>
+        <ul class="nav navbar-nav navbar-right">
+          <li class="dropdown">
+            <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
+              {{'EXAMPLES' | translate}} <span class="caret"></span></a>
+            <ul class="dropdown-menu">
+              <li><a ng-click="memphis()">Memphis Chattanooga</a></li>
+            </ul>
+          </li>
+        </ul>
+        <ul class="nav navbar-nav navbar-right">
+          <li class="dropdown">
+            <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
+              {{'LANGUAGE' | translate}} <span class="caret"></span></a>
+            <ul class="dropdown-menu">
+              <li><a ng-click="changeLanguage('fr')">Français</a></li>
+              <li><a ng-click="changeLanguage('en')">English</a></li>
+            </ul>
+          </li>
+        </ul>
+      </div><!-- /.navbar-collapse -->
+    </div><!-- /.container-fluid -->
+    </nav>
+    <div class="container-fluid" >
+      <div class="row" id="input">
+        <div class="col-md-5">
+          <h3>{{'DATA' | translate}}</h3>
+          <p>{{'P_PREFERENCES' | translate}}</p>
+          <p><strong>A>B</strong> {{'P_A_OVER_B' | translate}}</p>
+          <p><strong>C=D</strong> {{'P_C_EQUAL_D' | translate}}</p>
+          <p><strong>E>C=D>A</strong>  {{'P_E_CD_A' | translate}}  </p>
+          <p><strong>123:A>B</strong> {{'P_123_MEANS'| translate}}</p>
+          <p>{{'P_EACH_LINE' | translate}}</p>
+        </div>
+        <div class="col-md-7 well" >
+            <textarea style="width:100%; height:200px" ng-model="votes"></textarea>
+        </div>
+      </div>
+      <div class="row" id="votes">
+        <button class="btn btn-primary btn-block" ng-click="parseVotes();" ng-disabled="timeoutOn" >{{'BTN_PARSE_VOTES' | translate}} <span class="glyphicon glyphicon-arrow-down" aria-hidden="true"></span></button>
+        <div class="col-md-4">
+          <h3>{{'VOTES' | translate}}</h3>
+          <p>{{'P_EXTRACT_VOTES' | translate}}</p>
+          <!--<div ng-repeat="parsed in parsedVotes">
+            {{parsed | json}}
+          </div>-->
+        </div>
+        <div class="col-md-8" >
+
+          <table class="table table-condensed table-striped">
+            <tr ng-repeat="vote in parsedVotes">
+              <td>{{vote.number}} <span class="glyphicon glyphicon-user" aria-hidden="true"></span></td>
+              <td>
+                <span ng-repeat="v in vote.vote">
+                  <span ng-hide="$index == 0" class="glyphicon glyphicon-triangle-right" aria-hidden="true"></span>
+                  <span ng-repeat="c in v" ng-class="(highlightFrom==c)?'label label-success':(highlightTo==c)?'label label-danger':highlightFrom?'label label-default dimmed':'label label-default'">
+                    {{c}}
+                  </span>
+                </span>
+
+              </td>
+              <td>
+                <span ng-show="vote.highlightScoreW>0">{{vote.highlightScoreW}} {{highlightFrom}}</span>
+              </td>
+              <td>
+                <span ng-show="vote.highlightScoreL>0">{{vote.highlightScoreL}} {{highlightTo}}</span>
+              </td>
+            </tr>
+            <tr ng-show="highlightFrom">
+              <td></td><td></td>
+              <td>{{score.countW}} {{highlightFrom}}</td>
+              <td>{{score.countL}} {{highlightTo}}</td>
+            </tr>
+          </table>
+        </div>
+
+      </div>
+      <div class="row" id="scores">
+        <button class="btn btn-primary btn-block" ng-click="computeScores();" ng-disabled="timeoutOn || !parsedVotes.length>0">{{'BTN_COMPUTE_SCORES' | translate}} <span class="glyphicon glyphicon-arrow-down" aria-hidden="true"></span></button>
+        <div class="col-md-5">
+          <h3>{{'ONE_TO_ONE_SCORES'| translate}}</h3>
+          <p>{{'P_POSSIBLE_CONFRONTATIONS'| translate}}</p>
+          <p>{{'P_25_OVER_12'| translate}}</p>
+          <p>{{'P_10_OVER_12'| translate}}</p>
+          <p>{{'P_RANKING_PAIRS'| translate}}</p>
+        </div>
+        <div  class="col-md-7" >
+
+          <table class="table table-condensed table-striped" >
+            <tr ng-repeat="score in scores "
+            ng-class="score.added?'info':score.cycled?'danger':''"
+            ng-click="highlight(score);">
+              <td>
+                <span class="text-success">{{score.countW}}</span>
+                <span class="label label-success">{{labelForID(score.from)}}</span>
+                <span class="glyphicon glyphicon-triangle-right" aria-hidden="true"></span>
+                <span class="label label-danger">{{labelForID(score.to)}}</span>
+                <span class="text-danger">{{score.countL}}</span>
+              </td>
+              <td>Score = {{score.countW}} - {{score.countL}} ={{score.label }}</td>
+              <td>{{100*score.countW/(score.countL+score.countW) | number:1 }} % </td>
+            </tr>
+          </table>
+        </div>
+      </div>
+      <div class="row" id="graph" >
+        <button class="btn btn-primary btn-block" ng-click="addPair();" ng-disabled="timeoutOn || !scores.length>0 ||allGreens()">{{'BTN_ADD_TO_GRAPH' | translate}} <span class="glyphicon glyphicon-arrow-down" aria-hidden="true"></span></button>
+        <div class="col-md-6">
+          <h3>{{'NO_CONTRADICTION_GRAPH' | translate}}</h3>
+          <p>{{'P_BUILD_GRAPH'|translate}}</p>
+          <p>{{'P_INTUITION'|translate}}</p>
+          <p>{{'P_CHOOSE_STRONG'|translate}}</p>
+        </div>
+        <div id="graph" class="col-md-6">
+          <div id="mynetwork" style="border:3px solid black;width: 100%;height: 300px; "></div>
+        </div>
+      </div>
+      <div class="row">
+        <button ng-click="showSources()" class="btn btn-primary btn-block" ng-disabled="timeoutOn || !allGreens() || allDone()">{{'BTN_FIND_SOURCE' | translate}} <span class="glyphicon glyphicon-arrow-down" aria-hidden="true"></span></button>
+        <div class="col-md-4 ">
+          <h3>{{'RESULT'|translate}}</h3>
+          <p>{{'P_EXTRACT_WINNER'|translate}}</p>
+          <p>{{'P_CONDORCET'|translate}}</p>
+          <p>{{'P_PERCENTAGE_GRAPH'|translate}}</p>
+        </div>
+        <div class="col-md-4">
+          <h3>{{'RANKING'| translate}}</h3>
+          <div ng-repeat="set in result">
+            <span class="label label-success"> {{$index+1}} </span> : <span class="badge badge-info" ng-repeat="candidate in set"> {{candidate}} </span>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <h3>% Graph</h3>
+          <div id="hierar" style="border:3px solid black;width:100%;height:300px;"></div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="well">
+          <h3><span class="glyphicon glyphicon-user" aria-hidden="true"></span></h3>
+          <ul>
+            <li><a href="https://en.wikipedia.org/wiki/Ranked_pairs">Tideman</a></li>
+            <li><a href="https://en.wikipedia.org/wiki/Condorcet_method">Condorcet</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+</body>
+</html>

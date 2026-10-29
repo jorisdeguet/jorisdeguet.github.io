@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>Vote alternatif</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.17.0/vis.min.css" rel="stylesheet" type="text/css" />
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet" type="text/css" />
+    <style>
+        .dimmed {
+            opacity: 0.18;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.17.0/vis.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.6.0/angular.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/angular-translate/2.13.1/angular-translate.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-smooth-scroll/2.0.0/jquery.smooth-scroll.min.js"></script>
+    <script src="irv.js"></script>
+</head>
+
+<body ng-app="PreferentialDemo" ng-controller="PrefController" style="position:relative;padding-bottom:50px;" data-spy="scroll" data-offset="70" data-target=".navbar">
+    <nav class="navbar navbar-inverse navbar-fixed-bottom" id="navb">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navnav" aria-expanded="false">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <a href="https://en.wikipedia.org/wiki/Instant-runoff_voting" class="navbar-brand">Vote alternatif</a>
+            </div>
+            <div class="collapse navbar-collapse" id="navnav">
+                <ul class="nav navbar-nav">
+                    <li><a href="#input">{{'DATA'|translate}}</a></li>
+                    <li><a href="#votes">{{'VOTES'|translate}}</a></li>
+                    <li><a href="#result">{{'RESULT'|translate}}</a></li>
+                </ul>
+                <ul class="nav navbar-nav navbar-right">
+                    <li class="dropdown">
+                        <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
+              {{'EXAMPLES' | translate}} <span class="caret"></span></a>
+                        <ul class="dropdown-menu">
+                            <li><a ng-click="memphis()">Memphis Chattanooga</a></li>
+                        </ul>
+                    </li>
+                </ul>
+                <ul class="nav navbar-nav navbar-right">
+                    <li class="dropdown">
+                        <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">
+              {{'LANGUAGE' | translate}} <span class="caret"></span></a>
+                        <ul class="dropdown-menu">
+                            <li><a ng-click="changeLanguage('fr')">Français</a></li>
+                            <li><a ng-click="changeLanguage('en')">English</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+            <!-- /.navbar-collapse -->
+        </div>
+        <!-- /.container-fluid -->
+    </nav>
+    <div class="container-fluid">
+        <div class="row" id="input">
+            <div class="col-md-5">
+                <h3>{{'DATA' | translate}}</h3>
+                <p>{{'P_PREFERENCES' | translate}}</p>
+                <p><strong>A>B</strong> {{'P_A_OVER_B' | translate}}</p>
+                <!--<p><strong>C=D</strong> {{'P_C_EQUAL_D' | translate}}</p>
+                <p><strong>E>C=D>A</strong> {{'P_E_CD_A' | translate}} </p>-->
+                <p><strong>123:A>B</strong> {{'P_123_MEANS'| translate}}</p>
+                <p>{{'P_EACH_LINE' | translate}}</p>
+            </div>
+            <div class="col-md-7 well">
+                <textarea style="width:100%; height:200px" ng-model="votes"></textarea>
+            </div>
+        </div>
+        <div class="row" id="votes">
+            <button class="btn btn-primary btn-block" ng-click="parseVotes();" ng-disabled="timeoutOn">{{'BTN_PARSE_VOTES' | translate}} <span class="glyphicon glyphicon-arrow-down" aria-hidden="true"></span></button>
+            <div class="col-md-3">
+                <h3>{{'VOTES' | translate}}</h3>
+                <p>{{'P_EXTRACT_VOTES' | translate}}</p>
+                <!--<div ng-repeat="parsed in parsedVotes">
+            {{parsed | json}}
+          </div>-->
+            </div>
+            <div class="col-md-9">
+                <table class="table table-condensed table-striped">
+                    <tr ng-repeat="vote in parsedVotes">
+                        <td>{{vote.number}} <span class="glyphicon glyphicon-user" aria-hidden="true"></span></td>
+                        <td>
+                            <span ng-repeat="v in vote.vote">
+                                <span ng-hide="$index == 0" class="glyphicon glyphicon-triangle-right" aria-hidden="true"></span>
+                                <span ng-repeat="c in v" ng-class="!isActive(c)?'label label-default dimmed':'label label-default'" style="background:{{colorFor(c)}}">
+                                    {{c}}
+                                </span>
+                            </span>
+                        </td>
+                        <td>
+                            <span>{{vote.number}}</span> :: <span ng-repeat="active in vote.activeChoice" class="label label-default" style="background:{{colorFor(active)}}">{{active}}</span>   
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <div class="row" id="result">
+            <button class="btn btn-primary btn-block" ng-click="computePercentages();" ng-disabled="timeoutOn || !parsedVotes.length>0">{{'BTN_COMPUTE_INITIAL' | translate}} <span class="glyphicon glyphicon-arrow-down" aria-hidden="true"></span></button>
+            <div class="col-md-5">
+                <h3>{{'RACE_TO_50'| translate}}</h3>
+                
+                <p>{{'P_FIRST_TO_50'| translate}}</p>
+                <p>{{'P_ELIMINATE_THE_LAST'| translate}}</p>
+                <p>
+                    <button class="btn btn-primary btn-block" ng-click="findLoser();" ng-disabled="done || percentages.length < 1 ">{{'BTN_ELIMINATE_LOSER' | translate}} <span class="glyphicon glyphicon-arrow-right" aria-hidden="true"></span></button>
+                </p>
+                <p>{{'P_DISTRIBUTE_VOTES'| translate}}</p>
+            </div>
+            <div class="col-md-7">
+                <table class="table table-condensed table-striped">
+                    <tr ng-repeat="percentage in percentages ">
+                        <td style="width:80%;" ng-class="percentage.active?'':'dimmed'">
+                            <div class="progress">
+
+                                <div class="progress-bar progress-bar-success" style="background:{{percentage.color}};width: {{percentage.pct}}%">
+                                    {{percentage.count}}<span class="glyphicon glyphicon-user" aria-hidden="true"></span>
+                                </div>
+                                <div ng-repeat="r in percentage.recovered" class="progress-bar progress-bar-warning progress-bar-striped" style="width: {{r.pct}}%;background:{{r.color}}">
+                                    {{r.count}}<span class="glyphicon glyphicon-user" aria-hidden="true"></span>
+                                </div>
+                            </div>
+                        </td>
+                        <td> 
+                            <span ng-class="percentage.totalpct>50?'label label-success':'label label-danger'">{{percentage.totalpct | number:2}}%</span> 
+                            {{$index+1}}
+                            <span class="badge" style="background:{{colorFor(percentage.label)}}">{{percentage.label}}</span> </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <div class="row">
+            <div class="well">
+                <h3><span class="glyphicon glyphicon-user" aria-hidden="true"></span></h3>
+                <ul>
+                    <li><a href="https://en.wikipedia.org/wiki/Instant-runoff_voting">Alternate voting on Wikipedia</a></li>
+                    <li><a href="https://en.wikipedia.org/wiki/Ranked_voting_system">Ranked vote</a></li>
+                    <li>color palette reference https://eleanormaclure.files.wordpress.com/2011/03/colour-coding.pdf</li>
+                    <li><a href="https://web.archive.org/web/20171220150154/http://www1.cse.wustl.edu/~legrand/rbvote/desc.html">a major inspiration</a> </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

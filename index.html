@@ -1,439 +1,444 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Joris Deguet</title>
+        <meta name="description" content="Joris Deguet, prof d'informatique au cégep Édouard-Montpetit et développeur.">
 
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.2/css/bulma.min.css" integrity="sha512-byErQdWdTqREz6DLAA9pCnLbdoGGhXfU6gm1c8bkf7F51JVmUBlayGe2A31VpXWQP+eiJ3ilTAZHCR3vmMyybA==" crossorigin="anonymous" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.4/css/bulma.min.css" integrity="sha512-HqxHUkJM0SYcbvxUw5P60SzdOTy/QVwA1JJrvaXJv4q7lmbDZCmZaqz01UPOaQveoxfYRv1tHozWGPMcuTBuvQ==" crossorigin="anonymous" />
 
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css" integrity="sha512-HK5fgLBL+xu6dm/Ii3z4xhlSUyZgTT9tuc/hSrtw6uzJOvgRr2a9jyxxT1ely+B+xFAmJKVSTbpM/CuL7qxO8w==" crossorigin="anonymous" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" />
+
+        <style>
+            :root {
+                --bg: #f5f6fa;
+                --card: #ffffff;
+                --text: #2b2d42;
+                --muted: #6b7080;
+                --border: #e3e5ee;
+                --accent: #4444aa;
+                --accent-soft: #e9e9fb;
+                --hero: #1f2033;
+            }
+            @media (prefers-color-scheme: dark) {
+                :root {
+                    --bg: #15161f;
+                    --card: #1f2130;
+                    --text: #e6e7ef;
+                    --muted: #9a9db0;
+                    --border: #2f3245;
+                    --accent: #8c8cf0;
+                    --accent-soft: #2a2b4a;
+                    --hero: #0e0f17;
+                }
+            }
+            html, body { background: var(--bg); color: var(--text); }
+            a { color: var(--accent); }
+            a:hover { color: var(--text); }
+
+            .hero.site-hero { background: var(--hero); }
+            .site-hero .title, .site-hero .subtitle, .site-hero p { color: #f0f0f8; }
+            .site-hero .now {
+                display: inline-block;
+                background: rgba(255, 255, 255, .1);
+                border-left: 4px solid #8c8cf0;
+                padding: .5rem .9rem;
+                border-radius: 6px;
+            }
+            .site-hero .now a { color: #c8c8ff; font-weight: 600; }
+            .site-hero .socials { display: flex; gap: 24px; align-items: center; }
+            .site-hero .socials a { color: #f0f0f8; }
+            .portrait { width: 260px; max-width: 100%; border-radius: 12px; border: 5px solid #44a; }
+
+            .section-title { color: var(--text); font-size: 1.6rem; font-weight: 700; margin-bottom: .25rem; }
+            .section-sub { color: var(--muted); margin-bottom: 1.5rem; }
+
+            .item {
+                background: var(--card);
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                padding: 1.25rem;
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+                gap: .5rem;
+            }
+            .item.is-current { border: 2px solid var(--accent); }
+            .item.is-past { opacity: .85; }
+            .item .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+            .item .name { font-size: 1.25rem; font-weight: 700; color: var(--text); line-height: 1.2; }
+            .item .tech { color: var(--muted); font-size: .9rem; }
+            .item .desc { flex-grow: 1; }
+            .item .logo { width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0; }
+            .item .note { color: var(--muted); font-size: .8rem; font-style: italic; }
+            .tag.code { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+            .item .buttons { margin-bottom: 0; }
+            .item .button { background: var(--accent-soft); color: var(--accent); border: none; }
+            .item .button:hover { filter: brightness(.95); }
+
+            .timeline { border-left: 3px solid var(--border); margin-left: .5rem; padding-left: 1.25rem; }
+            .timeline li { position: relative; margin-bottom: 1rem; }
+            .timeline li::before {
+                content: ""; position: absolute; left: -1.75rem; top: .45rem;
+                width: 12px; height: 12px; border-radius: 50%;
+                background: var(--accent); border: 2px solid var(--bg);
+            }
+            .timeline .when { color: var(--muted); font-size: .85rem; display: block; }
+            .timeline .where { color: var(--muted); }
+
+            .footer.site-footer { background: var(--card); color: var(--muted); border-top: 1px solid var(--border); padding: 2rem 1.5rem; }
+        </style>
     </head>
-    <style>
-
-    </style>
     <body>
-        <section class="hero has-background-dark has-text-light is-halfheight">
+        <section class="hero site-hero">
             <div class="hero-body">
-                <div class="columns" style="width: 100%">
-                    <div class="column">
+                <div class="container">
+                    <div class="columns is-vcentered">
+                        <div class="column is-7">
+                            <h1 class="title is-2">Joris Deguet</h1>
+                            <p class="subtitle">
+                                Prof d'informatique au cégep Édouard-Montpetit, développeur…
+                            </p>
+                            <p>Je suis né à Tours, j'habite à Montréal.</p>
 
-                        <p class="title has-text-white">
-                            Joris Deguet 
-                        </p>
-                        <p class="subtitle has-text-light">
-                            Prof au cégep, développeur ...   
-                        </p>
-                        <div class="content">
-                            <p>
-                                Je suis né à Tours, j'habite à Montréal. 
+                            <p class="now mt-5">
+                                En ce moment, j'enseigne
+                                <a href="https://info.cegepmontpetit.ca/420-SN1/" target="_blank" rel="noopener">420-SN1 Programmation en sciences</a>
+                                et
+                                <a href="https://info.cegepmontpetit.ca/5N6-mobile-2/" target="_blank" rel="noopener">420-5N6 Applications mobiles avancées</a>.
                             </p>
 
-                            <br><br><br>
-                            <p style="font-size: 2em; text-align: center;word-spacing: 40px;">
-                                <a 
-                                   href="https://departement-info-cem.github.io/prof/joris.deguet"
-                                   target="_blank"
-                                   >
-                                    <img src="https://departement-info-cem.github.io/assets/CEM_V_blanc.svg" style="width: 30px;" />
+                            <div class="socials mt-5">
+                                <a href="https://info.cegepmontpetit.ca/" target="_blank" rel="noopener" title="Département d'informatique du cégep Édouard-Montpetit">
+                                    <img src="https://info.cegepmontpetit.ca/assets/CEM_V_blanc.svg" alt="Cégep Édouard-Montpetit" style="width: 28px; vertical-align: middle;" />
                                 </a>
-                                
-                                <a 
-                                   href="https://www.linkedin.com/in/joris-deguet-463781a/" 
-                                   target="_blank" >
-                                    <span class="icon has-text-light"><i class="fab fa-linkedin-in"></i></span>
+                                <a href="https://www.linkedin.com/in/joris-deguet-463781a/" target="_blank" rel="noopener" title="LinkedIn">
+                                    <span class="icon is-medium"><i class="fa-brands fa-linkedin-in fa-lg"></i></span>
                                 </a>
-                                
-                                <a 
-                                   target="_blank" 
-                                   href="https://www.youtube.com/channel/UCOH9PMOL-wGH29SYcNFlfbQ">
-                                    <span class="icon has-text-light">
-                                        <i class="fab fa-youtube"></i>
-                                    </span>
+                                <a href="https://www.youtube.com/channel/UCOH9PMOL-wGH29SYcNFlfbQ" target="_blank" rel="noopener" title="YouTube">
+                                    <span class="icon is-medium"><i class="fa-brands fa-youtube fa-lg"></i></span>
                                 </a>
-                            </p>
+                                <a href="https://github.com/jorisdeguet" target="_blank" rel="noopener" title="GitHub">
+                                    <span class="icon is-medium"><i class="fa-brands fa-github fa-lg"></i></span>
+                                </a>
+                            </div>
                         </div>
-                    </div>
-                    <div class="column" style="text-align: center;">
-                        <figure class="image" style="text-align: center;width: 100%;">
-                            <img  src="joris.jpeg" style="display: inline-block; width: 300px; border-radius: 10px; border:5px solid #44a;">
-                        </figure>
+                        <div class="column has-text-centered">
+                            <img class="portrait" src="joris.jpeg" alt="Photo de Joris Deguet">
+                        </div>
                     </div>
                 </div>
             </div>
         </section>
-        
-        <br><br><br>
 
-        <div class="tile is-ancestor m-2">
-            <div class="tile is-parent is-vertical">
-                <article class="tile is-child notification is-info " style="border: 4px solid black">
-                    <div class="content">
-                        <p class="title">Projets</p>
-                        <p class="subtitle">apps, sites et autres</p>
-                        <div class="content">
-                            J'aime développer et expérimenter différentes nouvelles technos.
-                            <h4></h4>
-                        </div>
-                    </div>
-                </article>
-                <article class="tile is-child notification is-light">
-                    <div class="content">
-                        <p class="title">Wikipedia</p>
-                        <div class="content">
-                            Je soutiens Wikipedia et j'ai contribué à 
-                            <a 
-                               
-                               target="_blank" 
-                               href="https://fr.wikipedia.org/wiki/Sp%C3%A9cial:Contributions/Joris.deguet">
-                                quelques reprises
-                            </a>
-                        </div>
-                    </div>
-                </article>
-                <article class="tile is-child notification is-info ">
-                    <div class="content">
-                        <p class="title">Comment faire un TP</p>
-                        <div class="content">
-                            Un guide sur comment produire un Travail Pratique en sciences.
-                            En collaboration avec Guillaume Piolle.
-                            <a href="methodoTP/methodoTP.pdf" class="button is-light is-small ">
-                                PDF
-                            </a>
-                        </div>
-                    </div>
-                </article>
-                <article class="tile is-child notification is-dark ">
-                    <div class="content">
-                        <p class="title">MinSpanTree</p>
-                        <p class="subtitle">HTML / JS / delaunator</p>
-                        <div class="content">
-                            ou comment relier des points avec le moins de câble possible 
-                            
-                            <a href="emst.html" class="button is-danger is-small">
-                                ici
-                            </a>
-                        </div>
-                    </div>
-                </article>
-                <article class="tile is-child notification is-info ">
-                    <div class="content">
-                        <p class="title">Code de césar</p>
-                        <p class="subtitle">SVG / Vue.js</p>
-                        <div class="content">
-                            Démo du premier chiffre symétrique connu.
-                            <a href="cesar.html" class="button is-light is-small ">
-                                ici
-                            </a>
-                        </div>
-                    </div>
-                </article>
-                <article class="tile is-child notification is-dark ">
-                    <div class="content">
-                        <p class="title">tuto-trace</p>
-                        <p class="subtitle">Vue.js / Python, C#, Dart</p>
-                        <div class="content">
-                            Exécuter du code pas à pas : chemins des boucles, pile d'appels, trace et erreurs de compilation.
-                            <a href="tuto-trace/" class="button is-danger is-small">
-                                ici
-                            </a>
-                        </div>
-                    </div>
-                </article>
-            </div>
-            <div class="tile is-vertical is-8">
-                <div class="tile">
-                    <div class="tile is-parent is-vertical">
-                        <article class="tile is-child notification is-info">
-                            <figure class="image is-64x64 is-pulled-right">
-                              <img class="is-rounded" src="https://raw.githubusercontent.com/jorisdeguet/hexile/master/hexile/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png">
-                            </figure>
-                            <p class="title">Hexile</p>
-                            <p class="subtitle">Jeu mobile / Android</p>
+        <section class="section">
+            <div class="container">
+                <h2 class="section-title">Enseignement</h2>
+                <p class="section-sub">
+                    Prof d'info depuis 2011 au cégep Édouard-Montpetit. Plus j'explique, mieux je comprends ; plus je comprends, mieux j'explique.
+                </p>
+
+                <div class="columns is-multiline">
+                    <div class="column is-half">
+                        <article class="item is-current">
+                            <div class="head">
+                                <div>
+                                    <span class="tag code">420-SN1</span>
+                                    <p class="name mt-2">Programmation en sciences</p>
+                                    <p class="tech">Python · Sciences de la nature</p>
+                                </div>
+                                <span class="tag is-success is-light">en ce moment</span>
+                            </div>
+                            <p class="desc">Apprendre à programmer en Python, pour les étudiants en sciences de la nature.</p>
                             <div class="buttons are-small">
-                              <a class="button" href="https://jorisdeguet.github.io/hexile/">Site</a>
-                              <a class="button" href="https://play.google.com/store/apps/details?id=org.deguet.hexile&utm_source=global_co&utm_medium=prtnr&utm_content=Mar2515&utm_campaign=PartBadge&pcampaignid=MKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1">Play Store</a>
+                                <a class="button" href="https://info.cegepmontpetit.ca/420-SN1/" target="_blank" rel="noopener">site</a>
+                                <a class="button" href="tuto-trace/">tuto-trace</a>
                             </div>
-                            
                         </article>
-                        <article class="tile is-child notification is-dark">
-                            <figure class="image is-64x64 is-pulled-right">
-                              <img class="is-rounded" src="https://xilex.app/logo1024.jpeg">
-                            </figure>
-                            <p class="title">Xilex</p>
-                            <p class="subtitle">Jeu mobile / Flutter</p>
+                    </div>
+                    <div class="column is-half">
+                        <article class="item is-current">
+                            <div class="head">
+                                <div>
+                                    <span class="tag code">420-5N6</span>
+                                    <p class="name mt-2">Applications mobiles avancées</p>
+                                    <p class="tech">Dart · Flutter</p>
+                                </div>
+                                <span class="tag is-success is-light">en ce moment</span>
+                            </div>
+                            <p class="desc">Créer des applications Flutter qui tournent sur Android, iOS et le web.</p>
                             <div class="buttons are-small">
-                              <a class="button" href="https://xilex.app/">Site</a>
-                              <a class="button" href="https://apps.apple.com/us/app/xilex/id1496229926?ls=1">App Store</a>
-                              <a class="button" href="https://play.google.com/store/apps/details?id=org.deguet.xilex&hl=fr_CA&pcampaignid=pcampaignidMKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1">Play Store</a>
+                                <a class="button" href="https://info.cegepmontpetit.ca/5N6-mobile-2/" target="_blank" rel="noopener">site</a>
+                                <a class="button" href="https://github.com/departement-info-cem/5N6-mobile-2" target="_blank" rel="noopener">repo</a>
                             </div>
-                            
                         </article>
-                        <article class="tile is-child notification box" style="border:3px solid grey;">
-                            <figure class="image is-64x64 is-pulled-right">
-                              <img class="is-rounded" src="barbu/barbu.png">
-                            </figure>
-                            <p class="title">Barbu</p>
-                            <p class="subtitle">App / Flutter</p>
-                            Permet de compter les points pour le Barbu, un jeu de cartes.
-                        </article>
-                        
                     </div>
-                    <div class="tile is-parent is-vertical">
-                        <article class="tile is-child notification box" style="border:3px solid #5d5dc2;">
-                            <figure class="image is-64x64 is-pulled-right">
-                                <img src="competenssator.png" class="is-rounded">
-                            </figure>
-                            <p class="title">Competenssator</p>
-                            <p class="subtitle">Skill Tree en SVG</p>
-                            <div class="content">
-                                Une application Python / Flask qui prend une description en YAML et
-                                renvoie un arbre de compétence SVG avec des haxagones. Le tout hébergé sur render.com
+                    <div class="column is-half">
+                        <article class="item is-past">
+                            <div class="head">
+                                <div>
+                                    <span class="tag code">420-3M5</span>
+                                    <p class="name mt-2">Introduction à la programmation mobile</p>
+                                    <p class="tech">Kotlin · Android</p>
+                                </div>
+                                <span class="tag is-light">déjà donné</span>
                             </div>
+                            <p class="desc">Anciennement 420-3N5 Prog 3 (Java / Android).</p>
                             <div class="buttons are-small">
-                              <a class="button" href="https://competenssator.onrender.com/">Site</a>
+                                <a class="button" href="https://info.cegepmontpetit.ca/3M5-Intro-Mobile/" target="_blank" rel="noopener">site</a>
+                                <a class="button" href="https://github.com/departement-info-cem/3M5-Intro-Mobile" target="_blank" rel="noopener">repo</a>
                             </div>
-                            
-                            
                         </article>
-
-
-                        <article class="tile is-child notification is-dark">
-                            <p class="title">Votspot</p>
-                            <p class="subtitle">App de vote / flutter + Google cloud</p>
-                            <div class="content">
-                                Une plateforme de questions et votes en ligne.
-                                L'appli web est réalisé en Angular.
-                                La partie serveur est en Java utilisant le Datastore de Google Cloud Platform.
+                    </div>
+                    <div class="column is-half">
+                        <article class="item is-past">
+                            <div class="head">
+                                <div>
+                                    <span class="tag code">420-4M6</span>
+                                    <p class="name mt-2">Applications mobiles</p>
+                                    <p class="tech">Android</p>
+                                </div>
+                                <span class="tag is-light">déjà donné</span>
                             </div>
+                            <p class="desc">Anciennement 420-4N6. Programmation d'applications mobiles Android.</p>
                             <div class="buttons are-small">
-                              <a class="button" href="https://votspot.org/">Site</a>
-                              <a class="button" href="https://apps.apple.com/ca/app/votspot/id1483481374">App Store</a>
-                              <a class="button" href="https://play.google.com/store/apps/details?id=org.votspot.votspot_client_flutter&hl=en_AU">Play Store</a>
-                            </div>
-
-
-                        </article>
-                        
-                    </div>
-                </div>
-                <div class="tile is-parent">
-                    <article class="tile is-child notification is-primary">
-                        <p class="title">Vote préférentiel</p>
-                        <p class="subtitle">Pouvoir faire plus qu'un choix / AngularJS</p>
-                        <div class="content">
-                            Quand on peut classer des candidats plutôt qu'en choisir un seul, un vote est plus expressif.
-                            <br>
-                            Par contre, le dépouillage est plus complexe. 
-                            <br>
-                            Voici 2 pages pour comprendre 
-                            la méthode des 
-                            
-                            <a href="https://jorisdeguet.github.io/PrefVote/tideman.html">
-                                <span class="button is-small is-dark">
-                                    paires rangées
-                                </span>
-                            </a> 
-                            et la méthode des 
-                            <a href="https://jorisdeguet.github.io/PrefVote/irv.html">
-                                <span class="button is-small is-dark">
-                                    tours instantanés
-                                </span>
-                            </a>
-                        </div>
-                    </article>
-                </div>
-            </div>
-        </div>
-
-
-
-        <br><br><br>
-
-        
-       
-
-
-        <div class="tile is-ancestor">
-            <div class="tile is-parent">
-                <article class="tile is-child notification box">
-                    <div class="content">
-                        <p class="title">Prof d'info</p>
-                        <p class="subtitle">au collège Édouard Montpetit</p>
-                        <div class="content">
-                            Depuis 2011, je m'occupe surtout de développement mobile.
-                        </div>
-                    </div>
-                </article>
-            </div>
-            <div class="tile is-vertical is-8">
-                <div class="tile">
-                    <div class="tile is-parent is-vertical">
-                        <article class="tile is-child notification is-dark">
-                            <!--                            <p class="title">420-3N5</p>-->
-                            <p class="subtitle">420-3N5 Prog 3</p>
-                            <div class="content">
-                                Programmation en Java et Android.
-                              <a class="button is-small" href="https://departement-info-cem.github.io/3N5-Prog3/">site</a>
-                              <a class="button is-small" href="https://github.com/departement-info-cem/3N5-Prog3">repo</a>
-                                
-                            </div>
-                        </article>
-                        <article class="tile is-child notification is-info">
-                            <!--                            <p class="title">420-4N6</p>-->
-                            <p class="subtitle">420-4N6 Applications mobiles</p>
-                            <div class="content">
-                                Programmation d'applications mobiles Android.
-                                <a class="button is-small" href="https://departement-info-cem.github.io/4N6-Mobile/">site</a>
-                              <a class="button is-small" href="https://github.com/departement-info-cem/4N6-Mobile">repo</a>
+                                <a class="button" href="https://info.cegepmontpetit.ca/4M6-Mobile/" target="_blank" rel="noopener">site</a>
+                                <a class="button" href="https://github.com/departement-info-cem/4M6-Mobile" target="_blank" rel="noopener">repo</a>
                             </div>
                         </article>
                     </div>
-
                 </div>
-                <div class="tile is-parent">
-                    <article class="tile is-child notification is-dark">
-                        <!--                        <p class="title">420-5N6</p>-->
-                        <p class="subtitle">420-5N6 Applis mobiles avancées</p>
-                        <div class="content">
-                            Programmation d'applis mobiles en Flutter. (en préparation)
-                             <a class="button is-small" href="https://departement-info-cem.github.io/5N6-mobile-2/">site</a>
-                              <a class="button is-small" href="https://github.com/departement-info-cem/5N6-mobile-2">repo</a>
-                        </div>
-                    </article>
-                </div>
+                <p class="is-size-7" style="color: var(--muted);">Les codes de cours ont changé récemment : le M, c'est pour mobile.</p>
             </div>
-        </div>
-        
-        <br><br><br>
+        </section>
 
-        
-         <div class="tile is-ancestor m-2">
-            <div class="tile is-vertical is-8">
-                <div class="tile">
-                    <div class="tile is-parent">
-                        
-                        <article class="tile is-child notification is-dark">
-                            <p class="title">Enseignant</p>
-                            <p class="subtitle">Prof quoi</p>
-                            <div>
-                                Plus j'explique mieux je comprends. 
-                                <br>
-                                Plus je comprends mieux j'explique.
+        <section class="section pt-0">
+            <div class="container">
+                <h2 class="section-title">Projets</h2>
+                <p class="section-sub">
+                    J'aime développer et expérimenter différentes nouvelles technos : apps, sites et autres.
+                </p>
+
+                <div class="columns is-multiline">
+                    <div class="column is-one-third-desktop is-half-tablet">
+                        <article class="item">
+                            <div class="head">
+                                <div>
+                                    <p class="name">tuto-trace</p>
+                                    <p class="tech">Vue.js · Python, C#, Dart</p>
+                                </div>
+                                <span class="icon is-large" style="color: var(--accent);"><i class="fa-solid fa-shoe-prints fa-2x"></i></span>
+                            </div>
+                            <p class="desc">Exécuter du code pas à pas : chemins des boucles, pile d'appels, trace et erreurs de compilation.</p>
+                            <div class="buttons are-small">
+                                <a class="button" href="tuto-trace/">essayer</a>
                             </div>
                         </article>
                     </div>
-                    <div class="tile is-parent is-vertical">
-                        
-                        <article class="tile is-child notification is-info">
-                            <p class="title">U. Joseph Fourier</p>
-                            <p class="subtitle">2004-2007</p>
-                        </article>
-                        <article class="tile is-child notification is-dark">
-                            <p class="title">PolyTech Grenoble</p>
-                            <p class="subtitle">2005-2007</p>
-                        </article>
-                        <article class="tile is-child notification is-info">
-                            <p class="title">IUT de Valence</p>
-                            <p class="subtitle">2007-2008</p>
+                    <div class="column is-one-third-desktop is-half-tablet">
+                        <article class="item">
+                            <div class="head">
+                                <div>
+                                    <p class="name">Vote préférentiel</p>
+                                    <p class="tech">AngularJS · vis.js</p>
+                                </div>
+                                <span class="icon is-large" style="color: var(--accent);"><i class="fa-solid fa-ranking-star fa-2x"></i></span>
+                            </div>
+                            <p class="desc">
+                                Quand on peut classer des candidats plutôt qu'en choisir un seul, un vote est plus expressif, mais le dépouillement est plus complexe. Deux pages pour comprendre deux méthodes.
+                            </p>
+                            <div class="buttons are-small">
+                                <a class="button" href="prefvote/tideman.html">paires rangées</a>
+                                <a class="button" href="prefvote/irv.html">tours instantanés</a>
+                            </div>
                         </article>
                     </div>
-                    
+                    <div class="column is-one-third-desktop is-half-tablet">
+                        <article class="item">
+                            <div class="head">
+                                <div>
+                                    <p class="name">Competenssator</p>
+                                    <p class="tech">Python · Flask · SVG</p>
+                                </div>
+                                <img class="logo" src="competenssator.png" alt="">
+                            </div>
+                            <p class="desc">Prend une description en YAML et renvoie un arbre de compétences SVG avec des hexagones. Hébergé sur render.com (le premier chargement peut être lent).</p>
+                            <div class="buttons are-small">
+                                <a class="button" href="https://competenssator.onrender.com/" target="_blank" rel="noopener">site</a>
+                            </div>
+                        </article>
+                    </div>
+                    <div class="column is-one-third-desktop is-half-tablet">
+                        <article class="item">
+                            <div class="head">
+                                <div>
+                                    <p class="name">Barbu</p>
+                                    <p class="tech">Flutter</p>
+                                </div>
+                                <img class="logo" src="barbu/barbu.png" alt="">
+                            </div>
+                            <p class="desc">Compter les points pour le Barbu, un jeu de cartes.</p>
+                            <div class="buttons are-small">
+                                <a class="button" href="barbu/">jouer</a>
+                            </div>
+                        </article>
+                    </div>
+                    <div class="column is-one-third-desktop is-half-tablet">
+                        <article class="item">
+                            <div class="head">
+                                <div>
+                                    <p class="name">Hexile</p>
+                                    <p class="tech">Jeu mobile · Android</p>
+                                </div>
+                                <img class="logo" src="https://raw.githubusercontent.com/jorisdeguet/hexile/master/hexile/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" alt="">
+                            </div>
+                            <p class="desc">Jeu mobile Android.</p>
+                            <div class="buttons are-small">
+                                <a class="button" href="https://jorisdeguet.github.io/hexile/">site</a>
+                            </div>
+                        </article>
+                    </div>
+                    <div class="column is-one-third-desktop is-half-tablet">
+                        <article class="item">
+                            <div class="head">
+                                <div>
+                                    <p class="name">Xilex</p>
+                                    <p class="tech">Jeu mobile · Flutter</p>
+                                </div>
+                                <span class="icon is-large" style="color: var(--accent);"><i class="fa-solid fa-gamepad fa-2x"></i></span>
+                            </div>
+                            <p class="desc">Jeu mobile en Flutter. Le site xilex.app n'est plus en ligne.</p>
+                            <div class="buttons are-small">
+                                <a class="button" href="https://apps.apple.com/us/app/xilex/id1496229926?ls=1" target="_blank" rel="noopener">App Store</a>
+                            </div>
+                        </article>
+                    </div>
+                    <div class="column is-one-third-desktop is-half-tablet">
+                        <article class="item">
+                            <div class="head">
+                                <div>
+                                    <p class="name">MinSpanTree</p>
+                                    <p class="tech">HTML · JS · delaunator</p>
+                                </div>
+                                <span class="icon is-large" style="color: var(--accent);"><i class="fa-solid fa-diagram-project fa-2x"></i></span>
+                            </div>
+                            <p class="desc">Ou comment relier des points avec le moins de câble possible.</p>
+                            <div class="buttons are-small">
+                                <a class="button" href="emst.html">essayer</a>
+                            </div>
+                        </article>
+                    </div>
+                    <div class="column is-one-third-desktop is-half-tablet">
+                        <article class="item">
+                            <div class="head">
+                                <div>
+                                    <p class="name">Code de César</p>
+                                    <p class="tech">SVG · Vue.js</p>
+                                </div>
+                                <span class="icon is-large" style="color: var(--accent);"><i class="fa-solid fa-key fa-2x"></i></span>
+                            </div>
+                            <p class="desc">Démo du premier chiffre symétrique connu.</p>
+                            <div class="buttons are-small">
+                                <a class="button" href="cesar.html">essayer</a>
+                            </div>
+                        </article>
+                    </div>
+                    <div class="column is-one-third-desktop is-half-tablet">
+                        <article class="item">
+                            <div class="head">
+                                <div>
+                                    <p class="name">Votspot</p>
+                                    <p class="tech">Flutter · Angular · Java / Google Cloud</p>
+                                </div>
+                                <span class="icon is-large" style="color: var(--accent);"><i class="fa-solid fa-check-to-slot fa-2x"></i></span>
+                            </div>
+                            <p class="desc">Une plateforme de questions et votes en ligne. Appli web en Angular, serveur Java sur le Datastore de Google Cloud.</p>
+                            <p class="note">N'est plus en ligne.</p>
+                        </article>
+                    </div>
                 </div>
-               
+                <p class="is-size-7" style="color: var(--muted);">J'ai eu un compte Play Store ; suite à mon inactivité, Google l'a désactivé. Les applis Android n'y sont donc plus.</p>
             </div>
-            <div class="tile is-parent is-vertical">
-                
-                <article class="tile is-child notification is-dark">
-                        <p class="title">CEGEP André Laurendeau</p>
-                        <p class="subtitle">2010</p>
-                        <div class="content">
-                            <!-- Content -->
-                        </div>
-                    </article>
-                <article class="tile is-child notification is-light">
-                    <div class="content">
-                        <p class="title">CÉGEP Édouard Montpetit </p>
-                        <p class="subtitle">2011 à aujourd'hui</p>
-                        <div class="content">
-                            Java Android Flutter
-                        </div>
-                    </div>
-                </article>
-            </div>
-        </div>
+        </section>
 
-
-
-        <br><br><br>
-        
-        
-        
-        
-        
-         <p>
-            J'ai étudié là:
-        </p>
-
-
-        <div class="tile is-ancestor">
-            <div class="tile is-vertical">
-                <div class="tile">
-                    <div class="tile is-parent is-vertical">
-                        <article class="tile is-child notification is-light">
-                            <p class="subtitle">École Paul-Louis Courier</p>
-                            Saint Pierre des Corps
+        <section class="section pt-0">
+            <div class="container">
+                <div class="columns">
+                    <div class="column is-half">
+                        <h2 class="section-title">Ressources</h2>
+                        <p class="section-sub">À lire, à partager.</p>
+                        <article class="item mb-4" style="height: auto;">
+                            <p class="name">Comment faire un TP</p>
+                            <p class="desc">Un guide sur comment produire un travail pratique en sciences. En collaboration avec Guillaume Piolle.</p>
+                            <div class="buttons are-small">
+                                <a class="button" href="methodoTP/methodoTP.pdf">PDF</a>
+                            </div>
                         </article>
-                        <article class="tile is-child notification is-light">
-                            <!--                                                <p class="title"></p>-->
-                            <p class="subtitle">Collège Jacques Decour</p>
-                            Saint Pierre des Corps
-                        </article>
-                        <article class="tile is-child notification is-info">
-                            <!--                                                <p class="title"></p>-->
-                            <p class="subtitle">Lycée Paul-Louis Courier</p>
-                            Tours
+                        <article class="item" style="height: auto;">
+                            <p class="name">Wikipédia</p>
+                            <p class="desc">
+                                Je soutiens Wikipédia et j'y ai contribué à
+                                <a href="https://fr.wikipedia.org/wiki/Sp%C3%A9cial:Contributions/Joris.deguet" target="_blank" rel="noopener">quelques reprises</a>.
+                            </p>
                         </article>
                     </div>
-
-                </div>
-
-            </div>
-            <div class="tile is-vertical">
-                <div class="tile">
-                    <div class="tile is-parent is-vertical">
-                        <article class="tile is-child notification is-info">
-                            <!--                                                <p class="title"></p>-->
-                            <p class="subtitle">Université François Rabelais</p>
-                            Tours
-
-                        </article>
-                        <article class="tile is-child notification is-dark" style="border: 2px solid grey;">
-                            <!--                                                <p class="title"></p>-->
-                            <p class="subtitle">Université Joseph Fourier</p>
-                            Grenoble
-                        </article>
-                        <article class="tile is-child notification is-primary">
-                            <p class="subtitle">Université de Montréal</p>
-                        </article>
+                    <div class="column is-half">
+                        <h2 class="section-title">Parcours</h2>
+                        <p class="section-sub">Des bords de Loire à Montréal.</p>
+                        <ul class="timeline">
+                            <li>
+                                <span class="when">2011 à aujourd'hui</span>
+                                <strong>Prof d'informatique</strong>, <a href="https://www.cegepmontpetit.ca/" target="_blank" rel="noopener">cégep Édouard-Montpetit</a>
+                                <span class="where">· Longueuil</span>
+                            </li>
+                            <li>
+                                <span class="when">2010</span>
+                                <strong>Prof</strong>, <a href="https://www.claurendeau.qc.ca/" target="_blank" rel="noopener">cégep André-Laurendeau</a>
+                            </li>
+                            <li>
+                                <span class="when">Études</span>
+                                Université de Montréal
+                            </li>
+                            <li>
+                                <span class="when">2007–2008</span>
+                                <strong>Doctorant et enseignant</strong>, <a href="https://iut-valence.fr/" target="_blank" rel="noopener">IUT de Valence</a>
+                            </li>
+                            <li>
+                                <span class="when">2004–2007</span>
+                                <strong>Doctorant et enseignant</strong>,
+                                <a href="https://www.univ-grenoble-alpes.fr/" target="_blank" rel="noopener">Université Joseph Fourier</a>
+                                (maintenant Université Grenoble Alpes) et
+                                <a href="https://polytech.grenoble-inp.fr/" target="_blank" rel="noopener">Polytech Grenoble</a>
+                            </li>
+                            <li>
+                                <span class="when">Études</span>
+                                Université Joseph Fourier <span class="where">· Grenoble</span>
+                            </li>
+                            <li>
+                                <span class="when">Études</span>
+                                Université François-Rabelais <span class="where">· Tours</span>
+                            </li>
+                            <li>
+                                <span class="when">1996–1999</span>
+                                Lycée Paul-Louis-Courier <span class="where">· Tours</span>
+                            </li>
+                            <li>
+                                <span class="when">1992–1996</span>
+                                Collège Jacques-Decour <span class="where">· Saint-Pierre-des-Corps</span>
+                            </li>
+                            <li>
+                                <span class="when">1987–1992</span>
+                                École Marceau-Courier <span class="where">· Saint-Pierre-des-Corps</span>
+                            </li>
+                        </ul>
                     </div>
-
                 </div>
             </div>
-        </div>
+        </section>
 
-
-        
-        
-        
-        
-        
-
-        <br>
-        <div class="box has-text-centered">
-            Fait avec <a href="https://bulma.io/">Bulma</a> par Joris Deguet
-        </div>
-
-
+        <footer class="footer site-footer has-text-centered">
+            Fait avec <a href="https://bulma.io/" target="_blank" rel="noopener">Bulma</a> par Joris Deguet · mis à jour en 2026
+        </footer>
     </body>
 </html>
