@@ -31,6 +31,7 @@ npm run deploy   # vérifie les types et construit dans ../tuto-trace/ (à commi
 ## Lien et intégration (sans base de données)
 
 Tout est dans le hash de l'URL : `#lang=python&ui=fr&ex=while-counter` ou `#lang=dart&code=<lz-string>`.
-Options : `embed=1`, `readonly=1`, `autoplay=1`, `speed=3`, `step=5`, `src=<code en clair>`.
+Options : `embed=1`, `readonly=1`, `autoplay=1`, `speed=3`, `step=5`, `src=<code en clair>`,
+`format=sn|mobile` (présentation de la trace ; aussi accepté en vrai paramètre GET : `?format=sn`).
 
 Intégration avec hauteur automatique : voir `public/demo-embed.html` (`embed.js`).

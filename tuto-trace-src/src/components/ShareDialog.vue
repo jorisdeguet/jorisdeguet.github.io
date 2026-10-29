@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { appUrl, buildHash } from '../composables/useUrlState'
+import { appUrl, buildHash, type TraceFormat } from '../composables/useUrlState'
 import type { Lang } from '../engine'
 import { t, type UiLang } from '../i18n'
 
-const props = defineProps<{ lang: Lang; ui: UiLang; code: string; ex?: string; custom: boolean; speed: number }>()
+const props = defineProps<{ lang: Lang; ui: UiLang; code: string; ex?: string; custom: boolean; speed: number; format: TraceFormat }>()
 const emit = defineEmits<{ close: [] }>()
 
 const readonly = ref(false)
@@ -20,6 +20,7 @@ const state = computed(() => ({
   readonly: readonly.value,
   autoplay: autoplay.value,
   speed: props.speed !== 2 ? props.speed : undefined,
+  format: props.format,
 }))
 
 const link = computed(() => appUrl() + buildHash(state.value))
@@ -29,7 +30,7 @@ const scriptBase = computed(() => appUrl().replace(/index\.html$/, '') + 'embed.
 const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 const script = computed(
   () =>
-    `<script src="${scriptBase.value}" defer><\/script>\n<pre data-tuto-trace data-lang="${props.lang}" data-ui="${props.ui}"${readonly.value ? ' data-readonly' : ''}${autoplay.value ? ' data-autoplay' : ''}>${escapeHtml(props.code)}</pre>`,
+    `<script src="${scriptBase.value}" defer><\/script>\n<pre data-tuto-trace data-lang="${props.lang}" data-ui="${props.ui}"${props.format !== 'default' ? ` data-format="${props.format}"` : ''}${readonly.value ? ' data-readonly' : ''}${autoplay.value ? ' data-autoplay' : ''}>${escapeHtml(props.code)}</pre>`,
 )
 
 async function copy(which: string, text: string) {

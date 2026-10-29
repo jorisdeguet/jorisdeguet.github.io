@@ -2,6 +2,10 @@ import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from
 import type { Lang } from '../engine'
 import type { UiLang } from '../i18n'
 
+/** Présentation de la trace : `default` (détaillée), `sn` (gabarit 420-SN1), `mobile` (étroite). */
+export type TraceFormat = 'default' | 'sn' | 'mobile'
+export const FORMATS: TraceFormat[] = ['default', 'sn', 'mobile']
+
 export interface UrlState {
   lang: Lang
   ui: UiLang
@@ -14,6 +18,7 @@ export interface UrlState {
   step?: number
   id?: string // identifiant de l'iframe (script d'intégration)
   theme?: 'light' | 'dark'
+  format: TraceFormat
 }
 
 const LANGS: Lang[] = ['python', 'csharp', 'dart']
@@ -34,6 +39,8 @@ export function readUrl(): UrlState {
   if (c) code = decompressFromEncodedURIComponent(c) ?? undefined
   const raw = p.get('src') // code non compressé (script d'intégration, liens écrits à la main)
   if (!code && raw) code = raw
+  // le format peut aussi venir d'un vrai paramètre GET (?format=sn) ; le hash a priorité
+  const fmt = (p.get('format') ?? new URLSearchParams(location.search).get('format') ?? '').toLowerCase()
   const num = (k: string) => (p.get(k) !== null && !isNaN(Number(p.get(k))) ? Number(p.get(k)) : undefined)
   return {
     lang,
@@ -47,6 +54,7 @@ export function readUrl(): UrlState {
     step: num('step'),
     id: p.get('id') ?? undefined,
     theme: p.get('theme') === 'dark' || p.get('theme') === 'light' ? (p.get('theme') as 'light' | 'dark') : undefined,
+    format: (FORMATS as string[]).includes(fmt) ? (fmt as TraceFormat) : 'default',
   }
 }
 
@@ -62,6 +70,7 @@ export function buildHash(s: Partial<UrlState> & { lang: Lang; ui: UiLang }): st
   if (s.speed) p.set('speed', String(s.speed))
   if (s.id) p.set('id', s.id)
   if (s.theme) p.set('theme', s.theme)
+  if (s.format && s.format !== 'default') p.set('format', s.format)
   return '#' + p.toString()
 }
 

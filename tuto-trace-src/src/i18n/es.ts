@@ -2,7 +2,8 @@ import type fr from './fr'
 
 const es: typeof fr = {
   app: { tagline: 'Ver el código ejecutarse, paso a paso' },
-  pick: { lang: 'Lenguaje', ui: 'Idioma' },
+  pick: { lang: 'Lenguaje', ui: 'Idioma', format: 'Formato de traza' },
+  format: { default: 'Por defecto', sn: 'SN', mobile: 'Móvil' },
   theme: { toLight: 'Cambiar al tema claro', toDark: 'Cambiar al tema oscuro' },
   dock: { toggle: 'Mostrar / ocultar' },
   vibed: 'Hecho con IA generativa',
@@ -42,6 +43,11 @@ const es: typeof fr = {
     event: 'Evento',
     output: 'Salida',
     hidden: '… {n} pasos anteriores ocultos',
+    stack: 'Pila de llamadas',
+    called: 'Función llamada',
+    returned: 'Valor devuelto',
+    mobileEvent: 'Llamada / retorno / salida',
+    typeChanged: 'Atención: la variable `{name}` cambia de tipo: **{from}** → **{to}**',
   },
   console: { empty: 'Lo que se imprima aparecerá aquí.' },
   errors: {

@@ -2,7 +2,8 @@ import type fr from './fr'
 
 const en: typeof fr = {
   app: { tagline: 'Watch code run, step by step' },
-  pick: { lang: 'Language', ui: 'Interface' },
+  pick: { lang: 'Language', ui: 'Interface', format: 'Trace format' },
+  format: { default: 'Default', sn: 'SN', mobile: 'Mobile' },
   theme: { toLight: 'Switch to light theme', toDark: 'Switch to dark theme' },
   dock: { toggle: 'Show / hide' },
   vibed: 'Vibe-coded with GenAI',
@@ -42,6 +43,11 @@ const en: typeof fr = {
     event: 'Event',
     output: 'Output',
     hidden: '… {n} earlier steps hidden',
+    stack: 'Call stack',
+    called: 'Function called',
+    returned: 'Returned value',
+    mobileEvent: 'Call / return / output',
+    typeChanged: 'Warning: variable `{name}` changes type: **{from}** → **{to}**',
   },
   console: { empty: 'Output will appear here.' },
   errors: {

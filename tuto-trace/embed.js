@@ -8,7 +8,7 @@
  *
  * Chaque bloc est remplacé par une iframe (mode compact) dont la hauteur s'ajuste au contenu.
  * Attributs : data-lang (python | csharp | dart), data-ui (fr | en | es), data-ex (exemple de la
- * bibliothèque, au lieu du code), data-readonly, data-autoplay, data-speed, data-theme (light | dark), data-height (hauteur initiale).
+ * bibliothèque, au lieu du code), data-readonly, data-autoplay, data-speed, data-theme (light | dark), data-format (default | sn | mobile), data-height (hauteur initiale).
  *
  * Code courant (après modification par le visiteur) : chaque iframe reçoit l'événement
  * « tuto-trace:change » (detail = { lang, ui, code }) et window.tutoTrace.state(iframe) le renvoie.
@@ -31,6 +31,7 @@
     if (el.hasAttribute('data-autoplay')) p.set('autoplay', '1')
     if (el.getAttribute('data-speed')) p.set('speed', el.getAttribute('data-speed'))
     if (el.getAttribute('data-theme')) p.set('theme', el.getAttribute('data-theme'))
+    if (el.getAttribute('data-format')) p.set('format', el.getAttribute('data-format'))
     p.set('id', id)
     return '#' + p.toString()
   }

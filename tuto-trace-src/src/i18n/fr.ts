@@ -3,7 +3,8 @@ export default {
   app: {
     tagline: 'Voir le code s’exécuter, pas à pas',
   },
-  pick: { lang: 'Langage', ui: 'Langue' },
+  pick: { lang: 'Langage', ui: 'Langue', format: 'Format de trace' },
+  format: { default: 'Par défaut', sn: 'SN', mobile: 'Mobile' },
   theme: { toLight: 'Passer au thème clair', toDark: 'Passer au thème sombre' },
   dock: { toggle: 'Afficher / masquer' },
   vibed: 'Vibé avec de l’IAG',
@@ -43,6 +44,11 @@ export default {
     event: 'Événement',
     output: 'Affichage',
     hidden: '… {n} pas plus anciens masqués',
+    stack: 'Pile d’appels',
+    called: 'Fonction appelée',
+    returned: 'Valeur retournée',
+    mobileEvent: 'Appel / retour / affichage',
+    typeChanged: 'Attention : la variable `{name}` change de type : **{from}** → **{to}**',
   },
   console: { empty: 'Les affichages apparaîtront ici.' },
   errors: {

@@ -15,7 +15,7 @@ import TraceTable from './components/TraceTable.vue'
 import { useEmbedResize } from './composables/useEmbedResize'
 import { flyStep } from './composables/useFly'
 import { forceTheme, theme, toggleTheme } from './composables/useTheme'
-import { appUrl, buildHash, readUrl, writeUrl } from './composables/useUrlState'
+import { appUrl, buildHash, FORMATS, readUrl, writeUrl, type TraceFormat } from './composables/useUrlState'
 import { analyze, hasBlockingErrors, trace, type Analysis, type Lang, type Step } from './engine'
 import { DEFAULT_EXAMPLE, getExample, hasExample } from './examples'
 import { locale, t, UI_LANGS, type UiLang } from './i18n'
@@ -26,6 +26,8 @@ const LANG_OPTIONS: PickerOption[] = [
   { id: 'dart', label: 'Dart', badge: 'Dt' },
 ]
 const UI_OPTIONS: PickerOption[] = UI_LANGS.map((l) => ({ id: l.id, label: l.label, badge: l.short }))
+const FORMAT_BADGES: Record<TraceFormat, string> = { default: 'Df', sn: 'SN', mobile: 'Mb' }
+const formatOptions = computed<PickerOption[]>(() => FORMATS.map((f) => ({ id: f, label: t('format.' + f), badge: FORMAT_BADGES[f] })))
 
 // ---------- état initial depuis le lien ----------
 const url = readUrl()
@@ -33,6 +35,7 @@ locale.value = url.ui
 const lang = ref<Lang>(url.lang)
 const exId = ref<string>(url.code !== undefined ? 'custom' : url.ex && hasExample(url.lang, url.ex) ? url.ex : DEFAULT_EXAMPLE)
 const code = ref<string>(url.code ?? getExample(lang.value, exId.value) ?? '')
+const format = ref<TraceFormat>(url.format)
 const speed = ref<number>(Math.min(10, Math.max(0.5, url.speed ?? 2)))
 const embed = url.embed
 const readonly = url.readonly
@@ -254,6 +257,7 @@ watch(lang, (l, old) => {
 })
 
 const langModel = computed({ get: () => lang.value, set: (v: string) => (lang.value = v as Lang) })
+const formatModel = computed({ get: () => format.value, set: (v: string) => (format.value = v as TraceFormat) })
 const uiModel = computed({ get: () => locale.value, set: (v: string) => (locale.value = v as UiLang) })
 watch(locale, (l) => (document.documentElement.lang = l), { immediate: true })
 
@@ -267,7 +271,7 @@ watch(
   },
   { immediate: true },
 )
-watch([lang, locale, exId, code, speed], () => {
+watch([lang, locale, exId, code, speed, format], () => {
   writeUrl({
     lang: lang.value,
     ui: locale.value,
@@ -278,10 +282,11 @@ watch([lang, locale, exId, code, speed], () => {
     speed: speed.value !== 2 ? speed.value : undefined,
     id: url.id,
     theme: url.theme,
+    format: format.value,
   })
 })
 const fullAppLink = computed(() =>
-  appUrl() + buildHash({ lang: lang.value, ui: locale.value, ex: exId.value === 'custom' ? undefined : exId.value, code: exId.value === 'custom' ? code.value : undefined }),
+  appUrl() + buildHash({ lang: lang.value, ui: locale.value, ex: exId.value === 'custom' ? undefined : exId.value, code: exId.value === 'custom' ? code.value : undefined, format: format.value }),
 )
 
 // ---------- clavier ----------
@@ -320,8 +325,9 @@ onBeforeUnmount(() => {
         <span class="tagline">{{ t('app.tagline') }}</span>
       </div>
       <div class="top-right">
-        <PickerMenu v-model="langModel" :options="LANG_OPTIONS" :title="t('pick.lang')" />
         <PickerMenu v-model="uiModel" :options="UI_OPTIONS" :title="t('pick.ui')" />
+        <PickerMenu v-model="langModel" :options="LANG_OPTIONS" :title="t('pick.lang')" />
+        <PickerMenu v-model="formatModel" :options="formatOptions" :title="t('pick.format')" />
         <button type="button" class="theme-btn" :title="theme === 'dark' ? t('theme.toLight') : t('theme.toDark')" :aria-label="theme === 'dark' ? t('theme.toLight') : t('theme.toDark')" @click="toggleTheme">
           <svg v-if="theme === 'dark'" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3.6" /><path d="M10 1.8v2.2M10 16v2.2M1.8 10H4M16 10h2.2M4.2 4.2l1.6 1.6M14.2 14.2l1.6 1.6M4.2 15.8l1.6-1.6M14.2 5.8l1.6-1.6" /></svg>
           <svg v-else viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 12.5A7 7 0 017.5 3.5a7 7 0 109 9z" /></svg>
@@ -384,7 +390,7 @@ onBeforeUnmount(() => {
         @keydown="splitKey"
       ></div>
       <div class="col-trace">
-        <TraceTable :steps="steps" :cur="cur" @goto="(i) => (stop(), goto(i))" />
+        <TraceTable :steps="steps" :cur="cur" :format="format" :lang="lang" @goto="(i) => (stop(), goto(i))" />
       </div>
     </main>
 
@@ -410,6 +416,6 @@ onBeforeUnmount(() => {
     </nav>
     <p class="vibed">{{ t('vibed') }}</p>
 
-    <ShareDialog v-if="showShare" :lang="lang" :ui="locale" :code="code" :ex="exId" :custom="exId === 'custom'" :speed="speed" @close="showShare = false" />
+    <ShareDialog v-if="showShare" :lang="lang" :ui="locale" :code="code" :ex="exId" :custom="exId === 'custom'" :speed="speed" :format="format" @close="showShare = false" />
   </div>
 </template>
