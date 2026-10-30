@@ -7,7 +7,7 @@
  *       i = i + 1</pre>
  *
  * Chaque bloc est remplacé par une iframe (mode compact) dont la hauteur s'ajuste au contenu.
- * Attributs : data-lang (python | csharp | dart), data-ui (fr | en | es), data-ex (exemple de la
+ * Attributs : data-lang (python | csharp | dart | javascript | typescript), data-ui (fr | en | es), data-ex (exemple de la
  * bibliothèque, au lieu du code), data-readonly, data-autoplay, data-speed, data-theme (light | dark), data-format (default | sn | mobile), data-height (hauteur initiale).
  *
  * Code courant (après modification par le visiteur) : chaque iframe reçoit l'événement
