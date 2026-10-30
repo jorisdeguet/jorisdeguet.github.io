@@ -5,7 +5,7 @@ export interface ExampleGroup {
   items: string[] // clé i18n : examples.<id>
 }
 
-// Même série d'exemples pour les trois langages (certains n'existent que pour un langage).
+// Même série d'exemples pour tous les langages (certains n'existent que pour un langage).
 export const GROUPS: ExampleGroup[] = [
   { id: 'sequence', items: ['variables', 'swap'] },
   { id: 'if', items: ['if-simple', 'if-else', 'if-elif'] },
@@ -15,9 +15,9 @@ export const GROUPS: ExampleGroup[] = [
   { id: 'errors', items: ['err-type', 'err-undeclared', 'err-semicolon', 'err-indent', 'err-runtime'] },
 ]
 
-export const EXT: Record<Lang, string> = { python: 'py', csharp: 'cs', dart: 'dart' }
+export const EXT: Record<Lang, string> = { python: 'py', csharp: 'cs', dart: 'dart', javascript: 'js', typescript: 'ts' }
 
-const files = import.meta.glob('./*/*.{py,cs,dart}', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
+const files = import.meta.glob('./*/*.{py,cs,dart,js,ts}', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
 
 export function getExample(lang: Lang, id: string): string | undefined {
   return files[`./${lang}/${id}.${EXT[lang]}`]

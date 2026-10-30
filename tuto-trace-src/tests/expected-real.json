@@ -158,5 +158,157 @@
  "dart/fact-loop.dart": {
   "out": "120\n",
   "err": ""
+ },
+ "javascript/err-runtime.js": {
+  "out": "1.0\n2.0\n3.0\n",
+  "err": "TypeError: Cannot read properties of undefined (reading 'toFixed')"
+ },
+ "javascript/err-type.js": {
+  "out": "Bonjour\n",
+  "err": "TypeError: Assignment to constant variable."
+ },
+ "javascript/err-undeclared.js": {
+  "out": "",
+  "err": "ReferenceError: totale is not defined"
+ },
+ "javascript/fact-loop.js": {
+  "out": "120\n",
+  "err": ""
+ },
+ "javascript/for-each.js": {
+  "out": "pomme\nkiwi\npoire\n",
+  "err": ""
+ },
+ "javascript/for-nested.js": {
+  "out": "1\n2\n3\n2\n4\n6\n",
+  "err": ""
+ },
+ "javascript/for-range.js": {
+  "out": "0\n1\n2\nFin\n",
+  "err": ""
+ },
+ "javascript/func-chain.js": {
+  "out": "20\n",
+  "err": ""
+ },
+ "javascript/func-recursion.js": {
+  "out": "24\n",
+  "err": ""
+ },
+ "javascript/func-simple.js": {
+  "out": "9\n",
+  "err": ""
+ },
+ "javascript/if-elif.js": {
+  "out": "Doux\n",
+  "err": ""
+ },
+ "javascript/if-else.js": {
+  "out": "Mineur\nFin\n",
+  "err": ""
+ },
+ "javascript/if-simple.js": {
+  "out": "Réussi\nFin\n",
+  "err": ""
+ },
+ "javascript/list-ops.js": {
+  "out": "83.33333333333333\n",
+  "err": ""
+ },
+ "javascript/swap.js": {
+  "out": "8 5\n",
+  "err": ""
+ },
+ "javascript/variables.js": {
+  "out": "36\nTotal : 41\n",
+  "err": ""
+ },
+ "javascript/while-counter.js": {
+  "out": "0\n1\n2\nFin\n",
+  "err": ""
+ },
+ "javascript/while-search.js": {
+  "out": "Trouvé à l'indice 2\n",
+  "err": ""
+ },
+ "javascript/while-sum.js": {
+  "out": "10\n",
+  "err": ""
+ },
+ "typescript/err-runtime.ts": {
+  "out": "1.0\n2.0\n3.0\n",
+  "err": "TypeError: Cannot read properties of undefined (reading 'toFixed')"
+ },
+ "typescript/err-type.ts": {
+  "out": "",
+  "err": "error TS2322: Type 'string' is not assignable to type 'number'."
+ },
+ "typescript/err-undeclared.ts": {
+  "out": "",
+  "err": "error TS2552: Cannot find name 'totale'. Did you mean 'total'?"
+ },
+ "typescript/fact-loop.ts": {
+  "out": "120\n",
+  "err": ""
+ },
+ "typescript/for-each.ts": {
+  "out": "pomme\nkiwi\npoire\n",
+  "err": ""
+ },
+ "typescript/for-nested.ts": {
+  "out": "1\n2\n3\n2\n4\n6\n",
+  "err": ""
+ },
+ "typescript/for-range.ts": {
+  "out": "0\n1\n2\nFin\n",
+  "err": ""
+ },
+ "typescript/func-chain.ts": {
+  "out": "20\n",
+  "err": ""
+ },
+ "typescript/func-recursion.ts": {
+  "out": "24\n",
+  "err": ""
+ },
+ "typescript/func-simple.ts": {
+  "out": "9\n",
+  "err": ""
+ },
+ "typescript/if-elif.ts": {
+  "out": "Doux\n",
+  "err": ""
+ },
+ "typescript/if-else.ts": {
+  "out": "Mineur\nFin\n",
+  "err": ""
+ },
+ "typescript/if-simple.ts": {
+  "out": "Réussi\nFin\n",
+  "err": ""
+ },
+ "typescript/list-ops.ts": {
+  "out": "83.33333333333333\n",
+  "err": ""
+ },
+ "typescript/swap.ts": {
+  "out": "8 5\n",
+  "err": ""
+ },
+ "typescript/variables.ts": {
+  "out": "36\nTotal : 41\n",
+  "err": ""
+ },
+ "typescript/while-counter.ts": {
+  "out": "0\n1\n2\nFin\n",
+  "err": ""
+ },
+ "typescript/while-search.ts": {
+  "out": "Trouvé à l'indice 2\n",
+  "err": ""
+ },
+ "typescript/while-sum.ts": {
+  "out": "10\n",
+  "err": ""
  }
 }

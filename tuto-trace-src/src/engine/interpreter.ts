@@ -1,7 +1,7 @@
 // Interpréteur pédagogique : un générateur qui produit un « pas » (Step) par instruction.
-import { typeStr, type Expr, type FuncDecl, type Lang, type Program, type Span, type Stmt, type TypeRef } from './ast'
+import { isJs, typeStr, type Expr, type FuncDecl, type Lang, type Program, type Span, type Stmt, type TypeRef } from './ast'
 import { LineMap } from './tokenizer'
-import { NULL, bool, dbl, display, int, list, rangeLen, repr, str, truthy, typeName, valueEquals, type Value } from './values'
+import { NULL, UNDEF, bool, dbl, display, int, jsToString, list, rangeLen, repr, str, truthy, typeName, valueEquals, type Value } from './values'
 
 export type StepKind =
   | 'start' | 'decl' | 'assign' | 'incdec' | 'cond' | 'loopBack' | 'forNext' | 'forUpdate'
@@ -162,7 +162,8 @@ export class Interpreter {
       for (const scope of f.scopes)
         for (const [name, v] of scope) {
           const vv: VarView = { name, text: this.repr(v.v), unset: v.v === undefined }
-          if (this.lang !== 'python') vv.type = typeStr(v.type) === 'var' && v.v ? typeName(this.lang, v.v) : typeStr(v.type)
+          if (isJs(this.lang)) vv.type = v.type ? typeStr(v.type) : v.v ? typeName(this.lang, v.v) : undefined
+          else if (this.lang !== 'python') vv.type = typeStr(v.type) === 'var' && v.v ? typeName(this.lang, v.v) : typeStr(v.type)
           else if (v.v) vv.type = typeName('python', v.v)
           if (v.v?.k === 'list') vv.items = v.v.items.map((x) => this.repr(x))
           vars.push(vv)
@@ -199,7 +200,7 @@ export class Interpreter {
   *run(): Gen {
     const p = this.program
     const py = this.lang === 'python'
-    const globalName = py ? 'global' : p.entry === 'main' ? 'global' : 'Main'
+    const globalName = py || isJs(this.lang) ? 'global' : p.entry === 'main' ? 'global' : 'Main'
     const g = new Frame(this.nextFrameId++, globalName, undefined, undefined, true)
     this.frames.push(g)
     try {
@@ -273,7 +274,7 @@ export class Interpreter {
   }
 
   coerce(v: Value, t: TypeRef | null): Value {
-    if (!t) return v
+    if (!t || isJs(this.lang)) return v
     if ((t.name === 'double' || t.name === 'float' || t.name === 'decimal') && !t.array && v.k === 'int') return dbl(v.v)
     if (v.k === 'list' && (t.args?.length || t.array)) {
       v.elem = t.array ? t.name : typeStr(t.args![0])
@@ -300,7 +301,8 @@ export class Interpreter {
         let v: Value | undefined
         if (s.init) v = this.coerce(yield* this.eval(s.init, s.type), s.type)
         else if (s.type?.nullable) v = NULL
-        f.scopes[f.scopes.length - 1].set(s.name, { v, type: s.type ?? (v ? { name: typeName(this.lang, v) } : null), final: s.final })
+        else if (isJs(this.lang)) v = UNDEF // let x;  →  x vaut undefined
+        f.scopes[f.scopes.length - 1].set(s.name, { v, type: s.type ?? (v && !isJs(this.lang) ? { name: typeName(this.lang, v) } : null), final: s.final })
         yield this.emit({
           kind: 'decl',
           span: s.span,
@@ -318,6 +320,7 @@ export class Interpreter {
         if (t.k !== 'name') this.err('runtime.unsupported', s.span)
         const { frame, v } = this.writeTarget(t.name, t.span)
         const cur = this.lookup(t.name, t.span).v!
+        if (v!.final) this.err('runtime.final', t.span, { name: t.name })
         if (cur.k !== 'int' && cur.k !== 'double') this.err('runtime.badOperand', s.span, { op: s.op, type: typeName(this.lang, cur) })
         const nv = this.wrap({ k: cur.k, v: cur.v + (s.op === '++' ? 1 : -1) } as Value)
         v!.v = nv
@@ -390,7 +393,7 @@ export class Interpreter {
       case 'foreach':
         return yield* this.execForeach(s)
       case 'return': {
-        const v = s.e ? yield* this.eval(s.e, this.frame.func?.ret ?? null) : NULL
+        const v = s.e ? yield* this.eval(s.e, this.frame.func?.ret ?? null) : isJs(this.lang) ? UNDEF : NULL
         throw new ReturnSig(v, s)
       }
       case 'break':
@@ -427,7 +430,7 @@ export class Interpreter {
 
   *cond(e: Expr): Gen<boolean> {
     const v = yield* this.eval(e)
-    if (this.lang !== 'python' && v.k !== 'bool') this.err('runtime.condNotBool', e.span, { type: typeName(this.lang, v) })
+    if (this.lang !== 'python' && !isJs(this.lang) && v.k !== 'bool') this.err('runtime.condNotBool', e.span, { type: typeName(this.lang, v) })
     return truthy(v)
   }
 
@@ -437,7 +440,10 @@ export class Interpreter {
       const obj = yield* this.eval(t.obj)
       const idx = yield* this.eval(t.idx)
       let v = yield* this.eval(s.value)
+      if (isJs(this.lang) && (obj.k === 'null' || obj.k === 'undef')) this.err('js.nullProp', t.span, { name: this.repr(idx), type: this.repr(obj), set: 1 })
       if (obj.k !== 'list') this.err(obj.k === 'str' ? 'runtime.strImmutable' : 'runtime.notIndexable', t.obj.span, { type: typeName(this.lang, obj) })
+      // JavaScript : écrire au-delà de la fin agrandit le tableau (cases vides = undefined)
+      if (isJs(this.lang) && idx.k === 'int' && idx.v >= obj.items.length) while (obj.items.length <= idx.v) obj.items.push(UNDEF)
       const i = this.checkIndex(obj, idx, t.idx.span)
       if (s.op !== '=') v = this.binop(s.op.slice(0, -1), obj.items[i], v, s.span)
       if (obj.elem === 'double' && v.k === 'int') v = dbl(v.v)
@@ -567,7 +573,7 @@ export class Interpreter {
           frame = w.frame
           if (w.v) w.v.v = v
           else frame.scopes[0].set(s.varName, { v, type: null, final: false })
-        } else this.frame.scopes[this.frame.scopes.length - 1].set(s.varName, { v: this.coerce(v, s.varType), type: s.varType ?? { name: typeName(this.lang, v) }, final: false })
+        } else this.frame.scopes[this.frame.scopes.length - 1].set(s.varName, { v: this.coerce(v, s.varType), type: s.varType ?? (isJs(this.lang) ? null : { name: typeName(this.lang, v) }), final: false })
         yield this.emit({
           kind: 'forNext',
           span: s.headSpan,
@@ -589,7 +595,9 @@ export class Interpreter {
 
   // ---------- Appels de fonctions ----------
   *callUser(f: FuncDecl, args: Value[], argExprs: Expr[], callSpan: Span): Gen<Value> {
-    if (args.length !== f.params.length)
+    // JavaScript : les arguments manquants valent undefined, les arguments en trop sont ignorés
+    if (isJs(this.lang)) args = f.params.map((_, i) => args[i] ?? UNDEF)
+    else if (args.length !== f.params.length)
       this.err('runtime.argCount', callSpan, { name: f.name, expected: f.params.length, given: args.length })
     if (this.frames.length > MAX_DEPTH) this.err(this.lang === 'python' ? 'py.recursion' : 'runtime.stackOverflow', callSpan, { name: f.name, max: MAX_DEPTH })
     const fr = new Frame(this.nextFrameId++, f.name, f, callSpan)
@@ -618,10 +626,10 @@ export class Interpreter {
       },
       construct: f.id,
       jump: { from: callSpan.line, to: f.headSpan.line, kind: 'call' },
-      flies: argExprs.map((a, i) => ({ from: a.span, text: this.repr(args[i]), to: { var: { frameId: fr.id, name: f.params[i].name } } })),
-      links: argExprs.map((a, i) => ({ from: a.span, to: f.params[i].span })),
+      flies: argExprs.slice(0, f.params.length).map((a, i) => ({ from: a.span, text: this.repr(args[i]), to: { var: { frameId: fr.id, name: f.params[i].name } } })),
+      links: argExprs.slice(0, f.params.length).map((a, i) => ({ from: a.span, to: f.params[i].span })),
     })
-    let value: Value = NULL
+    let value: Value = isJs(this.lang) ? UNDEF : NULL
     let retStmt: Extract<Stmt, { k: 'return' }> | null = null
     try {
       yield* this.execBlock(f.body, false)
@@ -654,12 +662,13 @@ export class Interpreter {
   *eval(e: Expr, hint: TypeRef | null = null): Gen<Value> {
     switch (e.k) {
       case 'num':
+        if (isJs(this.lang)) return jsNum(e.v)
         return e.isInt ? int(e.v) : dbl(e.v)
       case 'str':
         return e.char ? { k: 'char', v: e.v } : str(e.v)
       case 'istr': {
         let s = ''
-        for (const p of e.parts) s += typeof p === 'string' ? p : display(this.lang, yield* this.eval(p))
+        for (const p of e.parts) s += typeof p === 'string' ? p : isJs(this.lang) ? jsToString(yield* this.eval(p)) : display(this.lang, yield* this.eval(p))
         return str(s)
       }
       case 'bool':
@@ -667,6 +676,11 @@ export class Interpreter {
       case 'null':
         return NULL
       case 'name': {
+        if (isJs(this.lang) && !this.frame.find(e.name) && !this.globalFrame.find(e.name)) {
+          if (e.name === 'undefined') return UNDEF
+          if (e.name === 'NaN') return dbl(NaN)
+          if (e.name === 'Infinity') return dbl(Infinity)
+        }
         const v = this.lookup(e.name, e.span)
         if (v.v === undefined) this.err('runtime.unassigned', e.span, { name: e.name })
         return v.v
@@ -674,10 +688,11 @@ export class Interpreter {
       case 'bin': {
         if (e.op === 'and' || e.op === 'or') {
           const l = yield* this.eval(e.l)
-          if (this.lang !== 'python' && l.k !== 'bool') this.err('runtime.condNotBool', e.l.span, { type: typeName(this.lang, l) })
-          if (e.op === 'and' ? !truthy(l) : truthy(l)) return this.lang === 'python' ? l : bool(truthy(l))
+          const dyn = this.lang === 'python' || isJs(this.lang) // a || b renvoie a ou b
+          if (!dyn && l.k !== 'bool') this.err('runtime.condNotBool', e.l.span, { type: typeName(this.lang, l) })
+          if (e.op === 'and' ? !truthy(l) : truthy(l)) return dyn ? l : bool(truthy(l))
           const r = yield* this.eval(e.r)
-          return this.lang === 'python' ? r : bool(truthy(r))
+          return dyn ? r : bool(truthy(r))
         }
         const l = yield* this.eval(e.l)
         const r = yield* this.eval(e.r)
@@ -686,6 +701,7 @@ export class Interpreter {
       case 'un': {
         const v = yield* this.eval(e.e)
         if (e.op === 'not') return bool(!truthy(v))
+        if (isJs(this.lang)) return jsNum(e.op === '-' ? -toNum(v) : toNum(v))
         if (v.k !== 'int' && v.k !== 'double') this.err('runtime.badOperand', e.span, { op: e.op, type: typeName(this.lang, v) })
         return e.op === '-' ? this.wrap({ k: v.k, v: -v.v } as Value) : v
       }
@@ -720,6 +736,14 @@ export class Interpreter {
       case 'index': {
         const obj = yield* this.eval(e.obj)
         const idx = yield* this.eval(e.idx)
+        if (isJs(this.lang)) {
+          // hors limites : undefined (pas d'erreur en JavaScript)
+          if (obj.k === 'null' || obj.k === 'undef') this.err('js.nullProp', e.span, { name: this.repr(idx), type: this.repr(obj) })
+          const i = idx.k === 'int' ? idx.v : -1
+          if (obj.k === 'list') return obj.items[i] ?? UNDEF
+          if (obj.k === 'str') return i >= 0 && i < obj.v.length ? str(obj.v[i]) : UNDEF
+          return UNDEF
+        }
         if (obj.k === 'list') return obj.items[this.checkIndex(obj, idx, e.idx.span)]
         if (obj.k === 'str') {
           const i = this.checkIndex(obj, idx, e.idx.span)
@@ -751,7 +775,51 @@ export class Interpreter {
     return v
   }
 
+  /** Opérateurs JavaScript : conversions implicites, === strict, == avec conversion. */
+  jsBinop(op: string, l: Value, r: Value, span: Span): Value {
+    const nullish = (x: Value) => x.k === 'null' || x.k === 'undef'
+    switch (op) {
+      case '===':
+        return bool(this.eq(l, r))
+      case '!==':
+        return bool(!this.eq(l, r))
+      case '==':
+      case '!=': {
+        let res: boolean
+        if (nullish(l) || nullish(r)) res = nullish(l) && nullish(r)
+        else if (l.k === r.k || (l.k !== 'list' && r.k !== 'list' && (l.k === 'int' || l.k === 'double') === (r.k === 'int' || r.k === 'double') && l.k !== 'bool' && r.k !== 'bool'))
+          res = this.eq(l, r)
+        else res = toNum(l) === toNum(r)
+        return bool(op === '==' ? res : !res)
+      }
+      case '<':
+      case '>':
+      case '<=':
+      case '>=': {
+        const strs = l.k === 'str' && r.k === 'str'
+        const a: number | string = strs ? l.v : toNum(l)
+        const b: number | string = strs ? (r as { v: string }).v : toNum(r)
+        return bool(op === '<' ? a < b : op === '>' ? a > b : op === '<=' ? a <= b : a >= b)
+      }
+      case '+':
+        if (l.k === 'str' || r.k === 'str' || l.k === 'list' || r.k === 'list') return str(jsToString(l) + jsToString(r))
+        return jsNum(toNum(l) + toNum(r))
+      case '-':
+        return jsNum(toNum(l) - toNum(r))
+      case '*':
+        return jsNum(toNum(l) * toNum(r))
+      case '/':
+        return jsNum(toNum(l) / toNum(r))
+      case '%':
+        return jsNum(toNum(l) % toNum(r))
+      case '**':
+        return jsNum(toNum(l) ** toNum(r))
+    }
+    this.err('runtime.badOperands', span, { op, left: typeName(this.lang, l), right: typeName(this.lang, r) })
+  }
+
   binop(op: string, l: Value, r: Value, span: Span): Value {
+    if (isJs(this.lang)) return this.jsBinop(op, l, r, span)
     const lang = this.lang
     const num = (x: Value) => x.k === 'int' || x.k === 'double'
     const bad = (): never => this.err('runtime.badOperands', span, { op, left: typeName(lang, l), right: typeName(lang, r) })
@@ -865,6 +933,12 @@ export class Interpreter {
   *member(e: Extract<Expr, { k: 'member' }>): Gen<Value> {
     const obj = yield* this.eval(e.obj)
     const n = e.name
+    if (isJs(this.lang)) {
+      if (obj.k === 'null' || obj.k === 'undef') this.err('js.nullProp', e.span, { name: n, type: this.repr(obj) })
+      if (n === 'length' && obj.k === 'list') return int(obj.items.length)
+      if (n === 'length' && obj.k === 'str') return int(obj.v.length)
+      return UNDEF // propriété inexistante : undefined
+    }
     if (obj.k === 'list') {
       if ((this.lang === 'csharp' && ((obj.array && n === 'Length') || (!obj.array && n === 'Count'))) || (this.lang === 'dart' && n === 'length'))
         return int(obj.items.length)
@@ -908,6 +982,23 @@ export class Interpreter {
     const args = yield* this.evalArgs(e.args)
     const argc = (n: number, m = n) => {
       if (args.length < n || args.length > m) this.err('runtime.argCount', e.span, { name, expected: n === m ? n : `${n}-${m}`, given: args.length })
+    }
+    if (isJs(lang)) {
+      switch (name) {
+        case 'parseInt': {
+          const m = /^\s*[-+]?\d+/.exec(jsToString(args[0] ?? UNDEF))
+          return m ? jsNum(parseInt(m[0], 10)) : dbl(NaN)
+        }
+        case 'parseFloat':
+          return jsNum(parseFloat(jsToString(args[0] ?? UNDEF)))
+        case 'Number':
+          return jsNum(args.length ? toNum(args[0]) : 0)
+        case 'String':
+          return str(args.length ? jsToString(args[0]) : '')
+        case 'Boolean':
+          return bool(args.length ? truthy(args[0]) : false)
+      }
+      this.err('runtime.unknownFunc', e.nameSpan, { name })
     }
     if (name === 'print' && lang !== 'csharp') {
       if (lang === 'dart') argc(1)
@@ -1000,6 +1091,30 @@ export class Interpreter {
     if (e.obj.k === 'name' && !this.frame.find(e.obj.name) && !this.globalFrame.find(e.obj.name)) {
       const cls = e.obj.name
       const args = yield* this.evalArgs(e.args)
+      if (isJs(lang)) {
+        if (cls === 'console' && (n === 'log' || n === 'error' || n === 'info')) {
+          yield this.print(args.map((a) => display(lang, a)).join(' '), true, e.span, e.args[0]?.span ?? e.span)
+          return UNDEF
+        }
+        if (cls === 'Math') {
+          const ns = args.map(toNum)
+          const f: Record<string, (() => number) | undefined> = {
+            max: () => Math.max(...ns),
+            min: () => Math.min(...ns),
+            abs: () => Math.abs(ns[0]),
+            floor: () => Math.floor(ns[0]),
+            ceil: () => Math.ceil(ns[0]),
+            round: () => Math.round(ns[0]),
+            trunc: () => Math.trunc(ns[0]),
+            sqrt: () => Math.sqrt(ns[0]),
+            pow: () => ns[0] ** ns[1],
+          }
+          if (f[n]) return jsNum(f[n]!())
+          this.err('js.notFunction', e.span, { name: `Math.${n}` })
+        }
+        // console / Math mal écrits, ou variable inconnue
+        this.err('runtime.undeclared', e.obj.span, { name: cls })
+      }
       if (lang === 'csharp' && cls === 'Console' && (n === 'WriteLine' || n === 'Write')) {
         if (args.length > 1) this.err('runtime.argCount', e.span, { name: `Console.${n}`, expected: '0-1', given: args.length })
         yield this.print(args.length ? display(lang, args[0]) : '', n === 'WriteLine', e.span, e.args[0]?.span ?? e.span)
@@ -1052,6 +1167,8 @@ export class Interpreter {
         changed: { frameId: ownerFrame.id, name: owner },
         flies: flyFrom ? [{ from: flyFrom, text: flyText!, to: { var: { frameId: ownerFrame.id, name: owner } } }] : undefined,
       })
+
+    if (isJs(lang)) return yield* this.jsMethod(e, obj, args, owner, mutate)
 
     if (obj.k === 'list') {
       const add = (lang === 'python' && n === 'append') || (lang === 'csharp' && n === 'Add') || (lang === 'dart' && n === 'add')
@@ -1107,6 +1224,95 @@ export class Interpreter {
       if (n === 'toStringAsFixed') return str(obj.v.toFixed((args[0] as { v: number }).v))
     }
     this.err('runtime.noMember', e.span, { name: n, type: typeName(lang, obj) })
+  }
+
+  /** Méthodes JavaScript des tableaux, chaînes et nombres. */
+  *jsMethod(
+    e: Extract<Expr, { k: 'mcall' }>,
+    obj: Value,
+    args: Value[],
+    owner: string,
+    mutate: (key: string, params: Record<string, string | number>, flyFrom?: Span, flyText?: string) => Step,
+  ): Gen<Value> {
+    const n = e.name
+    const num = (i: number, def: number) => (args[i] === undefined || args[i].k === 'undef' ? def : toNum(args[i]))
+    if (obj.k === 'null' || obj.k === 'undef') this.err('js.nullProp', e.span, { name: n, type: this.repr(obj) })
+    if (obj.k === 'list') {
+      switch (n) {
+        case 'push':
+          for (const v of args) obj.items.push(v)
+          if (args.length) yield mutate('list.add', { value: args.map((a) => this.repr(a)).join(', '), size: obj.items.length }, e.args[0].span, this.repr(args[args.length - 1]))
+          return int(obj.items.length)
+        case 'pop': {
+          if (!obj.items.length) return UNDEF
+          const v = obj.items.pop()!
+          yield mutate('list.remove', { value: this.repr(v), index: obj.items.length })
+          return v
+        }
+        case 'includes':
+          return bool(obj.items.some((x) => valueEquals(x, args[0] ?? UNDEF)))
+        case 'indexOf':
+          return int(obj.items.findIndex((x) => valueEquals(x, args[0] ?? UNDEF)))
+        case 'join':
+          return str(obj.items.map((x) => (x.k === 'null' || x.k === 'undef' ? '' : jsToString(x))).join(args.length ? jsToString(args[0]) : ','))
+        case 'toString':
+          return str(jsToString(obj))
+      }
+    }
+    if (obj.k === 'str') {
+      const s = obj.v
+      switch (n) {
+        case 'toUpperCase':
+          return str(s.toUpperCase())
+        case 'toLowerCase':
+          return str(s.toLowerCase())
+        case 'trim':
+          return str(s.trim())
+        case 'includes':
+          return bool(s.includes(jsToString(args[0] ?? UNDEF)))
+        case 'indexOf':
+          return int(s.indexOf(jsToString(args[0] ?? UNDEF)))
+        case 'charAt':
+          return str(s.charAt(num(0, 0)))
+        case 'substring':
+          return str(s.substring(num(0, 0), num(1, s.length)))
+        case 'slice':
+          return str(s.slice(num(0, 0), num(1, s.length)))
+        case 'toString':
+          return str(s)
+      }
+    }
+    if (obj.k === 'int' || obj.k === 'double') {
+      if (n === 'toFixed') return str(obj.v.toFixed(num(0, 0)))
+      if (n === 'toString') return str(jsToString(obj))
+    }
+    if (obj.k === 'bool' && n === 'toString') return str(jsToString(obj))
+    this.err('js.notFunction', e.span, { name: `${owner}.${n}` })
+  }
+}
+
+/** JavaScript : un seul type number ; on garde int / double pour l'affichage (3 et 3.5). */
+function jsNum(v: number): Value {
+  return Number.isInteger(v) ? int(v) : dbl(v)
+}
+
+/** JavaScript : conversion implicite en nombre. */
+function toNum(v: Value): number {
+  switch (v.k) {
+    case 'int':
+    case 'double':
+      return v.v
+    case 'bool':
+      return v.v ? 1 : 0
+    case 'null':
+      return 0
+    case 'str':
+    case 'char':
+      return v.v.trim() === '' ? 0 : Number(v.v)
+    case 'list':
+      return toNum(str(jsToString(v)))
+    default:
+      return NaN
   }
 }
 

@@ -1,4 +1,4 @@
-import type { Lang } from './ast'
+import { isJs, type Lang } from './ast'
 
 export type Value =
   | { k: 'int'; v: number }
@@ -7,10 +7,12 @@ export type Value =
   | { k: 'char'; v: string }
   | { k: 'bool'; v: boolean }
   | { k: 'null' }
+  | { k: 'undef' } // JavaScript : undefined
   | { k: 'list'; items: Value[]; id: number; elem?: string; array?: boolean }
   | { k: 'range'; start: number; stop: number; step: number }
 
 export const NULL: Value = { k: 'null' }
+export const UNDEF: Value = { k: 'undef' }
 export const int = (v: number): Value => ({ k: 'int', v })
 export const dbl = (v: number): Value => ({ k: 'double', v })
 export const str = (v: string): Value => ({ k: 'str', v })
@@ -22,6 +24,7 @@ export function list(items: Value[], elem?: string, array = false): Value {
 }
 
 function fmtDouble(lang: Lang, v: number): string {
+  if (isJs(lang)) return String(v) // 3.5, 2, Infinity, NaN
   if (Number.isNaN(v)) return lang === 'python' ? 'nan' : 'NaN'
   if (!Number.isFinite(v)) {
     if (lang === 'python') return v > 0 ? 'inf' : '-inf'
@@ -51,6 +54,8 @@ export function repr(lang: Lang, v: Value): string {
       return lang === 'python' ? (v.v ? 'True' : 'False') : v.v ? 'true' : 'false'
     case 'null':
       return lang === 'python' ? 'None' : 'null'
+    case 'undef':
+      return 'undefined'
     case 'list':
       if (lang === 'csharp') return (v.array ? '{' : '[') + v.items.map((x) => repr(lang, x)).join(', ') + (v.array ? '}' : ']')
       return '[' + v.items.map((x) => repr(lang, x)).join(', ') + ']'
@@ -68,6 +73,7 @@ const CS_TYPE: Record<string, string> = { int: 'System.Int32', double: 'System.D
 
 /** Texte produit par print / Console.WriteLine. */
 export function display(lang: Lang, v: Value): string {
+  if (isJs(lang)) return jsInspect(v, true)
   switch (v.k) {
     case 'str':
     case 'char':
@@ -89,14 +95,44 @@ export function display(lang: Lang, v: Value): string {
   }
 }
 
+/** JavaScript : ce qu'affiche console.log (Node). Les chaînes dans un tableau sont entre apostrophes. */
+function jsInspect(v: Value, top: boolean): string {
+  switch (v.k) {
+    case 'str':
+    case 'char':
+      if (top) return v.v
+      return v.v.includes("'") && !v.v.includes('"') ? `"${v.v}"` : `'${v.v.replace(/'/g, "\\'")}'`
+    case 'list':
+      return v.items.length ? '[ ' + v.items.map((x) => jsInspect(x, false)).join(', ') + ' ]' : '[]'
+    default:
+      return repr('javascript', v)
+  }
+}
+
+/** JavaScript : conversion en chaîne (concaténation `"x" + v`, gabarit `${v}`). */
+export function jsToString(v: Value): string {
+  switch (v.k) {
+    case 'str':
+    case 'char':
+      return v.v
+    case 'list':
+      return v.items.map((x) => (x.k === 'null' || x.k === 'undef' ? '' : jsToString(x))).join(',')
+    default:
+      return repr('javascript', v)
+  }
+}
+
 /** Nom du type à l'exécution, dans le vocabulaire du langage. */
 export function typeName(lang: Lang, v: Value): string {
   const names: Record<Lang, Record<string, string>> = {
     python: { int: 'int', double: 'float', str: 'str', char: 'str', bool: 'bool', null: 'NoneType', list: 'list', range: 'range' },
     csharp: { int: 'int', double: 'double', str: 'string', char: 'char', bool: 'bool', null: 'null', list: 'List', range: 'range' },
     dart: { int: 'int', double: 'double', str: 'String', char: 'String', bool: 'bool', null: 'Null', list: 'List', range: 'range' },
+    javascript: { int: 'number', double: 'number', str: 'string', char: 'string', bool: 'boolean', null: 'null', undef: 'undefined', list: 'Array', range: 'range' },
+    typescript: { int: 'number', double: 'number', str: 'string', char: 'string', bool: 'boolean', null: 'null', undef: 'undefined', list: 'Array', range: 'range' },
   }
-  if (v.k === 'list' && lang !== 'python') return v.array ? `${v.elem ?? 'int'}[]` : `List<${v.elem ?? 'dynamic'}>`
+  if (v.k === 'list' && lang === 'typescript') return `${v.elem ?? 'any'}[]`
+  if (v.k === 'list' && lang !== 'python' && !isJs(lang)) return v.array ? `${v.elem ?? 'int'}[]` : `List<${v.elem ?? 'dynamic'}>`
   return names[lang][v.k]
 }
 
@@ -106,11 +142,12 @@ export function truthy(v: Value): boolean {
       return v.v
     case 'int':
     case 'double':
-      return v.v !== 0
+      return v.v !== 0 && !Number.isNaN(v.v)
     case 'str':
     case 'char':
       return v.v.length > 0
     case 'null':
+    case 'undef':
       return false
     case 'list':
       return v.items.length > 0
@@ -129,6 +166,7 @@ export function valueEquals(a: Value, b: Value): boolean {
   if ((a.k === 'str' || a.k === 'char') && (b.k === 'str' || b.k === 'char')) return a.v === b.v
   if (a.k === 'bool' && b.k === 'bool') return a.v === b.v
   if (a.k === 'null' && b.k === 'null') return true
+  if (a.k === 'undef' && b.k === 'undef') return true
   if (a.k === 'list' && b.k === 'list') return a.items.length === b.items.length && a.items.every((x, i) => valueEquals(x, b.items[i]))
   return false
 }

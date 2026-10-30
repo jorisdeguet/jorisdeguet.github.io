@@ -13,7 +13,7 @@ function run(lang: Lang, src: string) {
   return { errors, out: steps[steps.length - 1].out, steps, last: steps[steps.length - 1] }
 }
 
-for (const lang of ['python', 'csharp', 'dart'] as Lang[]) {
+for (const lang of ['python', 'csharp', 'dart', 'javascript', 'typescript'] as Lang[]) {
   describe(lang, () => {
     for (const f of readdirSync(new URL(`${lang}/`, dir))) {
       const src = readFileSync(new URL(`${lang}/${f}`, dir), 'utf8')
@@ -64,6 +64,35 @@ describe('détails', () => {
     expect(run('python', 'print(7 / 2, 7 // 2, -7 % 3, 2.0, True)').out).toBe('3.5 3 2 2.0 True\n')
     expect(run('csharp', 'Console.WriteLine(7 / 2);\nConsole.WriteLine(7.0 / 2);\nConsole.WriteLine(2.0);\nConsole.WriteLine(true);\nConsole.WriteLine(-7 % 3);').out).toBe('3\n3.5\n2\nTrue\n-1\n')
     expect(run('dart', 'void main() {\n  print(7 / 2);\n  print(7 ~/ 2);\n  print(-7 % 3);\n  print(2.0);\n  print(true);\n}').out).toBe('3.5\n3\n2\n2.0\ntrue\n')
+  })
+  it('JavaScript : nombres, undefined, conversions (comme Node)', () => {
+    const js = (src: string) => run('javascript', src).out
+    expect(js('console.log(7 / 2, 6 / 2, -7 % 3, 2.0, true, null, 1 / 0)')).toBe('3.5 3 -1 2 true null Infinity\n')
+    expect(js('const t = [1, 2];\nconsole.log(t, t[5], t.length, ["a", "b"], [])')).toBe("[ 1, 2 ] undefined 2 [ 'a', 'b' ] []\n")
+    expect(js('let x;\nconsole.log(x, "5" + 1, "5" - 1, "a" + [1, 2], `n = ${1 + 1}`)')).toBe('undefined 51 4 a1,2 n = 2\n')
+    expect(js('console.log(1 == "1", 1 === "1", null == undefined, 0 || "défaut", 2 ** 10)')).toBe('true false true défaut 1024\n')
+    expect(js('let n = 0\nn++\nconsole.log(n)')).toBe('1\n') // points-virgules facultatifs
+    expect(js('function f(a, b) {\n  return b;\n}\nconsole.log(f(1))')).toBe('undefined\n')
+    expect(js('const t = [3, 1];\nt.push(4);\nconsole.log(t.pop(), t.join("-"), t.includes(1), "Abc".toUpperCase(), (2.5).toFixed(2))')).toBe('4 3-1 true ABC 2.50\n')
+  })
+  it('JavaScript : erreurs à l’exécution', () => {
+    expect(run('javascript', 'let a = 1;\nconsole.log(b);').last?.error?.code).toBe('runtime.undeclared')
+    expect(run('javascript', 'const a = 1;\na++;').last?.error?.code).toBe('runtime.final')
+    expect(run('javascript', 'let t = [];\nt[0].x;').last?.error?.code).toBe('js.nullProp')
+    expect(run('javascript', 'function f(n) {\n  return f(n + 1);\n}\nf(0);').last?.error?.code).toBe('runtime.stackOverflow')
+    // erreur de syntaxe : signalée avant l'exécution
+    expect(analyze('javascript', 'let x = 1 let y = 2;').errors.map((e) => e.code)).toEqual(['syntax.missingSemicolon'])
+  })
+  it('erreurs TypeScript attendues (comme tsc)', () => {
+    const codes = (src: string) => analyze('typescript', src).errors.filter((e) => e.severity === 'error').map((e) => `${e.code}@${e.span.line}`)
+    expect(codes(readFileSync(new URL('typescript/err-type.ts', dir), 'utf8'))).toEqual(['type.mismatch@1'])
+    expect(codes(readFileSync(new URL('typescript/err-undeclared.ts', dir), 'utf8'))).toEqual(['var.undeclared@2'])
+    expect(codes('const a: number = 1;\na = 2;')).toEqual(['var.final@2'])
+    expect(codes('function f(x: number): string {\n  return x;\n}\nf("a");')).toEqual(['return.type@2', 'call.argType@4'])
+    expect(codes('let t = [1, 2];\nt = ["a"];')).toEqual(['type.mismatch@2'])
+    // le même code sans annotation est du JavaScript valide
+    expect(analyze('javascript', 'let age = "20";\nage = 3;').errors).toEqual([])
+    expect(analyze('javascript', 'let a: number = 1;').errors.map((e) => e.code)).toEqual(['js.typeInJs'])
   })
   it('boucle infinie arrêtée', () => {
     const r = run('python', 'i = 0\nwhile True:\n    i = i + 1\n')

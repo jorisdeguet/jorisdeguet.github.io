@@ -1,11 +1,13 @@
-import { CompileFailure, walkStmts, type CompileError, type FuncDecl, type Lang, type Program } from './ast'
+import { CompileFailure, isJs, walkStmts, type CompileError, type FuncDecl, type Lang, type Program } from './ast'
 import { checkProgram } from './check'
 import { buildFlow, type Construct } from './flow'
 import { record, type Step } from './interpreter'
 import { parseCLike } from './lang/clike'
+import { checkTs, parseJs } from './lang/jslike'
 import { parsePython } from './lang/python'
 
 export type { CompileError, Lang, Program } from './ast'
+export { isJs } from './ast'
 export type { Step, FrameView, VarView, Fly } from './interpreter'
 export type { Construct, Arc } from './flow'
 export { constructAt } from './flow'
@@ -22,12 +24,14 @@ export function analyze(lang: Lang, src: string): Analysis {
   try {
     if (lang === 'python') program = parsePython(src)
     else {
-      const r = parseCLike(lang, src)
+      const r = isJs(lang) ? parseJs(lang, src) : parseCLike(lang, src)
       program = r.program
       errors = r.errors
     }
     hoistNested(program)
-    errors = [...errors, ...checkProgram(program)]
+    // JavaScript : aucune vérification avant l'exécution ; TypeScript : vérification de types (comme tsc)
+    if (lang === 'typescript') errors = [...errors, ...checkTs(program)]
+    else if (lang !== 'javascript') errors = [...errors, ...checkProgram(program)]
   } catch (e) {
     if (e instanceof CompileFailure) errors = [...errors, e.err]
     else throw e

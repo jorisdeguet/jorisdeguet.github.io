@@ -316,5 +316,11 @@ export default {
     'runtime.parseError': 'Impossible de convertir `{value}`.',
     'runtime.noInput': 'La lecture au clavier (input / ReadLine) n’est pas disponible dans tuto-trace : donnez une valeur directement dans le code.',
     'runtime.unsupported': 'Cette construction n’est pas prise en charge par tuto-trace.',
+    'js.nullProp': 'Impossible de lire `{name}` : la valeur est `{type}` (elle n’existe pas, ou l’indice est hors du tableau).',
+    'js.nullProp.fix': 'En JavaScript, lire une case hors du tableau donne `undefined` sans erreur : l’erreur apparaît seulement quand on utilise cette valeur. Vérifiez la condition de la boucle (`<` plutôt que `<=` ?).',
+    'js.notFunction': '`{name}` n’est pas une fonction.',
+    'js.forIn': 'Pour parcourir les éléments d’un tableau, utilisez `for (const x of tableau)` (`for … in` parcourt les indices et n’est pas pris en charge).',
+    'js.typeInJs': 'Les annotations de type (`: number`) n’existent qu’en TypeScript.',
+    'js.constNeedsInit': 'Une constante `{name}` doit recevoir sa valeur dès sa déclaration : `const {name} = …;`.',
   },
 }

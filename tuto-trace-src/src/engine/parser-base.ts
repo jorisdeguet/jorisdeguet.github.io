@@ -5,6 +5,8 @@ export const TYPE_NAMES: Record<Lang, Set<string>> = {
   python: new Set(),
   csharp: new Set(['int', 'double', 'float', 'decimal', 'long', 'string', 'bool', 'char', 'var', 'List', 'object']),
   dart: new Set(['int', 'double', 'num', 'String', 'bool', 'var', 'List', 'dynamic', 'Object']),
+  javascript: new Set(),
+  typescript: new Set(),
 }
 
 export function tokDesc(t: Token): string {

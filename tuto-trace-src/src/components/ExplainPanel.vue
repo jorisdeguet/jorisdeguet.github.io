@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { constructAt, type Construct, type Lang, type Step } from '../engine'
+import { constructAt, isJs, type Construct, type Lang, type Step } from '../engine'
 import { has, locale, t, tr } from '../i18n'
 import { realRuntimeMessage } from '../i18n/real'
 import FlowFigure from './FlowFigure.vue'
@@ -54,7 +54,7 @@ const ctx = computed(() => {
 const conceptText = computed(() => {
   void locale.value
   if (!ctx.value) return ''
-  return tr('concepts.' + ctx.value.concept, { kw: props.lang === 'csharp' ? 'foreach' : 'for … in' })
+  return tr('concepts.' + ctx.value.concept, { kw: props.lang === 'csharp' ? 'foreach' : isJs(props.lang) ? 'for … of' : 'for … in' })
 })
 </script>
 

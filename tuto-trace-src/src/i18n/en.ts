@@ -314,6 +314,12 @@ const en: typeof fr = {
     'runtime.parseError': 'Cannot convert `{value}`.',
     'runtime.noInput': 'Keyboard input (input / ReadLine) is not available in tuto-trace: put a value directly in the code.',
     'runtime.unsupported': 'This construct is not supported by tuto-trace.',
+    'js.nullProp': 'Cannot read `{name}`: the value is `{type}` (it does not exist, or the index is outside the array).',
+    'js.nullProp.fix': 'In JavaScript, reading outside an array gives `undefined` without an error: the error only shows up when that value is used. Check the loop condition (`<` rather than `<=`?).',
+    'js.notFunction': '`{name}` is not a function.',
+    'js.forIn': 'To loop over the elements of an array, use `for (const x of array)` (`for … in` loops over indices and is not supported).',
+    'js.typeInJs': 'Type annotations (`: number`) only exist in TypeScript.',
+    'js.constNeedsInit': 'A constant `{name}` must get its value when declared: `const {name} = …;`.',
   },
 }
 export default en

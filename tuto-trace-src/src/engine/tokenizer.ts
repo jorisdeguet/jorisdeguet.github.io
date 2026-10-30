@@ -1,4 +1,4 @@
-import { CompileFailure, type Lang, type Span } from './ast'
+import { CompileFailure, isJs, type Lang, type Span } from './ast'
 
 export type TokType = 'id' | 'num' | 'str' | 'istr' | 'op' | 'nl' | 'indent' | 'dedent' | 'eof'
 
@@ -43,6 +43,9 @@ export class LineMap {
   }
 }
 
+const JS_OPS = ['===', '!==', '**=', '**', '==', '!=', '<=', '>=', '&&', '||', '??', '++', '--', '+=', '-=', '*=', '/=', '%=', '=>',
+  '(', ')', '[', ']', '{', '}', ',', ';', ':', '.', '+', '-', '*', '/', '%', '<', '>', '=', '!', '?', '|']
+
 const OPS: Record<Lang, string[]> = {
   python: ['**=', '//=', '**', '//', '==', '!=', '<=', '>=', '+=', '-=', '*=', '/=', '%=', '&&', '||', '++', '--', '->',
     '(', ')', '[', ']', '{', '}', ',', ':', '.', '+', '-', '*', '/', '%', '<', '>', '=', ';', '!'],
@@ -50,9 +53,11 @@ const OPS: Record<Lang, string[]> = {
     '(', ')', '[', ']', '{', '}', ',', ';', ':', '.', '+', '-', '*', '/', '%', '<', '>', '=', '!', '?'],
   dart: ['~/=', '~/', '==', '!=', '<=', '>=', '&&', '||', '++', '--', '+=', '-=', '*=', '/=', '%=', '=>', '??',
     '(', ')', '[', ']', '{', '}', ',', ';', ':', '.', '+', '-', '*', '/', '%', '<', '>', '=', '!', '?'],
+  javascript: JS_OPS,
+  typescript: JS_OPS,
 }
 
-const ESCAPES: Record<string, string> = { n: '\n', t: '\t', '\\': '\\', '"': '"', "'": "'", r: '\r', '0': '\0', $: '$', '{': '{', '}': '}' }
+const ESCAPES: Record<string, string> = { n: '\n', t: '\t', '\\': '\\', '"': '"', "'": "'", r: '\r', '0': '\0', $: '$', '{': '{', '}': '}', '`': '`' }
 
 function fail(lm: LineMap, code: string, start: number, end: number, params: Record<string, string | number> = {}): never {
   throw new CompileFailure({ code, span: lm.span(start, end), params, severity: 'error' })
@@ -163,6 +168,44 @@ export function tokenize(lang: Lang, lm: LineMap, src: string = lm.src, base = 0
       i = j
       continue
     }
+    // Gabarits JavaScript : `texte ${expr}` (peuvent s'étendre sur plusieurs lignes)
+    if (isJs(lang) && c === '`') {
+      const start = i
+      let j = i + 1
+      const parts: (string | IPart)[] = []
+      let cur = ''
+      let closed = false
+      while (j < src.length) {
+        const ch = src[j]
+        if (ch === '`') {
+          closed = true
+          j++
+          break
+        }
+        if (ch === '\\') {
+          cur += ESCAPES[src[j + 1]] ?? src[j + 1]
+          j += 2
+          continue
+        }
+        if (ch === '$' && src[j + 1] === '{') {
+          const e = matchBrace(src, j + 1, true)
+          if (e < 0) fail(lm, 'syntax.unterminatedString', base + start, base + j)
+          if (cur) parts.push(cur)
+          cur = ''
+          parts.push({ src: src.slice(j + 2, e), start: base + j + 2 })
+          j = e + 1
+          continue
+        }
+        cur += ch
+        j++
+      }
+      if (!closed) fail(lm, 'syntax.unterminatedString', base + start, base + j)
+      if (cur || parts.length === 0) parts.push(cur)
+      if (parts.some((p) => typeof p !== 'string')) push('istr', src.slice(start, j), start, j, { parts })
+      else push('str', parts.join(''), start, j)
+      i = j
+      continue
+    }
     // Chaînes (avec préfixes f"..." Python, $"..." C#)
     const isPyF = lang === 'python' && (c === 'f' || c === 'F') && (src[i + 1] === '"' || src[i + 1] === "'")
     const isCsInterp = lang === 'csharp' && c === '$' && src[i + 1] === '"'
@@ -254,9 +297,9 @@ export function tokenize(lang: Lang, lm: LineMap, src: string = lm.src, base = 0
       continue
     }
     // Identifiants
-    if (/[A-Za-z_]/.test(c)) {
+    if (/[A-Za-z_]/.test(c) || (c === '$' && isJs(lang))) {
       let j = i + 1
-      while (j < src.length && /[A-Za-z0-9_]/.test(src[j])) j++
+      while (j < src.length && (/[A-Za-z0-9_]/.test(src[j]) || (src[j] === '$' && isJs(lang)))) j++
       push('id', src.slice(i, j), i, j)
       i = j
       continue
@@ -283,14 +326,14 @@ export function tokenize(lang: Lang, lm: LineMap, src: string = lm.src, base = 0
   return toks
 }
 
-function matchBrace(src: string, open: number): number {
+function matchBrace(src: string, open: number, multiline = false): number {
   let d = 0
   for (let k = open; k < src.length; k++) {
     if (src[k] === '{') d++
     else if (src[k] === '}') {
       d--
       if (d === 0) return k
-    } else if (src[k] === '\n') return -1
+    } else if (src[k] === '\n' && !multiline) return -1
   }
   return -1
 }

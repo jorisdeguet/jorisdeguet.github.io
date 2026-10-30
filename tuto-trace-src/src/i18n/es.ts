@@ -314,6 +314,12 @@ const es: typeof fr = {
     'runtime.parseError': 'No se puede convertir `{value}`.',
     'runtime.noInput': 'La lectura de teclado (input / ReadLine) no está disponible en tuto-trace: ponga un valor directamente en el código.',
     'runtime.unsupported': 'Esta construcción no está soportada por tuto-trace.',
+    'js.nullProp': 'No se puede leer `{name}`: el valor es `{type}` (no existe, o el índice está fuera del arreglo).',
+    'js.nullProp.fix': 'En JavaScript, leer fuera de un arreglo da `undefined` sin error: el error aparece solo cuando se usa ese valor. Revise la condición del bucle (¿`<` en lugar de `<=`?).',
+    'js.notFunction': '`{name}` no es una función.',
+    'js.forIn': 'Para recorrer los elementos de un arreglo, use `for (const x of arreglo)` (`for … in` recorre los índices y no está soportado).',
+    'js.typeInJs': 'Las anotaciones de tipo (`: number`) solo existen en TypeScript.',
+    'js.constNeedsInit': 'Una constante `{name}` debe recibir su valor al declararse: `const {name} = …;`.',
   },
 }
 export default es

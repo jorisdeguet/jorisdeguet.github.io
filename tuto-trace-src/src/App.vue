@@ -24,6 +24,8 @@ const LANG_OPTIONS: PickerOption[] = [
   { id: 'python', label: 'Python', badge: 'Py' },
   { id: 'csharp', label: 'C#', badge: 'C#' },
   { id: 'dart', label: 'Dart', badge: 'Dt' },
+  { id: 'javascript', label: 'JavaScript', badge: 'JS' },
+  { id: 'typescript', label: 'TypeScript', badge: 'TS' },
 ]
 const UI_OPTIONS: PickerOption[] = UI_LANGS.map((l) => ({ id: l.id, label: l.label, badge: l.short }))
 const FORMAT_BADGES: Record<TraceFormat, string> = { default: 'Df', sn: 'SN', mobile: 'Mb' }

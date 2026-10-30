@@ -11,7 +11,7 @@ interface VarInfo {
   span: Span
 }
 
-const STRING: Record<Lang, string> = { python: 'str', csharp: 'string', dart: 'String' }
+const STRING: Record<Lang, string> = { python: 'str', csharp: 'string', dart: 'String', javascript: 'string', typescript: 'string' }
 
 export class Checker {
   errors: CompileError[] = []

@@ -4,7 +4,16 @@ import type { Lang } from '../engine'
 type P = Record<string, string | number>
 const fill = (s: string, p: P) => s.replace(/\{(\w+)\}/g, (m, k) => (p[k] !== undefined ? String(p[k]) : m))
 
-const COMPILE: Record<'python' | 'csharp' | 'dart', Record<string, string>> = {
+const JS_SYNTAX: Record<string, string> = {
+  'syntax.missingParen': 'SyntaxError: missing ) after argument list',
+  'syntax.missingBrace': 'SyntaxError: Unexpected end of input',
+  'syntax.unterminatedString': 'SyntaxError: Invalid or unexpected token',
+  'syntax.unexpected': "SyntaxError: Unexpected token '{found}'",
+  'syntax.missingSemicolon': "SyntaxError: Unexpected identifier '{found}'",
+  'js.constNeedsInit': 'SyntaxError: Missing initializer in const declaration',
+}
+
+const COMPILE: Record<Lang, Record<string, string>> = {
   python: {
     'py.expectedColon': "SyntaxError: expected ':'",
     'py.expectedIndent': 'IndentationError: expected an indented block',
@@ -60,9 +69,38 @@ const COMPILE: Record<'python' | 'csharp' | 'dart', Record<string, string>> = {
     'dart.noMain': "Error: Undefined name 'main'.",
     'func.missingReturn': "Error: A non-null value must be returned since the return type '{type}' doesn't allow null.",
   },
+  javascript: JS_SYNTAX,
+  typescript: {
+    'syntax.missingSemicolon': "error TS1005: ';' expected.",
+    'syntax.missingParen': "error TS1005: ')' expected.",
+    'syntax.missingBrace': "error TS1005: '}' expected.",
+    'syntax.expected': "error TS1005: '{expected}' expected.",
+    'syntax.unterminatedString': 'error TS1002: Unterminated string literal.',
+    'js.constNeedsInit': "error TS1155: 'const' declarations must be initialized.",
+    'var.undeclared': "error TS2304: Cannot find name '{name}'.",
+    'var.redeclared': "error TS2451: Cannot redeclare block-scoped variable '{name}'.",
+    'var.final': "error TS2588: Cannot assign to '{name}' because it is a constant.",
+    'type.mismatch': "error TS2322: Type '{found}' is not assignable to type '{expected}'.",
+    'return.type': "error TS2322: Type '{found}' is not assignable to type '{expected}'.",
+    'call.unknown': "error TS2304: Cannot find name '{name}'.",
+    'call.argCount': 'error TS2554: Expected {expected} arguments, but got {given}.',
+    'call.argType': "error TS2345: Argument of type '{found}' is not assignable to parameter of type '{expected}'.",
+    'op.badOperands': "error TS2362: The left-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.",
+  },
 }
 
-const RUNTIME: Record<'python' | 'csharp' | 'dart', Record<string, string>> = {
+// TypeScript est compilé en JavaScript : mêmes erreurs à l'exécution (Node).
+const JS_RUNTIME: Record<string, string> = {
+  'runtime.undeclared': 'ReferenceError: {name} is not defined',
+  'runtime.unknownFunc': 'ReferenceError: {name} is not defined',
+  'runtime.final': 'TypeError: Assignment to constant variable.',
+  'js.nullProp': "TypeError: Cannot read properties of {type} (reading '{name}')",
+  'js.notFunction': 'TypeError: {name} is not a function',
+  'runtime.notIterable': 'TypeError: object is not iterable',
+  'runtime.stackOverflow': 'RangeError: Maximum call stack size exceeded',
+}
+
+const RUNTIME: Record<Lang, Record<string, string>> = {
   python: {
     'py.nameError': "NameError: name '{name}' is not defined",
     'py.nameErrorFunc': "NameError: name '{name}' is not defined",
@@ -88,6 +126,8 @@ const RUNTIME: Record<'python' | 'csharp' | 'dart', Record<string, string>> = {
     'runtime.stackOverflow': 'Unhandled exception:\nStack Overflow',
     'runtime.emptyList': 'Unhandled exception:\nBad state: No element',
   },
+  javascript: JS_RUNTIME,
+  typescript: JS_RUNTIME,
 }
 
 export function realCompileMessage(lang: Lang, code: string, params: P): string | null {
@@ -99,6 +139,7 @@ export function realCompileMessage(lang: Lang, code: string, params: P): string 
 
 export function realRuntimeMessage(lang: Lang, code: string, params: P): string | null {
   if (lang === 'python' && code === 'py.strConcat' && params.left === 'str') return `TypeError: can only concatenate str (not "${params.right}") to str`
+  if (code === 'js.nullProp' && params.set) return `TypeError: Cannot set properties of ${params.type} (setting '${params.name}')`
   if (lang === 'csharp' && code === 'runtime.indexOut' && params.list) return 'Unhandled exception. System.ArgumentOutOfRangeException: Index was out of range. Must be non-negative and less than the size of the collection.'
   const m = RUNTIME[lang][code]
   if (!m) return null

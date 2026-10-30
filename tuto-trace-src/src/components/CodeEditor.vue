@@ -4,6 +4,7 @@ import { python } from '@codemirror/lang-python'
 import { bracketMatching, HighlightStyle, indentOnInput, indentUnit, StreamLanguage, syntaxHighlighting } from '@codemirror/language'
 import { tags } from '@lezer/highlight'
 import { csharp, dart } from '@codemirror/legacy-modes/mode/clike'
+import { javascript, typescript } from '@codemirror/legacy-modes/mode/javascript'
 import { Compartment, EditorState, StateEffect, StateField, type Extension } from '@codemirror/state'
 import { Decoration, EditorView, GutterMarker, WidgetType, gutter, keymap, lineNumbers, type DecorationSet } from '@codemirror/view'
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
@@ -35,6 +36,8 @@ const roConf = new Compartment()
 function langExt(l: Lang): Extension {
   if (l === 'python') return [python(), indentUnit.of('    ')]
   if (l === 'csharp') return [StreamLanguage.define(csharp), indentUnit.of('    ')]
+  if (l === 'javascript') return [StreamLanguage.define(javascript), indentUnit.of('  ')]
+  if (l === 'typescript') return [StreamLanguage.define(typescript), indentUnit.of('  ')]
   return [StreamLanguage.define(dart), indentUnit.of('  ')]
 }
 

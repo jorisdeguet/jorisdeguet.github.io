@@ -1,7 +1,10 @@
-// AST commun aux trois langages (Python, C#, Dart).
+// AST commun aux langages (Python, C#, Dart, JavaScript, TypeScript).
 // Les positions sont des offsets absolus dans le source + numéros de lignes (1-based).
 
-export type Lang = 'python' | 'csharp' | 'dart'
+export type Lang = 'python' | 'csharp' | 'dart' | 'javascript' | 'typescript'
+
+/** JavaScript et TypeScript partagent la même exécution (TypeScript est compilé en JavaScript). */
+export const isJs = (l: Lang): l is 'javascript' | 'typescript' => l === 'javascript' || l === 'typescript'
 
 export interface Span {
   start: number

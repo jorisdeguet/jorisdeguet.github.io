@@ -21,8 +21,8 @@ export interface UrlState {
   format: TraceFormat
 }
 
-const LANGS: Lang[] = ['python', 'csharp', 'dart']
-const LANG_ALIASES: Record<string, Lang> = { py: 'python', python: 'python', cs: 'csharp', csharp: 'csharp', 'c#': 'csharp', dart: 'dart' }
+const LANGS: Lang[] = ['python', 'csharp', 'dart', 'javascript', 'typescript']
+const LANG_ALIASES: Record<string, Lang> = { py: 'python', python: 'python', cs: 'csharp', csharp: 'csharp', 'c#': 'csharp', dart: 'dart', js: 'javascript', javascript: 'javascript', ts: 'typescript', typescript: 'typescript' }
 const UIS: UiLang[] = ['fr', 'en', 'es']
 
 function browserUi(): UiLang {
