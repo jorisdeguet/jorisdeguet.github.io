@@ -48,9 +48,13 @@
 //      figures were NOT verified for this file (the detailed Lightning
 //      connector spec is MFi-licensee only).                                [O]
 //      https://developer.apple.com/accessories/Accessory-Design-Guidelines.pdf
-//    Practical rule: the closer the sleeve's OUTER size (echoed in the
-//    console) stays to ~10 × 7.5 mm, the more cases it clears. Reduce `wall`
-//    (0.6) or `glue` (0.25) if your case is tight.
+//  • Case keepout around the Lightning port: rounded (stadium) opening
+//      13.65 mm wide × 6.85 mm high — figure given by the user.          [O]
+//    The front `keepout_len` mm of the sleeve is clipped to that outline
+//    (minus `keepout_margin`). Around an Apple head (5.4 mm thick) there is
+//    no room left for a printable top/bottom skin, so in that zone the sleeve
+//    automatically becomes two SIDE WALLS only (thin faces of the head left
+//    bare); the full shell starts behind it.
 //  • Cable OD: Apple USB-A/USB-C to Lightning ≈ 3.0 mm; braided third-party
 //    cables 3.5–4.5 mm                                                      [M]
 //  • Original rubber boot (strain relief): ≈ 4.2 mm tapering to cable size
@@ -82,6 +86,13 @@ collar_len  = 3.0;   // full-size section behind the head (holds the pins)
 relief_len  = 16.0;  // tapered strain relief length behind the collar
 relief_end_wall = 0.9; // wall around the cable at the far end of the taper
 front_setback = 0.0; // >0 stops the sleeve this far behind the head's front face
+
+/* [Phone-case keepout] */
+keepout_w      = 13.65; // case opening width (rounded ends)
+keepout_t      = 6.85;  // case opening height
+keepout_margin = 0.15;  // clearance per side inside the opening
+keepout_len    = 6.0;   // how deep the head goes into the case opening (from the tongue face)
+min_skin       = 0.4;   // thinner top/bottom skin than this is removed (open window)
 
 /* [Pins & glue overflow] */
 use_pins    = true;  // blind holes for pins cut from filament
@@ -116,9 +127,21 @@ pin_x   = head_len + collar_len/2;
 pin_y   = (boot_cd0/2 + out_w/2) / 2;
 pin_margin = min(pin_y - pin_hd/2 - boot_cd0/2, out_w/2 - pin_y - pin_hd/2);
 pin_h   = min(pin_depth, out_t/2 - 0.6);
+ko_w    = keepout_w - 2*keepout_margin;   // usable keepout outline
+ko_t    = keepout_t - 2*keepout_margin;
+ko_x    = x0 + keepout_len;               // end of the clipped zone
+skin_ko = min(out_t, ko_t)/2 - cav_t/2;   // top/bottom skin left in the zone
+ko_window = keepout_len > 0 && skin_ko < min_skin;
 
 echo(str("Sleeve outer size around head: ", out_w, " x ", out_t,
          " mm (W x T); total length ", x_end - x0, " mm"));
+if (keepout_len > 0)
+    echo(str("Case zone (first ", keepout_len, " mm): ",
+             min(out_w, ko_w), " x ", min(out_t, ko_t), " mm",
+             ko_window ? " — side walls only (top/bottom of head left bare)"
+                       : str(", top/bottom skin ", skin_ko, " mm")));
+if (out_w > ko_w)
+    echo("WARNING: sleeve wider than the case opening — reduce wall/glue");
 if (use_pins) {
     echo(str("Cut 2 pins from ", pin_d, " mm filament, length ",
              2*pin_h - 0.4, " mm"));
@@ -140,7 +163,24 @@ module rrect_x(w, t, r, len) {
 module disc_x(d, len) { rotate([0, 90, 0]) cylinder(d = d, h = len); }
 
 // ------------------------------------------------------------------ solids ---
+// Stadium (rounded-end) outline in the YZ plane, extruded along +X.
+module stadium_x(w, t, len) {
+    rotate([0, 90, 0]) linear_extrude(len)
+        hull() for (s = [-1, 1]) translate([0, s*(w - t)/2]) circle(d = t);
+}
+
+// Outer envelope, clipped to the case keepout over the first keepout_len mm.
 module outer_solid() {
+    intersection() {
+        outer_raw();
+        union() {
+            translate([x0 - 1, 0, 0]) stadium_x(ko_w, ko_t, keepout_len + 1);
+            translate([ko_x, -50, -50]) cube(100);
+        }
+    }
+}
+
+module outer_raw() {
     // head + collar: constant section
     translate([x0, 0, 0]) rrect_x(out_w, out_t, out_r, x_col - x0);
     // tapered strain relief
@@ -177,10 +217,11 @@ module pin_holes() {
                 cylinder(d = pin_hd, h = 2*pin_h, $fn = 24);
 }
 
+vx0 = ko_window ? min(ko_x, head_len - 2) : x0;   // vents behind the window
 module vent_holes() {
-    if (vents > 0)
+    if (vents > 0 && vx0 < head_len - 1)
         for (i = [1 : vents])
-            translate([x0 + (head_len - x0) * i/(vents + 1), 0, -out_t])
+            translate([vx0 + (head_len - vx0) * i/(vents + 1), 0, -out_t])
                 cylinder(d = vent_d, h = 2*out_t, $fn = 16);
 }
 
@@ -190,6 +231,9 @@ module sleeve_full() {
         cavity();
         pin_holes();
         vent_holes();
+        if (ko_window)   // remove the unprintably thin top/bottom skin
+            translate([x0 - 1, -cav_w/2, -out_t])
+                cube([min(keepout_len, head_len - x0) + 1, cav_w, 2*out_t]);
     }
 }
 

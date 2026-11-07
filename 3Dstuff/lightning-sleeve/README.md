@@ -25,8 +25,18 @@ non Apple varient beaucoup : mesurez et ajustez dans le Customizer d'OpenSCAD :
 | `glue` | jeu pour la colle, par côté | 0,35 |
 | `wall` | épaisseur de paroi | 0,8 |
 
-La console affiche la taille extérieure du manchon (≈ 10,3 × 7,7 mm par défaut).
-Si l'étui est trop serré : `wall = 0.6` et/ou `glue = 0.25`.
+### Compatibilité avec l'étui
+
+L'ouverture de l'étui autour du port Lightning est arrondie : **13,65 mm de large ×
+6,85 mm de haut** (`keepout_w`, `keepout_t`). Le manchon complet fait ≈ 10,3 × 7,7 mm :
+trop épais. Les `keepout_len` premiers millimètres (6 mm par défaut, à régler selon la
+profondeur à laquelle la tête entre dans l'étui) sont donc rognés à ce contour, moins
+`keepout_margin` (0,15 mm) de jeu par côté, soit ≈ 10,3 × 6,55 mm.
+
+Autour d'une tête Apple (5,4 mm d'épaisseur), il ne resterait qu'une peau dessus/dessous
+trop mince pour s'imprimer (< `min_skin`) : dans cette zone, le manchon se réduit
+automatiquement à **deux parois latérales**, et le dessus et le dessous de la tête restent
+nus. La coque complète commence juste derrière. La console indique ce qui a été fait.
 
 ## 2. Exporter
 
@@ -61,6 +71,9 @@ Puis F6 → *Export STL*.
    bord du manchon.
 5. Remplir la première moitié de colle chaude (sans excès), poser le câble, bien
    aligner la face avant de la tête avec le bord du manchon.
+   Dans la zone avant (parois latérales seulement), essuyer la colle qui déborde sur
+   le dessus et le dessous de la tête pendant qu'elle est chaude : toute surépaisseur
+   à cet endroit empêcherait la fiche d'entrer dans l'étui.
 6. Ajouter un filet de colle par-dessus, fermer avec la deuxième moitié et serrer
    entre les doigts (ou une pince à linge) ~1 min. L'excès sort par les petits
    évents et par l'arrière autour du câble.
