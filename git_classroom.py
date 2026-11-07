@@ -39,6 +39,46 @@ TEXT_EXTENSIONS = {
     ".vb", ".sql", ".sh", ".bat", ".ps1", ".xml", ".json", ".yaml", ".yml",
 }
 
+# Signature copies per file: a formatter or an edited line only erases some of them
+SIGNATURE_COPIES = 5
+
+# Work rhythm report. 10 lines/min is about 60 words/min of non-stop typing with no thinking.
+MAX_LINES_PER_MINUTE = 10
+MIN_BURST_LINES = 50
+BURST_GAP_SECONDS = 10 * 60
+
+# Only hand-written code counts: data and documents can legitimately be pasted in bulk
+RHYTHM_EXTENSIONS = TEXT_EXTENSIONS - {
+    ".txt", ".md", ".rst", ".json", ".xml", ".yaml", ".yml", ".sql",
+}
+GENERATED_PATH = re.compile(
+    r"(?:^|/)(?:bin|obj|node_modules|dist|build|packages|Migrations|\.vs|\.idea)/"
+    r"|\.min\.(?:js|css)$|\.Designer\.cs$|\.g\.(?:i\.)?cs$",
+    re.IGNORECASE
+)
+
+GIT_LOG_FORMAT = "%x1e%H%x1f%P%x1f%ct%x1f%ae%x1f%an%x1f%ce%x1f%cn%x1f%B%x1f"
+
+# Explicit traces only. "Claude" alone is not one: it is also a first name.
+AI_COMMIT_PATTERN = re.compile(
+    r"noreply@anthropic\.com|claude code|claude (?:opus|sonnet|haiku|fable)|claude\[bot\]"
+    r"|copilot\[bot\]|copilot-swe-agent|cursoragent"
+    r"|co-authored-by:[^\n]*(?:copilot|cursor|chatgpt|openai|codex|gemini|aider|devin|windsurf)"
+    r"|generated (?:with|by)[^\n]*(?:chatgpt|copilot|gemini|cursor|codex)"
+    r"|^aider: ",
+    re.IGNORECASE | re.MULTILINE
+)
+AI_FILE_PATTERN = re.compile(
+    r"(?:^|/)(?:CLAUDE\.md|AGENTS\.md|GEMINI\.md|\.cursorrules|\.windsurfrules|\.clinerules"
+    r"|\.aider[^/]*|copilot-instructions\.md)$"
+    r"|(?:^|/)\.(?:claude|cursor|windsurf|continue|codex|roo|cline)/"
+)
+AI_CONTENT_PATTERN = (
+    r"(generated|written) (with|by|using) (chatgpt|copilot|gemini|cursor|claude code)"
+    r"|as an ai (language )?model|en tant qu.(ia|intelligence artificielle)"
+    r"|chatgpt\.com/(share|c/)|claude\.ai/(chat|share)|utm_source=chatgpt|oaicite"
+)
+
 # Regex to match official repository naming convention
 # Pattern: {Session}-{Cours}-{Travail}-{NomFamille}-{Prenom}
 # e.g.: H26-4N6-TP1-DUPONT-MARC
@@ -168,45 +208,29 @@ def encode_watermark(student_id: str) -> str:
     for b in data_bytes:
         for i in range(7, -1, -1):
             chars.append('\t' if (b & (1 << i)) != 0 else ' ')
+    # End on a tab: two trailing spaces would be a line break in Markdown
+    chars.append('\t')
     return "".join(chars)
 
 
-def decode_watermark(text: str) -> str:
-    """Decode student identifier from space and tab characters."""
+def decode_watermarks(text: str) -> list:
+    """Decode every distinct student identifier hidden in space and tab characters."""
     prefix = "\t \t \t \t "
-    idx = 0
-    while True:
-        idx = text.find(prefix, idx)
-        if idx == -1:
-            break
-        
-        watermark_part = ""
-        for char in text[idx + len(prefix):]:
-            if char in (' ', '\t'):
-                watermark_part += char
-            else:
-                break
-                
-        num_bytes = len(watermark_part) // 8
-        if num_bytes > 0:
-            b_array = bytearray()
-            for i in range(num_bytes):
-                byte_chars = watermark_part[i*8:(i+1)*8]
-                b_val = 0
-                for b_idx, c in enumerate(byte_chars):
-                    if c == '\t':
-                        b_val |= (1 << (7 - b_idx))
-                b_array.append(b_val)
-            
-            try:
-                decoded = b_array.decode('utf-8', errors='ignore').strip()
-                if decoded:
-                    return decoded
-            except Exception:
-                pass
-        
-        idx += len(prefix) + len(watermark_part)
-    return ""
+    signatures = []
+    for match in re.finditer(re.escape(prefix) + r"([ \t]*)", text):
+        bits = match.group(1)
+        b_array = bytearray()
+        for i in range(len(bits) // 8):
+            b_val = 0
+            for b_idx, c in enumerate(bits[i*8:(i+1)*8]):
+                if c == '\t':
+                    b_val |= (1 << (7 - b_idx))
+            b_array.append(b_val)
+
+        decoded = b_array.decode('utf-8', errors='ignore').strip()
+        if decoded and decoded.isprintable() and decoded not in signatures:
+            signatures.append(decoded)
+    return signatures
 
 
 def repo_owner_from_path(file_path: str):
@@ -229,29 +253,110 @@ def is_likely_binary(file_path: str) -> bool:
         return True
 
 
-def inject_signatures_in_directory(dir_path: str, student_id: str):
-    """Recursively inject invisible steganographic signatures into text files."""
+def signable_lines(lines: list, ext: str) -> list:
+    """Return indexes of lines where trailing whitespace cannot change what the file means."""
+    safe = []
+    in_double_quotes = in_backticks = in_triple_single = False
+    heredoc_end = None
+    yaml_block_indent = None
+
+    for i, line in enumerate(lines):
+        body = line.rstrip('\r')
+        stripped = body.strip()
+        inside_before = in_double_quotes or in_backticks or in_triple_single
+
+        if heredoc_end is not None:
+            if stripped == heredoc_end:
+                heredoc_end = None
+            continue
+        if ext in (".sh", ".rb", ".php"):
+            heredoc = re.search(r"<<[-~<]*\s*['\"]?(\w+)", body)
+            if heredoc:
+                heredoc_end = heredoc.group(1)
+                continue
+
+        if ext in (".yaml", ".yml"):
+            indent = len(body) - len(body.lstrip())
+            if yaml_block_indent is not None:
+                if not stripped or indent > yaml_block_indent:
+                    continue
+                yaml_block_indent = None
+            if re.search(r"(?::|^\s*-)\s+[|>][-+0-9]*\s*$", body):
+                yaml_block_indent = indent
+                continue
+
+        unescaped = re.sub(r"\\.", "", body)
+        if unescaped.count('"') % 2:
+            in_double_quotes = not in_double_quotes
+        if unescaped.count('`') % 2:
+            in_backticks = not in_backticks
+        if unescaped.count("'''") % 2:
+            in_triple_single = not in_triple_single
+        inside_after = in_double_quotes or in_backticks or in_triple_single
+
+        if inside_before or inside_after or not stripped or body != body.rstrip():
+            continue
+        if i == 0 and body.startswith("#!"):
+            continue
+        # Line continuations, and a PHP closing tag whose next bytes are sent to the browser
+        if stripped.endswith(("\\", "^", "`")) or "?>" in body:
+            continue
+        # Trailing whitespace is part of "set X=value", and YAML parsers reject tabs after a value
+        if ext == ".bat" and not re.match(r"\s*(rem\b|::)", body, re.IGNORECASE):
+            continue
+        if ext in (".yaml", ".yml") and not stripped.startswith("#"):
+            continue
+        safe.append(i)
+    return safe
+
+
+def sign_file(path: str, watermark: str) -> bool:
+    """Hide the watermark at the end of several lines. Return False if the file stays unsigned."""
+    if os.path.islink(path):
+        return False
+    with open(path, 'rb') as f:
+        raw = f.read()
+    try:
+        text = raw.decode('utf-8')
+    except UnicodeDecodeError:
+        return False
+
+    # Working on \n only keeps \r\n endings and any BOM exactly as they were
+    lines = text.split('\n')
+    safe = signable_lines(lines, os.path.splitext(path)[1].lower())
+    if not safe:
+        return False
+
+    copies = min(SIGNATURE_COPIES, len(safe))
+    for n in range(copies):
+        i = safe[n * len(safe) // copies]
+        body = lines[i].rstrip('\r')
+        lines[i] = body + watermark + lines[i][len(body):]
+
+    with open(path, 'wb') as f:
+        f.write('\n'.join(lines).encode('utf-8'))
+    return True
+
+
+def inject_signatures_in_directory(dir_path: str, student_id: str) -> list:
+    """Recursively sign text files. Return the relative paths of files left unsigned."""
     watermark = encode_watermark(student_id)
+    unsigned = []
     for root, _, files in os.walk(dir_path):
         for file in files:
             ext = os.path.splitext(file)[1].lower()
             if ext not in TEXT_EXTENSIONS:
                 continue
             full_path = os.path.join(root, file)
-            if is_likely_binary(full_path):
+            if not os.path.islink(full_path) and is_likely_binary(full_path):
                 continue
             try:
-                # Read original contents
-                with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    content = f.read()
-                
-                # Add watermark as the first line of the file, followed by a newline
-                new_content = watermark + '\n' + content
-                
-                with open(full_path, 'w', encoding='utf-8') as f:
-                    f.write(new_content)
+                signed = sign_file(full_path, watermark)
             except Exception:
-                pass
+                signed = False
+            if not signed:
+                unsigned.append(os.path.relpath(full_path, dir_path))
+    return unsigned
 
 
 # ── Student List Loaders ──────────────────────────────────────────────────────
@@ -595,6 +700,133 @@ def check_repo_commits(r: dict, org: str) -> dict:
     return None
 
 
+# ── Work Rhythm & AI Traces ───────────────────────────────────────────────────
+
+def parse_git_log(text: str) -> list:
+    """Parse the output of `git log` with GIT_LOG_FORMAT and --numstat, oldest commit first."""
+    commits = []
+    for entry in text.split("\x1e")[1:]:
+        fields = entry.split("\x1f")
+        if len(fields) < 9:
+            continue
+        lines, paths = 0, []
+        for row in fields[8].splitlines():
+            parts = row.split("\t")
+            if len(parts) != 3:
+                continue
+            # Renames appear as "src/{a => b}/c.cs"
+            path = parts[2].split(" => ")[-1].replace("}", "")
+            paths.append(path)
+            if parts[0] == "-" or parts[1] == "-":
+                continue
+            if os.path.splitext(path)[1].lower() in RHYTHM_EXTENSIONS and not GENERATED_PATH.search(path):
+                # Net lines: code moved between files adds nothing
+                lines += max(0, int(parts[0]) - int(parts[1]))
+        commits.append({
+            "hash": fields[0].strip(),
+            "parents": fields[1].split(),
+            "time": int(fields[2]),
+            "email": fields[3].strip().lower(),
+            "identity": f"{fields[4]} <{fields[3]}> {fields[5]} <{fields[6]}>",
+            "message": fields[7].strip(),
+            "lines": lines,
+            "paths": paths,
+        })
+    return sorted(commits, key=lambda c: c["time"])
+
+
+def find_bursts(commits: list, teacher_email: str) -> list:
+    """Merge student commits made close together, and measure the time available to write them.
+
+    Students often commit a long session in several quick commits: rating those one by one
+    would be unfair, so a burst is rated against the time since the previous activity.
+    """
+    bursts = []
+    current = None
+    last_activity = None
+    for c in commits:
+        if c["email"] == teacher_email:
+            current = None
+        elif current and c["time"] - current["end"] <= BURST_GAP_SECONDS:
+            current["end"] = c["time"]
+            current["lines"] += c["lines"]
+        else:
+            current = {"since": last_activity, "end": c["time"], "lines": c["lines"]}
+            bursts.append(current)
+        last_activity = c["time"]
+
+    for b in bursts:
+        b["minutes"] = None if b["since"] is None else max(b["end"] - b["since"], 1) / 60
+        b["rate"] = None if b["minutes"] is None else b["lines"] / b["minutes"]
+        b["impossible"] = (
+            b["rate"] is not None
+            and b["lines"] >= MIN_BURST_LINES
+            and b["rate"] > MAX_LINES_PER_MINUTE
+        )
+    return bursts
+
+
+def grep_ai_content(repo_dir: str, rev: str) -> set:
+    """Return (path, text) pairs of the explicit AI mentions found in a revision."""
+    rc, stdout, _ = run_git(repo_dir, "grep", "-I", "-i", "-E", "-e", AI_CONTENT_PATTERN, rev, "--")
+    if rc != 0:
+        return set()
+    found = set()
+    for line in stdout.splitlines():
+        parts = line.split(":", 2)
+        if len(parts) == 3:
+            found.add((parts[1], parts[2].strip()))
+    return found
+
+
+def analyze_repo(repo_dir: str, teacher_email: str) -> dict:
+    """Analyze a local clone: student work rhythm and explicit AI traces."""
+    rc, stdout, stderr = run_git(
+        repo_dir, "-c", "core.quotepath=off", "log", "--all", "--no-merges", "-M",
+        f"--format={GIT_LOG_FORMAT}", "--numstat"
+    )
+    if rc != 0:
+        return {"error": stderr.strip()}
+
+    commits = parse_git_log(stdout)
+    student_commits = [c for c in commits if c["email"] != teacher_email]
+    traces = []
+
+    for c in student_commits:
+        if AI_COMMIT_PATTERN.search(f"{c['message']}\n{c['identity']}"):
+            subject = c["message"].splitlines()[0] if c["message"] else ""
+            traces.append(f"Commit : {subject[:70]}")
+
+    ai_files = {p for c in student_commits for p in c["paths"] if AI_FILE_PATTERN.search(p)}
+    traces.extend(f"Fichier : {p}" for p in sorted(ai_files))
+
+    mentions = grep_ai_content(repo_dir, "HEAD")
+    seed = next((c for c in commits if c["email"] == teacher_email and not c["parents"]), None)
+    if seed and mentions:
+        mentions -= grep_ai_content(repo_dir, seed["hash"])
+    traces.extend(f"Contenu : {path} : {text[:70]}" for path, text in sorted(mentions))
+
+    bursts = find_bursts(commits, teacher_email)
+    rated = [b for b in bursts if b["rate"] is not None and b["lines"] >= MIN_BURST_LINES]
+    return {
+        "commits": len(student_commits),
+        "lines": sum(c["lines"] for c in student_commits),
+        "fastest": max(rated, key=lambda b: b["rate"]) if rated else None,
+        "impossible": sum(1 for b in bursts if b["impossible"]),
+        "traces": traces,
+    }
+
+
+def find_local_repos(path: str) -> list:
+    """Return the git repos directly inside a folder, or the folder itself if it is one."""
+    if os.path.exists(os.path.join(path, ".git")):
+        return [path]
+    return sorted(
+        os.path.join(path, d) for d in os.listdir(path)
+        if os.path.exists(os.path.join(path, d, ".git"))
+    )
+
+
 # ── Git Classroom Application Class ───────────────────────────────────────────
 
 class GitClassroomApp:
@@ -670,7 +902,9 @@ class GitClassroomApp:
                     return False
 
             if hide_signature:
-                inject_signatures_in_directory(tmp_dir, student_id)
+                unsigned = inject_signatures_in_directory(tmp_dir, student_id)
+                if unsigned:
+                    console.print(f"[dim]  {len(unsigned)} fichier(s) non signé(s) : {escape(', '.join(sorted(unsigned)))}[/]")
                 
             repo_url = f"https://github.com/{org}/{repo_name}.git"
             run_git(tmp_dir, "init")
@@ -1170,13 +1404,13 @@ class GitClassroomApp:
                 try:
                     with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
                         content = f.read()
-                    sig = decode_watermark(content)
-                    if sig:
+                    signatures = decode_watermarks(content)
+                    if signatures:
                         rel_path = os.path.relpath(full_path, path_to_scan)
                         findings.append({
                             "file": file,
                             "rel_path": rel_path,
-                            "signature": sig,
+                            "signatures": signatures,
                             "full_path": full_path
                         })
                 except Exception:
@@ -1200,19 +1434,90 @@ class GitClassroomApp:
             owner = repo_owner_from_path(f["full_path"])
             if owner is None:
                 status = "[dim]? Repo non reconnu[/]"
-            elif normalize_slug(f["signature"]) == owner:
+            elif all(normalize_slug(sig) == owner for sig in f["signatures"]):
                 status = "[green]OK[/]"
             else:
                 status = "[bold red]⚠ Discordance / Copie suspectée ![/]"
 
             table.add_row(
                 escape(f["file"]),
-                f"[bold cyan]{escape(f['signature'])}[/]",
+                f"[bold cyan]{escape(' + '.join(f['signatures']))}[/]",
                 escape(f["rel_path"]),
                 status
             )
             
         console.print(table)
+
+    def analyser_rythme(self):
+        """Report impossible work rhythms and explicit AI traces in locally cloned repos."""
+        console.print(Rule("[cyan]Rythme de travail et traces d'IA[/]", style="cyan"))
+        console.print()
+
+        path = clean_path(Prompt.ask("Dossier des repos clonés", default=os.getcwd()))
+        if not os.path.isdir(path):
+            console.print(f"[red]✘ Dossier introuvable : {escape(path)}[/]")
+            return
+
+        repos = find_local_repos(path)
+        if not repos:
+            console.print("[yellow]Aucun repo git trouvé dans ce dossier.[/]")
+            return
+
+        _, stdout, _ = run_git(path, "config", "user.email")
+        teacher_email = Prompt.ask(
+            "Courriel git de l'enseignant (ses commits sont ignorés)", default=stdout.strip()
+        ).strip().lower()
+
+        table = Table(
+            title=f"[cyan]{len(repos)} repo(s) analysé(s)[/]",
+            show_header=True,
+            header_style="bold"
+        )
+        table.add_column("Repo")
+        table.add_column("Commits", justify="right")
+        table.add_column("Lignes", justify="right")
+        table.add_column("Rythme max")
+        table.add_column("Signal")
+
+        details = []
+        for repo_dir in repos:
+            name = os.path.basename(os.path.abspath(repo_dir))
+            report = analyze_repo(repo_dir, teacher_email)
+            if "error" in report:
+                table.add_row(escape(name), "", "", "", f"[red]{escape(report['error'])}[/]")
+                continue
+
+            fastest = report["fastest"]
+            rhythm = "[dim]–[/]"
+            if fastest:
+                rhythm = f"{fastest['lines']} lignes en {fastest['minutes']:.0f} min ({fastest['rate']:.0f}/min)"
+
+            signals = []
+            if report["impossible"]:
+                signals.append(f"[bold red]{report['impossible']} rafale(s) impossible(s) à la frappe[/]")
+            if report["traces"]:
+                signals.append(f"[bold red]{len(report['traces'])} trace(s) d'IA[/]")
+                details.append((name, report["traces"]))
+
+            table.add_row(
+                escape(name),
+                str(report["commits"]),
+                str(report["lines"]),
+                rhythm,
+                " · ".join(signals) if signals else "[dim]–[/]"
+            )
+
+        console.print(table)
+        for name, traces in details:
+            console.print(f"\n[bold]{escape(name)}[/]")
+            for trace in traces:
+                console.print(f"  • {escape(trace)}")
+
+        console.print()
+        console.print(f"[dim]Impossible : plus de {MAX_LINES_PER_MINUTE} lignes/min sur au moins "
+                      f"{MIN_BURST_LINES} lignes. Du code collé ou écrit hors du repo donne le même résultat.[/]")
+        console.print("[dim]Ce sont des sujets à aborder à l'oral, pas des preuves. "
+                      "L'absence de signal ne prouve rien non plus.[/]")
 
     def run(self):
         """Submenu execution loop."""
@@ -1235,6 +1540,7 @@ class GitClassroomApp:
                     "💬 Repos avec commits étudiants",
                     "🗑  Supprimer des repos",
                     "🕵️  Détecter les signatures stéganographiques",
+                    "⏱  Rythme de travail et traces d'IA",
                     retour
                 ]
             )
@@ -1258,6 +1564,8 @@ class GitClassroomApp:
                 self.supprimer_repos()
             elif "signatures" in choice:
                 self.detecter_signatures()
+            elif "Rythme" in choice:
+                self.analyser_rythme()
                 
             console.print("\n[dim]Appuyez sur Entrée pour revenir au menu principal...[/]")
             input()
