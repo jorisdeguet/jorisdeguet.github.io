@@ -82,7 +82,10 @@ cable_d     = 3.2;   // [M] cable outer diameter
 
 /* [Sleeve] */
 wall        = 0.8;   // wall thickness around the head (keep thin for cases)
-glue        = 0.35;  // glue clearance PER SIDE around head, boot and cable
+glue        = 0.35;  // glue clearance PER SIDE around head and boot
+cable_glue  = 0.6;   // glue clearance PER SIDE around the cable (channel = cable_d + 2×this)
+nose_r      = 3.0;   // outer corner radius of the head section (rounder = wider;
+                     // width grows so the wall stays >= `wall`; max = half the thickness)
 collar_len  = 3.0;   // full-size section behind the head (holds the pins)
 relief_len  = 16.0;  // tapered strain relief length behind the collar
 relief_end_wall = 0.9; // wall around the cable at the far end of the taper
@@ -113,15 +116,16 @@ eps  = 0.01;
 cav_w   = head_w + 2*glue;              // head cavity
 cav_t   = head_t + 2*glue;
 cav_r   = head_r + glue;
-out_w   = cav_w + 2*wall;               // outer envelope around the head
 out_t   = cav_t + 2*wall;
-out_r   = cav_r + wall;
+out_r   = min(max(nose_r, cav_r + wall), out_t/2 - eps);  // rounded outer corners
+// corner circles share their centre line with the cavity corners → wall >= `wall`
+out_w   = 2*(cav_w/2 - cav_r + out_r);  // outer envelope around the head
 x0      = front_setback;                // front edge of the sleeve
 x_head  = head_len;                     // end of rigid head
 x_col   = head_len + collar_len;        // end of collar
 x_end   = x_col + relief_len;           // rear end of the sleeve
-end_d   = cable_d + 2*glue + 2*relief_end_wall;
-cab_cd  = cable_d + 2*glue;             // cable channel diameter
+end_d   = cable_d + 2*cable_glue + 2*relief_end_wall;
+cab_cd  = cable_d + 2*cable_glue;       // cable channel diameter
 pin_hd  = pin_d + pin_clear;
 boot_cd0 = (boot_len > 0 ? boot_d0 : cable_d) + 2*glue;
 // pin position: halfway between the boot cavity and the outer side

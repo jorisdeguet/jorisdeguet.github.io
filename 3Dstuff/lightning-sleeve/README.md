@@ -22,16 +22,18 @@ non Apple varient beaucoup : mesurez et ajustez dans le Customizer d'OpenSCAD :
 | `head_len` | longueur de la tête rigide (face avant → début du boot) | 10 |
 | `boot_d0`, `boot_d1`, `boot_len` | boot en caoutchouc (mettre `boot_len = 0` si on l'a coupé) | 4,2 / 3,3 / 8 |
 | `cable_d` | diamètre du câble | 3,2 |
-| `glue` | jeu pour la colle, par côté | 0,35 |
+| `glue` | jeu pour la colle autour de la tête, par côté | 0,35 |
+| `cable_glue` | jeu pour la colle autour du câble, par côté (canal = câble + 2 × jeu) | 0,6 |
+| `nose_r` | rayon des coins extérieurs côté connecteur (plus rond = un peu plus large) | 3 |
 | `wall` | épaisseur de paroi | 0,8 |
 
 ### Compatibilité avec l'étui
 
 L'ouverture de l'étui autour du port Lightning est arrondie : **13,65 mm de large ×
-6,85 mm de haut** (`keepout_w`, `keepout_t`). Le manchon complet fait ≈ 10,3 × 7,7 mm :
+6,85 mm de haut** (`keepout_w`, `keepout_t`). Le manchon complet fait ≈ 11,6 × 7,7 mm :
 trop épais. Les `keepout_len` premiers millimètres (6 mm par défaut, à régler selon la
 profondeur à laquelle la tête entre dans l'étui) sont donc rognés à ce contour, moins
-`keepout_margin` (0,15 mm) de jeu par côté, soit ≈ 10,3 × 6,55 mm.
+`keepout_margin` (0,15 mm) de jeu par côté, soit ≈ 11,6 × 6,55 mm.
 
 Le manchon entoure quand même la tête **sur les 4 côtés** dans cette zone. Autour d'une
 tête Apple (5,4 mm d'épaisseur), il ne reste que ≈ 0,57 mm par côté sur les faces
