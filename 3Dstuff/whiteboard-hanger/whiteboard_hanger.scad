@@ -42,7 +42,7 @@ strip_t     = 0.8;   // épaisseur de la partie coincée entre mur et tablette
                      // (≥ 2 lignes d'extrusion avec une buse de 0.4)
 
 // Tablette et languette du haut
-shelf_t     = 18;    // épaisseur de la tablette
+shelf_t     = 25.4;  // épaisseur de la tablette (1 po)
 shelf_clear = 0.5;   // jeu vertical : la partie épaisse commence ce jeu sous la tablette
 tab_len     = 25;    // longueur de la languette posée sur la tablette (depuis le mur)
 tab_t       = 2.0;   // épaisseur de la languette
@@ -52,14 +52,14 @@ tab_lip_h   = 0;     // rebord descendant au bout de la languette (0 = aucun).
 
 // Descente et crochet du bas
 drop_len    = 60;    // du dessous de la tablette au fond intérieur du crochet
-below_t     = 2.0;   // épaisseur de la bande sous la tablette (rigidité)
+below_t     = 3.5;   // épaisseur de la bande sous la tablette (rigidité)
 board_t     = 15;    // épaisseur du tableau (ou de son cadre)
 board_clear = 1.0;   // jeu entre le tableau et la lèvre
-hook_t      = 2.5;   // épaisseur du fond et de la lèvre du crochet
+hook_t      = 4.0;   // épaisseur du fond et de la lèvre du crochet
 lip_h       = 12;    // hauteur de la lèvre (au-dessus du fond intérieur)
 
 // Renforts
-fillet      = 1.5;   // gousset à 45° dans les angles intérieurs du crochet et
+fillet      = 2.5;   // gousset à 45° dans les angles intérieurs du crochet et
                      // de la descente (0 = angles vifs)
 top_fillet  = 0;     // gousset sous la languette (contre l'arête de la tablette :
                      // laisser 0 si l'arête de la tablette est vive)

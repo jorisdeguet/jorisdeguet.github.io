@@ -18,18 +18,18 @@ Fichier : `whiteboard_hanger.scad` (OpenSCAD). `whiteboard_hanger.stl` contient 
 | `count` | 2 | nombre d'exemplaires sur le plateau |
 | `width` | 20 | largeur du crochet (= hauteur d'impression) |
 | `strip_t` | 0.8 | épaisseur de la bande coincée entre mur et tablette |
-| `shelf_t` | 18 | épaisseur de la tablette |
+| `shelf_t` | 25.4 | épaisseur de la tablette (1 po) |
 | `shelf_clear` | 0.5 | jeu : la partie épaisse commence ce jeu sous la tablette |
 | `tab_len` | 25 | longueur de la languette sur la tablette (depuis le mur) |
 | `tab_t` | 2.0 | épaisseur de la languette |
 | `tab_lip_h` | 0 | rebord descendant au bout de la languette (0 = aucun) |
 | `drop_len` | 60 | du dessous de la tablette au fond intérieur du crochet |
-| `below_t` | 2.0 | épaisseur de la bande sous la tablette |
+| `below_t` | 3.5 | épaisseur de la bande sous la tablette |
 | `board_t` | 15 | épaisseur du tableau (ou de son cadre) |
 | `board_clear` | 1.0 | jeu entre le tableau et la lèvre |
-| `hook_t` | 2.5 | épaisseur du fond et de la lèvre du crochet |
+| `hook_t` | 4.0 | épaisseur du fond et de la lèvre du crochet |
 | `lip_h` | 12 | hauteur de la lèvre au-dessus du fond |
-| `fillet` | 1.5 | goussets dans les angles du crochet (0 = angles vifs) |
+| `fillet` | 2.5 | goussets dans les angles du crochet (0 = angles vifs) |
 | `top_fillet` | 0 | gousset sous la languette (laisser 0 si l'arête de la tablette est vive) |
 
 Pour **enserrer l'avant de la tablette** (pièce impossible à faire glisser) : `tab_len = strip_t + profondeur de la tablette + jeu + tab_t` et `tab_lip_h` = 5 à 10 mm.
