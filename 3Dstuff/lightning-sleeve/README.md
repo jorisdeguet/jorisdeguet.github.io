@@ -33,10 +33,12 @@ trop épais. Les `keepout_len` premiers millimètres (6 mm par défaut, à régl
 profondeur à laquelle la tête entre dans l'étui) sont donc rognés à ce contour, moins
 `keepout_margin` (0,15 mm) de jeu par côté, soit ≈ 10,3 × 6,55 mm.
 
-Autour d'une tête Apple (5,4 mm d'épaisseur), il ne resterait qu'une peau dessus/dessous
-trop mince pour s'imprimer (< `min_skin`) : dans cette zone, le manchon se réduit
-automatiquement à **deux parois latérales**, et le dessus et le dessous de la tête restent
-nus. La coque complète commence juste derrière. La console indique ce qui a été fait.
+Le manchon entoure quand même la tête **sur les 4 côtés** dans cette zone. Autour d'une
+tête Apple (5,4 mm d'épaisseur), il ne reste que ≈ 0,57 mm par côté sur les faces
+minces : le jeu de colle dessus/dessous y passe donc à `glue_ko` (0,1 mm) et la paroi
+dessus/dessous fait ≈ 0,48 mm (4 couches à 0,12 mm). Les côtés gardent le jeu de colle
+et la paroi normaux. La console affiche l'épaisseur obtenue et avertit si elle descend
+sous `min_skin` (0,4 mm).
 
 ## 2. Exporter
 
@@ -53,7 +55,7 @@ Puis F6 → *Export STL*.
 - **Orientation** : telle qu'exportée, **face de jonction plate sur le plateau**,
   extérieur vers le haut. Pas de supports : le seul surplomb est le plafond de la
   cavité de la tête, un petit pont de 6–7 mm.
-- Hauteur de couche **0,12 mm** (0,16 mm acceptable) pour bien rendre les parois minces.
+- Hauteur de couche **0,12 mm** : la paroi dessus/dessous à l'avant ne fait que ≈ 0,48 mm.
 - 100 % de remplissage (de toute façon presque tout est paroi), 2 périmètres.
 - Buse 0,4 mm, vitesse réduite (les pièces sont minuscules) ; activer le
   refroidissement minimum par couche pour éviter qu'elles ramollissent.
@@ -71,9 +73,9 @@ Puis F6 → *Export STL*.
    bord du manchon.
 5. Remplir la première moitié de colle chaude (sans excès), poser le câble, bien
    aligner la face avant de la tête avec le bord du manchon.
-   Dans la zone avant (parois latérales seulement), essuyer la colle qui déborde sur
-   le dessus et le dessous de la tête pendant qu'elle est chaude : toute surépaisseur
-   à cet endroit empêcherait la fiche d'entrer dans l'étui.
+   Sur les 6 premiers mm, mettre très peu de colle sur le dessus et le dessous de la
+   tête (le jeu n'est que de 0,1 mm) : la colle va surtout sur les côtés et vers
+   l'arrière. Trop de colle à cet endroit empêcherait la coque de bien fermer.
 6. Ajouter un filet de colle par-dessus, fermer avec la deuxième moitié et serrer
    entre les doigts (ou une pince à linge) ~1 min. L'excès sort par les petits
    évents et par l'arrière autour du câble.

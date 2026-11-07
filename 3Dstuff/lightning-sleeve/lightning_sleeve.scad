@@ -51,10 +51,11 @@
 //  • Case keepout around the Lightning port: rounded (stadium) opening
 //      13.65 mm wide × 6.85 mm high — figure given by the user.          [O]
 //    The front `keepout_len` mm of the sleeve is clipped to that outline
-//    (minus `keepout_margin`). Around an Apple head (5.4 mm thick) there is
-//    no room left for a printable top/bottom skin, so in that zone the sleeve
-//    automatically becomes two SIDE WALLS only (thin faces of the head left
-//    bare); the full shell starts behind it.
+//    (minus `keepout_margin`). The sleeve still wraps all FOUR sides there,
+//    but around an Apple head (5.4 mm thick) only ~0.57 mm per side is left
+//    on the thin faces, so in that zone the glue gap on the top/bottom drops
+//    to `glue_ko` (0.1 mm) and the top/bottom skin is ~0.48 mm (4 layers at
+//    0.12 mm). The sides keep the normal glue gap and wall.
 //  • Cable OD: Apple USB-A/USB-C to Lightning ≈ 3.0 mm; braided third-party
 //    cables 3.5–4.5 mm                                                      [M]
 //  • Original rubber boot (strain relief): ≈ 4.2 mm tapering to cable size
@@ -92,7 +93,8 @@ keepout_w      = 13.65; // case opening width (rounded ends)
 keepout_t      = 6.85;  // case opening height
 keepout_margin = 0.15;  // clearance per side inside the opening
 keepout_len    = 6.0;   // how deep the head goes into the case opening (from the tongue face)
-min_skin       = 0.4;   // thinner top/bottom skin than this is removed (open window)
+glue_ko        = 0.1;   // top/bottom glue gap inside the case zone (if needed to fit)
+min_skin       = 0.4;   // thinnest acceptable top/bottom skin (warning below this)
 
 /* [Pins & glue overflow] */
 use_pins    = true;  // blind holes for pins cut from filament
@@ -130,16 +132,19 @@ pin_h   = min(pin_depth, out_t/2 - 0.6);
 ko_w    = keepout_w - 2*keepout_margin;   // usable keepout outline
 ko_t    = keepout_t - 2*keepout_margin;
 ko_x    = x0 + keepout_len;               // end of the clipped zone
-skin_ko = min(out_t, ko_t)/2 - cav_t/2;   // top/bottom skin left in the zone
-ko_window = keepout_len > 0 && skin_ko < min_skin;
+ko_thin = keepout_len > 0 && min(out_t, ko_t)/2 - cav_t/2 < min_skin;
+cav_t_ko = ko_thin ? head_t + 2*glue_ko : cav_t;  // head cavity height in the zone
+skin_ko = min(out_t, ko_t)/2 - cav_t_ko/2;        // top/bottom skin in the zone
 
 echo(str("Sleeve outer size around head: ", out_w, " x ", out_t,
          " mm (W x T); total length ", x_end - x0, " mm"));
 if (keepout_len > 0)
     echo(str("Case zone (first ", keepout_len, " mm): ",
              min(out_w, ko_w), " x ", min(out_t, ko_t), " mm",
-             ko_window ? " — side walls only (top/bottom of head left bare)"
-                       : str(", top/bottom skin ", skin_ko, " mm")));
+             ", top/bottom skin ", skin_ko, " mm",
+             ko_thin ? str(" (top/bottom glue gap reduced to ", glue_ko, " mm)") : ""));
+if (keepout_len > 0 && skin_ko < min_skin)
+    echo("WARNING: top/bottom skin in the case zone is thinner than min_skin — head too thick for the case opening?");
 if (out_w > ko_w)
     echo("WARNING: sleeve wider than the case opening — reduce wall/glue");
 if (use_pins) {
@@ -191,8 +196,10 @@ module outer_raw() {
 }
 
 module cavity() {
-    // head, open at the front
-    translate([-1, 0, 0]) rrect_x(cav_w, cav_t, cav_r, x_head + 1);
+    // head, open at the front; flatter in the case zone if needed
+    x_ko = min(ko_x, x_head);
+    translate([-1, 0, 0]) rrect_x(cav_w, cav_t_ko, cav_r, x_ko + 1);
+    translate([x_ko - eps, 0, 0]) rrect_x(cav_w, cav_t, cav_r, x_head - x_ko + eps);
     // old rubber boot (cone)
     if (boot_len > 0)
         hull() {
@@ -217,7 +224,7 @@ module pin_holes() {
                 cylinder(d = pin_hd, h = 2*pin_h, $fn = 24);
 }
 
-vx0 = ko_window ? min(ko_x, head_len - 2) : x0;   // vents behind the window
+vx0 = ko_thin ? min(ko_x, head_len - 2) : x0;   // keep vents out of the thin skin
 module vent_holes() {
     if (vents > 0 && vx0 < head_len - 1)
         for (i = [1 : vents])
@@ -231,9 +238,6 @@ module sleeve_full() {
         cavity();
         pin_holes();
         vent_holes();
-        if (ko_window)   // remove the unprintably thin top/bottom skin
-            translate([x0 - 1, -cav_w/2, -out_t])
-                cube([min(keepout_len, head_len - x0) + 1, cav_w, 2*out_t]);
     }
 }
 
