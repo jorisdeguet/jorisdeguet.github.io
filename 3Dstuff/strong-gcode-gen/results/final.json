@@ -1,0 +1,862 @@
+{
+ "verify": {
+  "params": {
+   "b": 4.21,
+   "h_s": 6.01,
+   "h_c": 6.96,
+   "t_p": 3.61,
+   "r_p": 6.41,
+   "pad_back": 2.04
+  },
+  "part_volume": 2960.159484941067,
+  "part_mass": 3.670597761326923,
+  "deflection_service": 0.7151552363073107,
+  "screw_tension_design": 222.44900591715978,
+  "stem_stress_beam": 38.27732633926507,
+  "stem_stress_fea": 41.410628861181195,
+  "fea_dofs": "85779",
+  "best": {
+   "d": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "label": "\u00e0 plat (plan du crochet sur le plateau)",
+   "FI": 0.8820726223042232,
+   "support_volume": 446.25,
+   "support_mass": 0.55335,
+   "total_mass": 4.223947761326923,
+   "height": 12.820000314712527,
+   "feasible": true,
+   "violation": 0.0
+  },
+  "orientations": [
+   {
+    "d": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "label": "\u00e0 plat (plan du crochet sur le plateau)",
+    "FI": 0.8820726223042232,
+    "support_volume": 446.25,
+    "support_mass": 0.55335,
+    "total_mass": 4.223947761326923,
+    "height": 12.820000314712527,
+    "feasible": true,
+    "violation": 0.0
+   },
+   {
+    "d": [
+     0.7071,
+     0.7071,
+     0.0
+    ],
+    "label": "d=(+0.71,+0.71,+0.00)",
+    "FI": 1.021928320740611,
+    "support_volume": 316.25,
+    "support_mass": 0.39215,
+    "total_mass": 4.062747761326923,
+    "height": 38.92128882854389,
+    "feasible": false,
+    "violation": 0.021928320740610907
+   },
+   {
+    "d": [
+     -0.7071,
+     0.7071,
+     0.0
+    ],
+    "label": "d=(-0.71,+0.71,+0.00)",
+    "FI": 1.0219283206557124,
+    "support_volume": 407.25,
+    "support_mass": 0.50499,
+    "total_mass": 4.175587761326923,
+    "height": 38.93123966575983,
+    "feasible": false,
+    "violation": 0.021928320655712374
+   },
+   {
+    "d": [
+     0.9239,
+     0.0,
+     0.3827
+    ],
+    "label": "d=(+0.92,+0.00,+0.38)",
+    "FI": 1.110568999483549,
+    "support_volume": 401.25,
+    "support_mass": 0.49755,
+    "total_mass": 4.1681477613269236,
+    "height": 42.66261166040372,
+    "feasible": false,
+    "violation": 0.11056899948354904
+   },
+   {
+    "d": [
+     -0.9239,
+     0.0,
+     -0.3827
+    ],
+    "label": "d=(-0.92,+0.00,-0.38)",
+    "FI": 1.1105689994835493,
+    "support_volume": 676.25,
+    "support_mass": 0.83855,
+    "total_mass": 4.509147761326923,
+    "height": 42.662611660403726,
+    "feasible": false,
+    "violation": 0.11056899948354926
+   },
+   {
+    "d": [
+     -0.9239,
+     0.0,
+     0.3827
+    ],
+    "label": "d=(-0.92,+0.00,+0.38)",
+    "FI": 1.2924045856570894,
+    "support_volume": 493.0,
+    "support_mass": 0.61132,
+    "total_mass": 4.281917761326923,
+    "height": 55.48792549924376,
+    "feasible": false,
+    "violation": 0.2924045856570894
+   },
+   {
+    "d": [
+     0.9239,
+     0.0,
+     -0.3827
+    ],
+    "label": "d=(+0.92,+0.00,-0.38)",
+    "FI": 1.2924045856570896,
+    "support_volume": 756.75,
+    "support_mass": 0.93837,
+    "total_mass": 4.608967761326923,
+    "height": 55.48792549924375,
+    "feasible": false,
+    "violation": 0.2924045856570896
+   },
+   {
+    "d": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "label": "sur la tranche, pointe du C en haut",
+    "FI": 1.2970458787217425,
+    "support_volume": 549.5,
+    "support_mass": 0.68138,
+    "total_mass": 4.351977761326923,
+    "height": 50.894062995910645,
+    "feasible": false,
+    "violation": 0.2970458787217425
+   },
+   {
+    "d": [
+     -1.0,
+     0.0,
+     0.0
+    ],
+    "label": "sur la tranche, arri\u00e8re de la semelle en haut",
+    "FI": 1.2970458787217425,
+    "support_volume": 627.5,
+    "support_mass": 0.7781,
+    "total_mass": 4.448697761326923,
+    "height": 50.894062995910645,
+    "feasible": false,
+    "violation": 0.2970458787217425
+   },
+   {
+    "d": [
+     0.5774,
+     0.5774,
+     0.5774
+    ],
+    "label": "d=(+0.58,+0.58,+0.58)",
+    "FI": 1.298190364994119,
+    "support_volume": 188.75,
+    "support_mass": 0.23405,
+    "total_mass": 3.904647761326923,
+    "height": 32.49661240983078,
+    "feasible": false,
+    "violation": 0.2981903649941191
+   },
+   {
+    "d": [
+     -0.5774,
+     0.5774,
+     -0.5774
+    ],
+    "label": "d=(-0.58,+0.58,-0.58)",
+    "FI": 1.2981903652237108,
+    "support_volume": 358.75,
+    "support_mass": 0.44485,
+    "total_mass": 4.115447761326923,
+    "height": 32.50580661772324,
+    "feasible": false,
+    "violation": 0.2981903652237108
+   },
+   {
+    "d": [
+     -0.5774,
+     0.5774,
+     0.5774
+    ],
+    "label": "d=(-0.58,+0.58,+0.58)",
+    "FI": 1.3356680411271917,
+    "support_volume": 330.75,
+    "support_mass": 0.41013,
+    "total_mass": 4.080727761326923,
+    "height": 46.85382382398829,
+    "feasible": false,
+    "violation": 0.33566804112719173
+   },
+   {
+    "d": [
+     0.5774,
+     0.5774,
+     -0.5774
+    ],
+    "label": "d=(+0.58,+0.58,-0.58)",
+    "FI": 1.3356680413479396,
+    "support_volume": 547.75,
+    "support_mass": 0.67921,
+    "total_mass": 4.3498077613269235,
+    "height": 46.87978469828089,
+    "feasible": false,
+    "violation": 0.3356680413479396
+   },
+   {
+    "d": [
+     0.7071,
+     0.0,
+     0.7071
+    ],
+    "label": "d=(+0.71,+0.00,+0.71)",
+    "FI": 1.4235632555553255,
+    "support_volume": 184.0,
+    "support_mass": 0.22816,
+    "total_mass": 3.898757761326923,
+    "height": 37.83866104497061,
+    "feasible": false,
+    "violation": 0.4235632555553255
+   },
+   {
+    "d": [
+     -0.7071,
+     0.0,
+     -0.7071
+    ],
+    "label": "d=(-0.71,+0.00,-0.71)",
+    "FI": 1.4235632555553255,
+    "support_volume": 377.75,
+    "support_mass": 0.46841,
+    "total_mass": 4.139007761326923,
+    "height": 37.83866104497061,
+    "feasible": false,
+    "violation": 0.4235632555553255
+   },
+   {
+    "d": [
+     -0.7071,
+     0.0,
+     0.7071
+    ],
+    "label": "d=(-0.71,+0.00,+0.71)",
+    "FI": 1.527761136535664,
+    "support_volume": 146.0,
+    "support_mass": 0.18104,
+    "total_mass": 3.851637761326923,
+    "height": 54.563296325472066,
+    "feasible": false,
+    "violation": 0.527761136535664
+   },
+   {
+    "d": [
+     0.7071,
+     0.0,
+     -0.7071
+    ],
+    "label": "d=(+0.71,+0.00,-0.71)",
+    "FI": 1.5277611365356643,
+    "support_volume": 633.0,
+    "support_mass": 0.78492,
+    "total_mass": 4.455517761326923,
+    "height": 54.563296325472066,
+    "feasible": false,
+    "violation": 0.5277611365356643
+   },
+   {
+    "d": [
+     0.0,
+     0.7071,
+     -0.7071
+    ],
+    "label": "d=(+0.00,+0.71,-0.71)",
+    "FI": 1.5287112147071502,
+    "support_volume": 157.25,
+    "support_mass": 0.19499,
+    "total_mass": 3.865587761326923,
+    "height": 32.02039448092515,
+    "feasible": false,
+    "violation": 0.5287112147071502
+   },
+   {
+    "d": [
+     0.0,
+     0.7071,
+     0.7071
+    ],
+    "label": "d=(+0.00,+0.71,+0.71)",
+    "FI": 1.5287112144323087,
+    "support_volume": 190.25,
+    "support_mass": 0.23591,
+    "total_mass": 3.9065077613269232,
+    "height": 31.964694959242046,
+    "feasible": false,
+    "violation": 0.5287112144323087
+   },
+   {
+    "d": [
+     -0.3827,
+     0.0,
+     -0.9239
+    ],
+    "label": "d=(-0.38,+0.00,-0.92)",
+    "FI": 1.7832311932095033,
+    "support_volume": 738.5,
+    "support_mass": 0.91574,
+    "total_mass": 4.586337761326924,
+    "height": 35.73428524066383,
+    "feasible": false,
+    "violation": 0.7832311932095033
+   },
+   {
+    "d": [
+     0.3827,
+     0.0,
+     0.9239
+    ],
+    "label": "d=(+0.38,+0.00,+0.92)",
+    "FI": 1.7832311932095029,
+    "support_volume": 1104.0,
+    "support_mass": 1.36896,
+    "total_mass": 5.039557761326924,
+    "height": 35.73428524066384,
+    "feasible": false,
+    "violation": 0.7832311932095029
+   },
+   {
+    "d": [
+     0.3827,
+     0.0,
+     -0.9239
+    ],
+    "label": "d=(+0.38,+0.00,-0.92)",
+    "FI": 1.8546442549512165,
+    "support_volume": 831.25,
+    "support_mass": 1.03075,
+    "total_mass": 4.7013477613269234,
+    "height": 48.258071972768484,
+    "feasible": false,
+    "violation": 0.8546442549512165
+   },
+   {
+    "d": [
+     -0.3827,
+     0.0,
+     0.9239
+    ],
+    "label": "d=(-0.38,+0.00,+0.92)",
+    "FI": 1.8546442549512165,
+    "support_volume": 1775.75,
+    "support_mass": 2.20193,
+    "total_mass": 5.872527761326923,
+    "height": 48.25807197276846,
+    "feasible": false,
+    "violation": 0.8546442549512165
+   },
+   {
+    "d": [
+     -0.0,
+     0.0,
+     -1.0
+    ],
+    "label": "semelle sur le plateau (debout)",
+    "FI": 1.9558858244987072,
+    "support_volume": 376.0,
+    "support_mass": 0.46624,
+    "total_mass": 4.136837761326923,
+    "height": 37.56912975311279,
+    "feasible": false,
+    "violation": 0.9558858244987072
+   },
+   {
+    "d": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "label": "semelle en haut (crochet t\u00eate en bas)",
+    "FI": 1.9558858244987072,
+    "support_volume": 1731.25,
+    "support_mass": 2.14675,
+    "total_mass": 5.817347761326923,
+    "height": 37.5691297531128,
+    "feasible": false,
+    "violation": 0.9558858244987072
+   }
+  ],
+  "design_load_kg": 6.0,
+  "capacity_kg": 6.8021610106504635,
+  "objective": 4.223947761326923,
+  "feasible": true
+ },
+ "repairs": [],
+ "verify_opt_orientation": {
+  "label": "d=(+0.71,+0.71,+0.00)",
+  "FI": 1.021928320740611,
+  "support_mass": 0.39215,
+  "total_mass": 4.062747761326923,
+  "feasible": false
+ },
+ "final": {
+  "params": {
+   "b": 4.21,
+   "h_s": 6.01,
+   "h_c": 6.96,
+   "t_p": 3.61,
+   "r_p": 6.41,
+   "pad_back": 2.04
+  },
+  "part_volume": 2960.159484941067,
+  "part_mass": 3.670597761326923,
+  "deflection_service": 0.7151552363073107,
+  "screw_tension_design": 222.44900591715978,
+  "stem_stress_beam": 38.27732633926507,
+  "stem_stress_fea": 41.410628861181195,
+  "fea_dofs": "85779",
+  "best": {
+   "d": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "label": "\u00e0 plat (plan du crochet sur le plateau)",
+   "FI": 0.8820726223042232,
+   "support_volume": 446.25,
+   "support_mass": 0.55335,
+   "total_mass": 4.223947761326923,
+   "height": 12.820000314712527,
+   "feasible": true,
+   "violation": 0.0
+  },
+  "orientations": [
+   {
+    "d": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "label": "\u00e0 plat (plan du crochet sur le plateau)",
+    "FI": 0.8820726223042232,
+    "support_volume": 446.25,
+    "support_mass": 0.55335,
+    "total_mass": 4.223947761326923,
+    "height": 12.820000314712527,
+    "feasible": true,
+    "violation": 0.0
+   },
+   {
+    "d": [
+     0.7071,
+     0.7071,
+     0.0
+    ],
+    "label": "d=(+0.71,+0.71,+0.00)",
+    "FI": 1.021928320740611,
+    "support_volume": 316.25,
+    "support_mass": 0.39215,
+    "total_mass": 4.062747761326923,
+    "height": 38.92128882854389,
+    "feasible": false,
+    "violation": 0.021928320740610907
+   },
+   {
+    "d": [
+     -0.7071,
+     0.7071,
+     0.0
+    ],
+    "label": "d=(-0.71,+0.71,+0.00)",
+    "FI": 1.0219283206557124,
+    "support_volume": 407.25,
+    "support_mass": 0.50499,
+    "total_mass": 4.175587761326923,
+    "height": 38.93123966575983,
+    "feasible": false,
+    "violation": 0.021928320655712374
+   },
+   {
+    "d": [
+     0.9239,
+     0.0,
+     0.3827
+    ],
+    "label": "d=(+0.92,+0.00,+0.38)",
+    "FI": 1.110568999483549,
+    "support_volume": 401.25,
+    "support_mass": 0.49755,
+    "total_mass": 4.1681477613269236,
+    "height": 42.66261166040372,
+    "feasible": false,
+    "violation": 0.11056899948354904
+   },
+   {
+    "d": [
+     -0.9239,
+     0.0,
+     -0.3827
+    ],
+    "label": "d=(-0.92,+0.00,-0.38)",
+    "FI": 1.1105689994835493,
+    "support_volume": 676.25,
+    "support_mass": 0.83855,
+    "total_mass": 4.509147761326923,
+    "height": 42.662611660403726,
+    "feasible": false,
+    "violation": 0.11056899948354926
+   },
+   {
+    "d": [
+     -0.9239,
+     0.0,
+     0.3827
+    ],
+    "label": "d=(-0.92,+0.00,+0.38)",
+    "FI": 1.2924045856570894,
+    "support_volume": 493.0,
+    "support_mass": 0.61132,
+    "total_mass": 4.281917761326923,
+    "height": 55.48792549924376,
+    "feasible": false,
+    "violation": 0.2924045856570894
+   },
+   {
+    "d": [
+     0.9239,
+     0.0,
+     -0.3827
+    ],
+    "label": "d=(+0.92,+0.00,-0.38)",
+    "FI": 1.2924045856570896,
+    "support_volume": 756.75,
+    "support_mass": 0.93837,
+    "total_mass": 4.608967761326923,
+    "height": 55.48792549924375,
+    "feasible": false,
+    "violation": 0.2924045856570896
+   },
+   {
+    "d": [
+     1.0,
+     0.0,
+     0.0
+    ],
+    "label": "sur la tranche, pointe du C en haut",
+    "FI": 1.2970458787217425,
+    "support_volume": 549.5,
+    "support_mass": 0.68138,
+    "total_mass": 4.351977761326923,
+    "height": 50.894062995910645,
+    "feasible": false,
+    "violation": 0.2970458787217425
+   },
+   {
+    "d": [
+     -1.0,
+     0.0,
+     0.0
+    ],
+    "label": "sur la tranche, arri\u00e8re de la semelle en haut",
+    "FI": 1.2970458787217425,
+    "support_volume": 627.5,
+    "support_mass": 0.7781,
+    "total_mass": 4.448697761326923,
+    "height": 50.894062995910645,
+    "feasible": false,
+    "violation": 0.2970458787217425
+   },
+   {
+    "d": [
+     0.5774,
+     0.5774,
+     0.5774
+    ],
+    "label": "d=(+0.58,+0.58,+0.58)",
+    "FI": 1.298190364994119,
+    "support_volume": 188.75,
+    "support_mass": 0.23405,
+    "total_mass": 3.904647761326923,
+    "height": 32.49661240983078,
+    "feasible": false,
+    "violation": 0.2981903649941191
+   },
+   {
+    "d": [
+     -0.5774,
+     0.5774,
+     -0.5774
+    ],
+    "label": "d=(-0.58,+0.58,-0.58)",
+    "FI": 1.2981903652237108,
+    "support_volume": 358.75,
+    "support_mass": 0.44485,
+    "total_mass": 4.115447761326923,
+    "height": 32.50580661772324,
+    "feasible": false,
+    "violation": 0.2981903652237108
+   },
+   {
+    "d": [
+     -0.5774,
+     0.5774,
+     0.5774
+    ],
+    "label": "d=(-0.58,+0.58,+0.58)",
+    "FI": 1.3356680411271917,
+    "support_volume": 330.75,
+    "support_mass": 0.41013,
+    "total_mass": 4.080727761326923,
+    "height": 46.85382382398829,
+    "feasible": false,
+    "violation": 0.33566804112719173
+   },
+   {
+    "d": [
+     0.5774,
+     0.5774,
+     -0.5774
+    ],
+    "label": "d=(+0.58,+0.58,-0.58)",
+    "FI": 1.3356680413479396,
+    "support_volume": 547.75,
+    "support_mass": 0.67921,
+    "total_mass": 4.3498077613269235,
+    "height": 46.87978469828089,
+    "feasible": false,
+    "violation": 0.3356680413479396
+   },
+   {
+    "d": [
+     0.7071,
+     0.0,
+     0.7071
+    ],
+    "label": "d=(+0.71,+0.00,+0.71)",
+    "FI": 1.4235632555553255,
+    "support_volume": 184.0,
+    "support_mass": 0.22816,
+    "total_mass": 3.898757761326923,
+    "height": 37.83866104497061,
+    "feasible": false,
+    "violation": 0.4235632555553255
+   },
+   {
+    "d": [
+     -0.7071,
+     0.0,
+     -0.7071
+    ],
+    "label": "d=(-0.71,+0.00,-0.71)",
+    "FI": 1.4235632555553255,
+    "support_volume": 377.75,
+    "support_mass": 0.46841,
+    "total_mass": 4.139007761326923,
+    "height": 37.83866104497061,
+    "feasible": false,
+    "violation": 0.4235632555553255
+   },
+   {
+    "d": [
+     -0.7071,
+     0.0,
+     0.7071
+    ],
+    "label": "d=(-0.71,+0.00,+0.71)",
+    "FI": 1.527761136535664,
+    "support_volume": 146.0,
+    "support_mass": 0.18104,
+    "total_mass": 3.851637761326923,
+    "height": 54.563296325472066,
+    "feasible": false,
+    "violation": 0.527761136535664
+   },
+   {
+    "d": [
+     0.7071,
+     0.0,
+     -0.7071
+    ],
+    "label": "d=(+0.71,+0.00,-0.71)",
+    "FI": 1.5277611365356643,
+    "support_volume": 633.0,
+    "support_mass": 0.78492,
+    "total_mass": 4.455517761326923,
+    "height": 54.563296325472066,
+    "feasible": false,
+    "violation": 0.5277611365356643
+   },
+   {
+    "d": [
+     0.0,
+     0.7071,
+     -0.7071
+    ],
+    "label": "d=(+0.00,+0.71,-0.71)",
+    "FI": 1.5287112147071502,
+    "support_volume": 157.25,
+    "support_mass": 0.19499,
+    "total_mass": 3.865587761326923,
+    "height": 32.02039448092515,
+    "feasible": false,
+    "violation": 0.5287112147071502
+   },
+   {
+    "d": [
+     0.0,
+     0.7071,
+     0.7071
+    ],
+    "label": "d=(+0.00,+0.71,+0.71)",
+    "FI": 1.5287112144323087,
+    "support_volume": 190.25,
+    "support_mass": 0.23591,
+    "total_mass": 3.9065077613269232,
+    "height": 31.964694959242046,
+    "feasible": false,
+    "violation": 0.5287112144323087
+   },
+   {
+    "d": [
+     -0.3827,
+     0.0,
+     -0.9239
+    ],
+    "label": "d=(-0.38,+0.00,-0.92)",
+    "FI": 1.7832311932095033,
+    "support_volume": 738.5,
+    "support_mass": 0.91574,
+    "total_mass": 4.586337761326924,
+    "height": 35.73428524066383,
+    "feasible": false,
+    "violation": 0.7832311932095033
+   },
+   {
+    "d": [
+     0.3827,
+     0.0,
+     0.9239
+    ],
+    "label": "d=(+0.38,+0.00,+0.92)",
+    "FI": 1.7832311932095029,
+    "support_volume": 1104.0,
+    "support_mass": 1.36896,
+    "total_mass": 5.039557761326924,
+    "height": 35.73428524066384,
+    "feasible": false,
+    "violation": 0.7832311932095029
+   },
+   {
+    "d": [
+     0.3827,
+     0.0,
+     -0.9239
+    ],
+    "label": "d=(+0.38,+0.00,-0.92)",
+    "FI": 1.8546442549512165,
+    "support_volume": 831.25,
+    "support_mass": 1.03075,
+    "total_mass": 4.7013477613269234,
+    "height": 48.258071972768484,
+    "feasible": false,
+    "violation": 0.8546442549512165
+   },
+   {
+    "d": [
+     -0.3827,
+     0.0,
+     0.9239
+    ],
+    "label": "d=(-0.38,+0.00,+0.92)",
+    "FI": 1.8546442549512165,
+    "support_volume": 1775.75,
+    "support_mass": 2.20193,
+    "total_mass": 5.872527761326923,
+    "height": 48.25807197276846,
+    "feasible": false,
+    "violation": 0.8546442549512165
+   },
+   {
+    "d": [
+     -0.0,
+     0.0,
+     -1.0
+    ],
+    "label": "semelle sur le plateau (debout)",
+    "FI": 1.9558858244987072,
+    "support_volume": 376.0,
+    "support_mass": 0.46624,
+    "total_mass": 4.136837761326923,
+    "height": 37.56912975311279,
+    "feasible": false,
+    "violation": 0.9558858244987072
+   },
+   {
+    "d": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "label": "semelle en haut (crochet t\u00eate en bas)",
+    "FI": 1.9558858244987072,
+    "support_volume": 1731.25,
+    "support_mass": 2.14675,
+    "total_mass": 5.817347761326923,
+    "height": 37.5691297531128,
+    "feasible": false,
+    "violation": 0.9558858244987072
+   }
+  ],
+  "design_load_kg": 6.0,
+  "capacity_kg": 6.8021610106504635,
+  "objective": 4.223947761326923,
+  "feasible": true
+ },
+ "orientation": {
+  "d": [
+   0.0,
+   1.0,
+   0.0
+  ],
+  "label": "\u00e0 plat (plan du crochet sur le plateau)"
+ },
+ "slice": {
+  "gcode": "best_hook_kobra_x.gcode",
+  "orca_total_g": 5.0,
+  "orca_part_only_g": 3.5,
+  "orca_support_g": 1.5,
+  "print_time": "17m 59s",
+  "stats": {
+   "filament_mm": "1676.09",
+   "filament_cm3": "4.03",
+   "filament_g": "5.00",
+   "print_time": "17m 59s",
+   "gcode_flavor": "klipper",
+   "layer_height": "0.2",
+   "wall_loops": "6",
+   "sparse_infill_density": "100%",
+   "lines": 78692
+  }
+ }
+}

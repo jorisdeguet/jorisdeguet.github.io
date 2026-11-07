@@ -1,0 +1,18 @@
+[project]
+name = "strong-gcode-gen"
+version = "0.1.0"
+description = "Générateur de pièces imprimées FDM optimisées en résistance (Kobra X, PLA)"
+requires-python = ">=3.11"
+dependencies = ["numpy>=2.0", "scipy>=1.13", "scikit-fem>=10.0", "scikit-image>=0.24", "trimesh>=4.0", "pyamg>=5.0"]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0"]
+
+[project.scripts]
+sgg = "sgg.cli:main"
+
+[tool.setuptools]
+packages = ["sgg"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
