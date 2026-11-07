@@ -10,6 +10,7 @@ using the GitHub CLI (gh) and Git, styled beautifully with the rich library.
 import os
 import sys
 import re
+import io
 import csv
 import json
 import tempfile
@@ -17,11 +18,11 @@ import shutil
 import unicodedata
 import subprocess
 import concurrent.futures
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Import rich elements for high-fidelity UI
 from rich.console import Console
-from rich.panel import Panel
+from rich.markup import escape
 from rich.table import Table
 from rich.rule import Rule
 from rich.prompt import Prompt, Confirm
@@ -38,13 +39,73 @@ TEXT_EXTENSIONS = {
     ".vb", ".sql", ".sh", ".bat", ".ps1", ".xml", ".json", ".yaml", ".yml",
 }
 
+# Signature copies per file: a formatter or an edited line only erases some of them
+SIGNATURE_COPIES = 5
+
+# Work rhythm report. 10 lines/min is about 60 words/min of non-stop typing with no thinking.
+MAX_LINES_PER_MINUTE = 10
+MIN_BURST_LINES = 50
+BURST_GAP_SECONDS = 10 * 60
+
+# Only hand-written code counts: data and documents can legitimately be pasted in bulk
+RHYTHM_EXTENSIONS = TEXT_EXTENSIONS - {
+    ".txt", ".md", ".rst", ".json", ".xml", ".yaml", ".yml", ".sql",
+}
+GENERATED_PATH = re.compile(
+    r"(?:^|/)(?:bin|obj|node_modules|dist|build|packages|Migrations|\.vs|\.idea)/"
+    r"|\.min\.(?:js|css)$|\.Designer\.cs$|\.g\.(?:i\.)?cs$",
+    re.IGNORECASE
+)
+
+GIT_LOG_FORMAT = "%x1e%H%x1f%P%x1f%ct%x1f%ae%x1f%an%x1f%ce%x1f%cn%x1f%B%x1f"
+
+# Explicit traces only. "Claude" alone is not one: it is also a first name.
+AI_COMMIT_PATTERN = re.compile(
+    r"noreply@anthropic\.com|claude code|claude (?:opus|sonnet|haiku|fable)|claude\[bot\]"
+    r"|copilot\[bot\]|copilot-swe-agent|cursoragent"
+    r"|co-authored-by:[^\n]*(?:copilot|cursor|chatgpt|openai|codex|gemini|aider|devin|windsurf)"
+    r"|generated (?:with|by)[^\n]*(?:chatgpt|copilot|gemini|cursor|codex)"
+    r"|^aider: ",
+    re.IGNORECASE | re.MULTILINE
+)
+AI_FILE_PATTERN = re.compile(
+    r"(?:^|/)(?:CLAUDE\.md|AGENTS\.md|GEMINI\.md|\.cursorrules|\.windsurfrules|\.clinerules"
+    r"|\.aider[^/]*|copilot-instructions\.md)$"
+    r"|(?:^|/)\.(?:claude|cursor|windsurf|continue|codex|roo|cline)/"
+)
+AI_CONTENT_PATTERN = (
+    r"(generated|written) (with|by|using) (chatgpt|copilot|gemini|cursor|claude code)"
+    r"|as an ai (language )?model|en tant qu.(ia|intelligence artificielle)"
+    r"|chatgpt\.com/(share|c/)|claude\.ai/(chat|share)|utm_source=chatgpt|oaicite"
+)
+
 # Regex to match official repository naming convention
 # Pattern: {Session}-{Cours}-{Travail}-{NomFamille}-{Prenom}
 # e.g.: H26-4N6-TP1-DUPONT-MARC
 REPO_NAME_PATTERN = re.compile(
-    r"^([HAE]\d{2})-([A-Z0-9]+)-([A-Z0-9]+)-([A-Z]+)-([A-Z]+)$",
+    r"^([HAE]\d{2})-([A-Z0-9]+)-([A-Z0-9]+)-([A-Z0-9]+)-([A-Z0-9]+)$",
     re.IGNORECASE
 )
+
+# Matches the {Session}-{Cours}-{Travail} part shared by every repo of a TP
+WORK_PREFIX_PATTERN = re.compile(r"^[HAE]\d{2}-[A-Z0-9]+-[A-Z0-9]+(?=-)", re.IGNORECASE)
+
+# `gh repo list` has no "unlimited" option: this is high enough to never be reached
+REPO_LIST_LIMIT = 1_000_000
+
+# Build output and IDE state that must never reach a student repo
+TEMPLATE_IGNORED = (".git", ".idea", ".vs", "bin", "obj")
+
+# Accepted column titles for student lists (CSV and Excel)
+NOM_HEADERS = {"nom", "nom de famille", "lastname", "last name"}
+PRENOM_HEADERS = {"prénom", "prenom", "firstname", "first name", "given name"}
+LOGIN_HEADERS = {"login", "github", "username", "login github"}
+
+# Letters that Unicode decomposition does not reduce to ASCII
+SLUG_TRANSLITERATION = str.maketrans({
+    "Œ": "OE", "œ": "oe", "Æ": "AE", "æ": "ae", "ß": "ss",
+    "Ø": "O", "ø": "o", "Đ": "D", "đ": "d", "Ł": "L", "ł": "l",
+})
 
 
 # ── Slug Helpers ─────────────────────────────────────────────────────────────
@@ -54,10 +115,10 @@ def normalize_slug(s: str) -> str:
     if not s:
         return ""
     # Decompose unicode to separate characters from combining accents/diacritics
-    normalized = unicodedata.normalize('NFKD', s)
+    normalized = unicodedata.normalize('NFKD', s.translate(SLUG_TRANSLITERATION))
     no_accents = "".join([c for c in normalized if not unicodedata.combining(c)])
-    # Keep only alphanumeric characters, uppercase
-    cleaned = "".join([c for c in no_accents if c.isalnum()])
+    # Keep only ASCII alphanumeric characters (GitHub rejects the others), uppercase
+    cleaned = "".join([c for c in no_accents if c.isascii() and c.isalnum()])
     return cleaned.upper()
 
 
@@ -128,7 +189,7 @@ def ensure_gh_scope(scope: str) -> bool:
         if res.returncode == 0 and has_gh_scope(scope):
             return True
     except Exception as ex:
-        console.print(f"[red]Erreur lors du refresh : {ex}[/]")
+        console.print(f"[red]Erreur lors du refresh : {escape(str(ex))}[/]")
         return False
 
     console.print(f"[red]Le scope {scope} n'est toujours pas disponible. Action annulée.[/]")
@@ -147,45 +208,39 @@ def encode_watermark(student_id: str) -> str:
     for b in data_bytes:
         for i in range(7, -1, -1):
             chars.append('\t' if (b & (1 << i)) != 0 else ' ')
+    # End on a tab: two trailing spaces would be a line break in Markdown
+    chars.append('\t')
     return "".join(chars)
 
 
-def decode_watermark(text: str) -> str:
-    """Decode student identifier from space and tab characters."""
+def decode_watermarks(text: str) -> list:
+    """Decode every distinct student identifier hidden in space and tab characters."""
     prefix = "\t \t \t \t "
-    idx = 0
-    while True:
-        idx = text.find(prefix, idx)
-        if idx == -1:
-            break
-        
-        watermark_part = ""
-        for char in text[idx + len(prefix):]:
-            if char in (' ', '\t'):
-                watermark_part += char
-            else:
-                break
-                
-        num_bytes = len(watermark_part) // 8
-        if num_bytes > 0:
-            b_array = bytearray()
-            for i in range(num_bytes):
-                byte_chars = watermark_part[i*8:(i+1)*8]
-                b_val = 0
-                for b_idx, c in enumerate(byte_chars):
-                    if c == '\t':
-                        b_val |= (1 << (7 - b_idx))
-                b_array.append(b_val)
-            
-            try:
-                decoded = b_array.decode('utf-8', errors='ignore').strip()
-                if decoded:
-                    return decoded
-            except Exception:
-                pass
-        
-        idx += len(prefix) + len(watermark_part)
-    return ""
+    signatures = []
+    for match in re.finditer(re.escape(prefix) + r"([ \t]*)", text):
+        bits = match.group(1)
+        b_array = bytearray()
+        for i in range(len(bits) // 8):
+            b_val = 0
+            for b_idx, c in enumerate(bits[i*8:(i+1)*8]):
+                if c == '\t':
+                    b_val |= (1 << (7 - b_idx))
+            b_array.append(b_val)
+
+        decoded = b_array.decode('utf-8', errors='ignore').strip()
+        if decoded and decoded.isprintable() and decoded not in signatures:
+            signatures.append(decoded)
+    return signatures
+
+
+def repo_owner_from_path(file_path: str):
+    """Return the NOMPRENOM slug of the student repo holding a file, or None if not in one."""
+    folders = os.path.dirname(os.path.abspath(file_path)).split(os.sep)
+    for folder in reversed(folders):
+        m = REPO_NAME_PATTERN.match(folder)
+        if m:
+            return (m.group(4) + m.group(5)).upper()
+    return None
 
 
 def is_likely_binary(file_path: str) -> bool:
@@ -198,108 +253,212 @@ def is_likely_binary(file_path: str) -> bool:
         return True
 
 
-def inject_signatures_in_directory(dir_path: str, student_id: str):
-    """Recursively inject invisible steganographic signatures into text files."""
+def signable_lines(lines: list, ext: str) -> list:
+    """Return indexes of lines where trailing whitespace cannot change what the file means."""
+    safe = []
+    in_double_quotes = in_backticks = in_triple_single = False
+    heredoc_end = None
+    yaml_block_indent = None
+
+    for i, line in enumerate(lines):
+        body = line.rstrip('\r')
+        stripped = body.strip()
+        inside_before = in_double_quotes or in_backticks or in_triple_single
+
+        if heredoc_end is not None:
+            if stripped == heredoc_end:
+                heredoc_end = None
+            continue
+        if ext in (".sh", ".rb", ".php"):
+            heredoc = re.search(r"<<[-~<]*\s*['\"]?(\w+)", body)
+            if heredoc:
+                heredoc_end = heredoc.group(1)
+                continue
+
+        if ext in (".yaml", ".yml"):
+            indent = len(body) - len(body.lstrip())
+            if yaml_block_indent is not None:
+                if not stripped or indent > yaml_block_indent:
+                    continue
+                yaml_block_indent = None
+            if re.search(r"(?::|^\s*-)\s+[|>][-+0-9]*\s*$", body):
+                yaml_block_indent = indent
+                continue
+
+        unescaped = re.sub(r"\\.", "", body)
+        if unescaped.count('"') % 2:
+            in_double_quotes = not in_double_quotes
+        if unescaped.count('`') % 2:
+            in_backticks = not in_backticks
+        if unescaped.count("'''") % 2:
+            in_triple_single = not in_triple_single
+        inside_after = in_double_quotes or in_backticks or in_triple_single
+
+        if inside_before or inside_after or not stripped or body != body.rstrip():
+            continue
+        if i == 0 and body.startswith("#!"):
+            continue
+        # Line continuations, and a PHP closing tag whose next bytes are sent to the browser
+        if stripped.endswith(("\\", "^", "`")) or "?>" in body:
+            continue
+        # Trailing whitespace is part of "set X=value", and YAML parsers reject tabs after a value
+        if ext == ".bat" and not re.match(r"\s*(rem\b|::)", body, re.IGNORECASE):
+            continue
+        if ext in (".yaml", ".yml") and not stripped.startswith("#"):
+            continue
+        safe.append(i)
+    return safe
+
+
+def sign_file(path: str, watermark: str) -> bool:
+    """Hide the watermark at the end of several lines. Return False if the file stays unsigned."""
+    if os.path.islink(path):
+        return False
+    with open(path, 'rb') as f:
+        raw = f.read()
+    try:
+        text = raw.decode('utf-8')
+    except UnicodeDecodeError:
+        return False
+
+    # Working on \n only keeps \r\n endings and any BOM exactly as they were
+    lines = text.split('\n')
+    safe = signable_lines(lines, os.path.splitext(path)[1].lower())
+    if not safe:
+        return False
+
+    copies = min(SIGNATURE_COPIES, len(safe))
+    for n in range(copies):
+        i = safe[n * len(safe) // copies]
+        body = lines[i].rstrip('\r')
+        lines[i] = body + watermark + lines[i][len(body):]
+
+    with open(path, 'wb') as f:
+        f.write('\n'.join(lines).encode('utf-8'))
+    return True
+
+
+def inject_signatures_in_directory(dir_path: str, student_id: str) -> list:
+    """Recursively sign text files. Return the relative paths of files left unsigned."""
     watermark = encode_watermark(student_id)
+    unsigned = []
     for root, _, files in os.walk(dir_path):
         for file in files:
             ext = os.path.splitext(file)[1].lower()
             if ext not in TEXT_EXTENSIONS:
                 continue
             full_path = os.path.join(root, file)
-            if is_likely_binary(full_path):
+            if not os.path.islink(full_path) and is_likely_binary(full_path):
                 continue
             try:
-                # Read original contents
-                with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    content = f.read()
-                
-                # Add watermark as the first line of the file, followed by a newline
-                new_content = watermark + '\n' + content
-                
-                with open(full_path, 'w', encoding='utf-8') as f:
-                    f.write(new_content)
+                signed = sign_file(full_path, watermark)
             except Exception:
-                pass
+                signed = False
+            if not signed:
+                unsigned.append(os.path.relpath(full_path, dir_path))
+    return unsigned
 
 
 # ── Student List Loaders ──────────────────────────────────────────────────────
 
+def parse_student_line(line: str):
+    """Parse 'Nom Prénom [@login]' or 'Nom, Prénom[, login]'. Return None if ambiguous."""
+    if ',' in line or ';' in line:
+        parts = [p.strip() for p in re.split(r'[,;]', line)]
+        if len(parts) not in (2, 3) or not parts[0] or not parts[1]:
+            return None
+        login = parts[2] if len(parts) == 3 else ""
+    else:
+        parts = line.split()
+        if len(parts) == 2:
+            login = ""
+        elif len(parts) == 3 and parts[2].startswith("@"):
+            login = parts[2]
+        else:
+            return None
+    login = login.lstrip("@")
+    if any(c.isspace() for c in login):
+        return None
+    return {"nom": parts[0], "prenom": parts[1], "login": login or None}
+
+
 def load_students_interactive() -> list:
     """Manually input students via terminal."""
+    expected = "Nom Prénom \\[@login]  ou  Nom composé, Prénom\\[, login]"
     students = []
     console.print("[dim]Entrer les étudiants (ligne vide pour terminer).[/]")
-    console.print("[dim]Format : NomFamille Prénom [LoginGitHub][/]")
+    console.print(f"[dim]Format : {expected}[/]")
     while True:
         line = input("  > ").strip()
         if not line:
             break
-        parts = line.split(None, 2)
-        if len(parts) < 2:
-            console.print("[yellow]Format attendu : NomFamille Prénom [LoginGitHub][/]")
+        student = parse_student_line(line)
+        if not student:
+            console.print(f"[yellow]Format attendu : {expected}[/]")
             continue
-        login = parts[2] if len(parts) >= 3 else None
-        students.append({"nom": parts[0], "prenom": parts[1], "login": login})
+        students.append(student)
+    return students
+
+
+def parse_header(cells: list):
+    """Return the (nom, prenom, login) column indexes of a header row, or None if it is not one."""
+    lowered = [cell.lower() for cell in cells]
+
+    def find(aliases):
+        return next((i for i, cell in enumerate(lowered) if cell in aliases), None)
+
+    columns = (find(NOM_HEADERS), find(PRENOM_HEADERS), find(LOGIN_HEADERS))
+    return None if columns == (None, None, None) else columns
+
+
+def students_from_rows(rows: list) -> list:
+    """Build students from rows of stripped strings, first row being an optional header."""
+    rows = [row for row in rows if any(row) and not row[0].startswith('#')]
+    if not rows:
+        return []
+
+    columns = parse_header(rows[0])
+    if columns:
+        nom_col, prenom_col, login_col = columns
+        if nom_col is None or prenom_col is None:
+            console.print("[red]✘ L'en-tête doit contenir une colonne Nom et une colonne Prénom.[/]")
+            return []
+        rows = rows[1:]
+    else:
+        # Without a header, a third column could be anything: only names are positional
+        nom_col, prenom_col, login_col = 0, 1, None
+
+    if login_col is None:
+        console.print("[yellow]⚠ Aucune colonne de login reconnue : aucune invitation ne sera envoyée.[/]")
+
+    def cell(row, col):
+        return row[col] if col is not None and col < len(row) else ""
+
+    students = []
+    for row in rows:
+        nom, prenom = cell(row, nom_col), cell(row, prenom_col)
+        if nom and prenom:
+            students.append({"nom": nom, "prenom": prenom, "login": cell(row, login_col) or None})
     return students
 
 
 def load_students_from_csv(file_path: str) -> list:
     """Load and parse students from a CSV file with auto-detected separators."""
-    delim = ','
     try:
-        with open(file_path, 'r', encoding='utf-8-sig') as f:
-            sample = f.read(2048)
-            if ';' in sample:
-                delim = ';'
-    except Exception:
-        pass
-
-    students = []
-    nom_col, prenom_col, login_col = 0, 1, 2
-    header_parsed = False
-
-    try:
-        with open(file_path, 'r', encoding='utf-8-sig') as f:
-            reader = csv.reader(f, delimiter=delim)
-            for row in reader:
-                if not row or (row[0] and row[0].strip().startswith('#')):
-                    continue
-
-                fields = [cell.strip() for cell in row]
-
-                if not header_parsed:
-                    header_parsed = True
-                    looks_like_header = any(
-                        f.lower() in ("nom", "nom de famille", "lastname", "last name",
-                                      "prénom", "prenom", "firstname", "first name",
-                                      "login", "github", "username")
-                        for f in fields
-                    )
-                    if looks_like_header:
-                        for i, h in enumerate(fields):
-                            h_lower = h.lower()
-                            if h_lower in ("nom", "nom de famille", "lastname", "last name"):
-                                nom_col = i
-                            elif h_lower in ("prénom", "prenom", "firstname", "first name"):
-                                prenom_col = i
-                            elif h_lower in ("login", "github", "username"):
-                                login_col = i
-                        continue
-
-                if len(fields) < 2:
-                    continue
-
-                nom = fields[nom_col] if nom_col < len(fields) else ""
-                prenom = fields[prenom_col] if prenom_col < len(fields) else ""
-                login = fields[login_col] if login_col < len(fields) else None
-                if not login:
-                    login = None
-
-                if nom and prenom:
-                    students.append({"nom": nom, "prenom": prenom, "login": login})
+        with open(file_path, 'rb') as f:
+            raw = f.read()
+        try:
+            text = raw.decode('utf-8-sig')
+        except UnicodeDecodeError:
+            # Excel on Windows saves "CSV" files as ANSI
+            text = raw.decode('cp1252', errors='replace')
+        delim = ';' if ';' in text[:2048] else ','
+        reader = csv.reader(io.StringIO(text, newline=''), delimiter=delim)
+        rows = [[cell.strip() for cell in row] for row in reader]
     except Exception as ex:
-        console.print(f"[red]Erreur de lecture du fichier CSV : {ex}[/]")
-    return students
+        console.print(f"[red]Erreur de lecture du fichier CSV : {escape(str(ex))}[/]")
+        return []
+    return students_from_rows(rows)
 
 
 def load_students_from_excel(file_path: str) -> list:
@@ -311,41 +470,19 @@ def load_students_from_excel(file_path: str) -> list:
         console.print("[dim]Veuillez l'installer avec : pip install openpyxl[/]")
         return []
 
-    students = []
     try:
         wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
-        ws = wb.worksheets[0]
-        
-        # Read the first row to determine column indexes
-        headers = []
-        for cell in ws[1]:
-            headers.append((cell.value or "").strip().lower())
-        
-        nom_col = 1
-        prenom_col = 2
-        login_col = -1
-        
-        for i, h in enumerate(headers, 1):
-            if h in ("nom", "nom de famille", "lastname", "last name"):
-                nom_col = i
-            elif h in ("prénom", "prenom", "firstname", "first name", "given name"):
-                prenom_col = i
-            elif h in ("login", "github", "username", "login github"):
-                login_col = i
-        
-        for row in list(ws.iter_rows(min_row=2, values_only=True)):
-            if not any(row):
-                continue
-            nom = str(row[nom_col - 1]).strip() if (nom_col - 1 < len(row) and row[nom_col - 1] is not None) else ""
-            prenom = str(row[prenom_col - 1]).strip() if (prenom_col - 1 < len(row) and row[prenom_col - 1] is not None) else ""
-            login = str(row[login_col - 1]).strip() if (login_col > 0 and login_col - 1 < len(row) and row[login_col - 1] is not None) else None
-            if not login:
-                login = None
-            if nom and prenom:
-                students.append({"nom": nom, "prenom": prenom, "login": login})
+        try:
+            rows = [
+                ["" if cell is None else str(cell).strip() for cell in row]
+                for row in wb.worksheets[0].iter_rows(values_only=True)
+            ]
+        finally:
+            wb.close()
     except Exception as ex:
-        console.print(f"[red]Erreur de lecture du fichier Excel : {ex}[/]")
-    return students
+        console.print(f"[red]Erreur de lecture du fichier Excel : {escape(str(ex))}[/]")
+        return []
+    return students_from_rows(rows)
 
 
 # ── Interactive Helpers ───────────────────────────────────────────────────────
@@ -434,6 +571,11 @@ def prompt_visibility() -> str:
     return "--private" if "🔒" in choice else "--public"
 
 
+def clean_path(path: str) -> str:
+    """Normalize a path typed at a prompt: outer quotes removed, ~ expanded."""
+    return os.path.expanduser(path.strip().strip('"'))
+
+
 def prompt_and_load_students() -> list:
     """Determine the student source and load them."""
     mode = prompt_selection(
@@ -441,13 +583,13 @@ def prompt_and_load_students() -> list:
         ["✏  Saisir interactivement", "📄 Charger un CSV", "📊 Charger un Excel (.xlsx)"]
     )
     if "CSV" in mode:
-        path = Prompt.ask("Chemin du fichier CSV").strip().strip('"')
+        path = clean_path(Prompt.ask("Chemin du fichier CSV"))
         if not os.path.exists(path):
             console.print("[red]✘ Fichier introuvable.[/]")
             return []
         return load_students_from_csv(path)
     if "Excel" in mode:
-        path = Prompt.ask("Chemin du fichier Excel (.xlsx)").strip().strip('"')
+        path = clean_path(Prompt.ask("Chemin du fichier Excel (.xlsx)"))
         if not os.path.exists(path):
             console.print("[red]✘ Fichier introuvable.[/]")
             return []
@@ -467,7 +609,7 @@ def fetch_user_orgs() -> list:
 
 def extract_year(prefix: str) -> str:
     """Try to extract a 2-digit school year (20-35) from the prefix."""
-    m = re.match(r'^[a-zA-Z]?(\d{2})', prefix)
+    m = re.match(r'^[a-zA-Z]?(\d{2})(?!\d)', prefix)
     if not m:
         return ""
     try:
@@ -498,6 +640,12 @@ def detect_work_groups(repos: list) -> list:
     assignment = {}
     for r in repos:
         name = r["name"]
+        # A repo following the convention always belongs to its TP, whatever the student's
+        # name: two DUPONT in a class must not split into their own group.
+        work_prefix = WORK_PREFIX_PATTERN.match(name)
+        if work_prefix:
+            assignment[name] = work_prefix.group(0)
+            continue
         parts = name.split('-')
         best = None
         for length in range(len(parts) - 1, 0, -1):
@@ -552,6 +700,133 @@ def check_repo_commits(r: dict, org: str) -> dict:
     return None
 
 
+# ── Work Rhythm & AI Traces ───────────────────────────────────────────────────
+
+def parse_git_log(text: str) -> list:
+    """Parse the output of `git log` with GIT_LOG_FORMAT and --numstat, oldest commit first."""
+    commits = []
+    for entry in text.split("\x1e")[1:]:
+        fields = entry.split("\x1f")
+        if len(fields) < 9:
+            continue
+        lines, paths = 0, []
+        for row in fields[8].splitlines():
+            parts = row.split("\t")
+            if len(parts) != 3:
+                continue
+            # Renames appear as "src/{a => b}/c.cs"
+            path = parts[2].split(" => ")[-1].replace("}", "")
+            paths.append(path)
+            if parts[0] == "-" or parts[1] == "-":
+                continue
+            if os.path.splitext(path)[1].lower() in RHYTHM_EXTENSIONS and not GENERATED_PATH.search(path):
+                # Net lines: code moved between files adds nothing
+                lines += max(0, int(parts[0]) - int(parts[1]))
+        commits.append({
+            "hash": fields[0].strip(),
+            "parents": fields[1].split(),
+            "time": int(fields[2]),
+            "email": fields[3].strip().lower(),
+            "identity": f"{fields[4]} <{fields[3]}> {fields[5]} <{fields[6]}>",
+            "message": fields[7].strip(),
+            "lines": lines,
+            "paths": paths,
+        })
+    return sorted(commits, key=lambda c: c["time"])
+
+
+def find_bursts(commits: list, teacher_email: str) -> list:
+    """Merge student commits made close together, and measure the time available to write them.
+
+    Students often commit a long session in several quick commits: rating those one by one
+    would be unfair, so a burst is rated against the time since the previous activity.
+    """
+    bursts = []
+    current = None
+    last_activity = None
+    for c in commits:
+        if c["email"] == teacher_email:
+            current = None
+        elif current and c["time"] - current["end"] <= BURST_GAP_SECONDS:
+            current["end"] = c["time"]
+            current["lines"] += c["lines"]
+        else:
+            current = {"since": last_activity, "end": c["time"], "lines": c["lines"]}
+            bursts.append(current)
+        last_activity = c["time"]
+
+    for b in bursts:
+        b["minutes"] = None if b["since"] is None else max(b["end"] - b["since"], 1) / 60
+        b["rate"] = None if b["minutes"] is None else b["lines"] / b["minutes"]
+        b["impossible"] = (
+            b["rate"] is not None
+            and b["lines"] >= MIN_BURST_LINES
+            and b["rate"] > MAX_LINES_PER_MINUTE
+        )
+    return bursts
+
+
+def grep_ai_content(repo_dir: str, rev: str) -> set:
+    """Return (path, text) pairs of the explicit AI mentions found in a revision."""
+    rc, stdout, _ = run_git(repo_dir, "grep", "-I", "-i", "-E", "-e", AI_CONTENT_PATTERN, rev, "--")
+    if rc != 0:
+        return set()
+    found = set()
+    for line in stdout.splitlines():
+        parts = line.split(":", 2)
+        if len(parts) == 3:
+            found.add((parts[1], parts[2].strip()))
+    return found
+
+
+def analyze_repo(repo_dir: str, teacher_email: str) -> dict:
+    """Analyze a local clone: student work rhythm and explicit AI traces."""
+    rc, stdout, stderr = run_git(
+        repo_dir, "-c", "core.quotepath=off", "log", "--all", "--no-merges", "-M",
+        f"--format={GIT_LOG_FORMAT}", "--numstat"
+    )
+    if rc != 0:
+        return {"error": stderr.strip()}
+
+    commits = parse_git_log(stdout)
+    student_commits = [c for c in commits if c["email"] != teacher_email]
+    traces = []
+
+    for c in student_commits:
+        if AI_COMMIT_PATTERN.search(f"{c['message']}\n{c['identity']}"):
+            subject = c["message"].splitlines()[0] if c["message"] else ""
+            traces.append(f"Commit : {subject[:70]}")
+
+    ai_files = {p for c in student_commits for p in c["paths"] if AI_FILE_PATTERN.search(p)}
+    traces.extend(f"Fichier : {p}" for p in sorted(ai_files))
+
+    mentions = grep_ai_content(repo_dir, "HEAD")
+    seed = next((c for c in commits if c["email"] == teacher_email and not c["parents"]), None)
+    if seed and mentions:
+        mentions -= grep_ai_content(repo_dir, seed["hash"])
+    traces.extend(f"Contenu : {path} : {text[:70]}" for path, text in sorted(mentions))
+
+    bursts = find_bursts(commits, teacher_email)
+    rated = [b for b in bursts if b["rate"] is not None and b["lines"] >= MIN_BURST_LINES]
+    return {
+        "commits": len(student_commits),
+        "lines": sum(c["lines"] for c in student_commits),
+        "fastest": max(rated, key=lambda b: b["rate"]) if rated else None,
+        "impossible": sum(1 for b in bursts if b["impossible"]),
+        "traces": traces,
+    }
+
+
+def find_local_repos(path: str) -> list:
+    """Return the git repos directly inside a folder, or the folder itself if it is one."""
+    if os.path.exists(os.path.join(path, ".git")):
+        return [path]
+    return sorted(
+        os.path.join(path, d) for d in os.listdir(path)
+        if os.path.exists(os.path.join(path, d, ".git"))
+    )
+
+
 # ── Git Classroom Application Class ───────────────────────────────────────────
 
 class GitClassroomApp:
@@ -583,9 +858,11 @@ class GitClassroomApp:
 
     def fetch_org_repos(self, org: str) -> list:
         """Fetch all repositories within the target organization."""
-        rc, stdout, stderr = run_gh("repo", "list", org, "--json", "name,createdAt", "--limit", "1000")
+        rc, stdout, stderr = run_gh(
+            "repo", "list", org, "--json", "name,createdAt", "--limit", str(REPO_LIST_LIMIT)
+        )
         if rc != 0:
-            console.print(f"[red]✘ gh repo list : {stderr.strip()}[/]")
+            console.print(f"[red]✘ gh repo list : {escape(stderr.strip())}[/]")
             return []
         try:
             return json.loads(stdout)
@@ -600,12 +877,12 @@ class GitClassroomApp:
             "-X", "PUT", "-f", "permission=push"
         )
         if rc == 0:
-            console.print(f"  [green]✔ Collaborateur invité : {login}[/]")
+            console.print(f"  [green]✔ Collaborateur invité : {escape(login)}[/]")
         else:
-            console.print(f"  [yellow]⚠ Invitation échouée ({login}) : {stderr.strip()}[/]")
+            console.print(f"  [yellow]⚠ Invitation échouée ({escape(login)}) : {escape(stderr.strip())}[/]")
 
-    def seed_repo(self, org: str, repo_name: str, template_dir: str, hide_signature: bool, student_id: str):
-        """Seed a repo with files, optional local template directory, and/or invisible signatures."""
+    def seed_repo(self, org: str, repo_name: str, template_dir: str, hide_signature: bool, student_id: str) -> bool:
+        """Seed a repo from a local template, with optional invisible signatures. Return True once pushed."""
         tmp_dir = tempfile.mkdtemp(prefix=f"git_{repo_name}_")
         try:
             if template_dir:
@@ -613,30 +890,38 @@ class GitClassroomApp:
                     for item in os.listdir(template_dir):
                         s = os.path.join(template_dir, item)
                         d = os.path.join(tmp_dir, item)
-                        if item == ".git":
+                        if item in TEMPLATE_IGNORED:
                             continue
                         if os.path.isdir(s):
-                            shutil.copytree(s, d, symlinks=True, ignore=shutil.ignore_patterns(".git", ".idea", ".vs", "bin", "obj"))
+                            shutil.copytree(s, d, symlinks=True, ignore=shutil.ignore_patterns(*TEMPLATE_IGNORED))
                         else:
                             shutil.copy2(s, d)
                 except Exception as ex:
-                    console.print(f"[yellow]  ⚠ Erreur de copie du modèle : {ex}[/]")
-            
+                    # Never push a partial template to a student
+                    console.print(f"[yellow]  ⚠ Erreur de copie du modèle : {escape(str(ex))}[/]")
+                    return False
+
             if hide_signature:
-                inject_signatures_in_directory(tmp_dir, student_id)
+                unsigned = inject_signatures_in_directory(tmp_dir, student_id)
+                if unsigned:
+                    console.print(f"[dim]  {len(unsigned)} fichier(s) non signé(s) : {escape(', '.join(sorted(unsigned)))}[/]")
                 
             repo_url = f"https://github.com/{org}/{repo_name}.git"
             run_git(tmp_dir, "init")
             run_git(tmp_dir, "branch", "-M", "main")
             run_git(tmp_dir, "remote", "add", "origin", repo_url)
             run_git(tmp_dir, "add", ".")
-            rc, _, stderr = run_git(tmp_dir, "commit", "-m", "Initial commit")
+            rc, stdout, stderr = run_git(tmp_dir, "commit", "-m", "Initial commit")
             if rc != 0:
-                console.print(f"[yellow]  ⚠ Commit échoué pour {repo_name}: {stderr.strip()}[/]")
-                return
+                # git explains "nothing to commit" on stdout
+                reason = stderr.strip() or stdout.strip()
+                console.print(f"[yellow]  ⚠ Commit échoué pour {repo_name}: {escape(reason)}[/]")
+                return False
             rc, _, stderr = run_git(tmp_dir, "push", "-u", "origin", "main")
             if rc != 0:
-                console.print(f"[yellow]  ⚠ Push échoué pour {repo_name}: {stderr.strip()}[/]")
+                console.print(f"[yellow]  ⚠ Push échoué pour {repo_name}: {escape(stderr.strip())}[/]")
+                return False
+            return True
         finally:
             try:
                 shutil.rmtree(tmp_dir)
@@ -669,9 +954,9 @@ class GitClassroomApp:
             if not line_str:
                 continue
             if rc != 0:
-                console.print(f"[red]  {line_str}[/]")
+                console.print(f"[red]  {escape(line_str)}[/]")
             else:
-                console.print(f"[green]  {line_str}[/]")
+                console.print(f"[green]  {escape(line_str)}[/]")
 
     def tester_creation_repo(self):
         """Test creating a single repository."""
@@ -679,7 +964,7 @@ class GitClassroomApp:
         console.print()
         
         org = self.get_or_prompt_org()
-        default_name = f"TEST-{datetime.utcnow().strftime('%Y%m%d%H%M')}"
+        default_name = f"TEST-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M')}"
         
         repo_name = Prompt.ask("Nom du repo de test", default=default_name).strip()
         visibility = prompt_visibility()
@@ -695,13 +980,15 @@ class GitClassroomApp:
                 self.invite_collaborateur(org, repo_name, collaborateur)
                 
             if Confirm.ask("Supprimer ce repo de test maintenant ?", default=True):
+                if not ensure_gh_scope("delete_repo"):
+                    return
                 rc2, _, stderr2 = run_gh("repo", "delete", f"{org}/{repo_name}", "--yes")
                 if rc2 == 0:
                     console.print("[green]✔ Repo supprimé.[/]")
                 else:
-                    console.print(f"[red]✘ Erreur suppression : {stderr2.strip()}[/]")
+                    console.print(f"[red]✘ Erreur suppression : {escape(stderr2.strip())}[/]")
         else:
-            console.print(f"[red]✘ Échec de création : {stderr.strip()}[/]")
+            console.print(f"[red]✘ Échec de création : {escape(stderr.strip())}[/]")
 
     def creer_repos_etudiants(self):
         """Create a collection of repositories for students in the organization."""
@@ -719,13 +1006,16 @@ class GitClassroomApp:
         template_dir = None
         if use_template:
             while True:
-                template_dir = Prompt.ask("Chemin du dossier local contenant le modèle").strip().strip('"')
+                template_dir = clean_path(Prompt.ask("Chemin du dossier local contenant le modèle"))
                 if os.path.exists(template_dir) and os.path.isdir(template_dir):
                     break
-                console.print(f"[red]✘ Dossier introuvable ou invalide : {template_dir}[/]")
-            
-        hide_signature = Confirm.ask("Cacher une signature stéganographique dans les fichiers ?", default=False)
-        
+                console.print(f"[red]✘ Dossier introuvable ou invalide : {escape(template_dir)}[/]")
+
+        # Signatures live inside the template's files: without a template there is nothing to sign
+        hide_signature = use_template and Confirm.ask(
+            "Cacher une signature stéganographique dans les fichiers ?", default=False
+        )
+
         students = prompt_and_load_students()
         if not students:
             console.print("[yellow]⚠ Aucun étudiant chargé.[/]")
@@ -745,8 +1035,8 @@ class GitClassroomApp:
             name = build_repo_name(session, cours, travail, e["nom"], e["prenom"])
             preview.add_row(
                 name,
-                f"{e['nom']} {e['prenom']}",
-                f"[dim]{e['login']}[/]" if e["login"] else "[dim]–[/]"
+                escape(f"{e['nom']} {e['prenom']}"),
+                f"[dim]{escape(e['login'])}[/]" if e["login"] else "[dim]–[/]"
             )
         console.print(preview)
         
@@ -768,15 +1058,19 @@ class GitClassroomApp:
                 
                 rc, _, stderr = run_gh("repo", "create", f"{org}/{repo_name}", visibility)
                 if rc != 0:
-                    console.print(f"[red]  ✘ {repo_name} : {stderr.strip()}[/]")
+                    console.print(f"[red]  ✘ {repo_name} : {escape(stderr.strip())}[/]")
                     failed += 1
                     progress.advance(task, 1)
                     continue
                     
-                if use_template or hide_signature:
+                if use_template:
                     student_id = f"{e['nom']},{e['prenom']}"
-                    self.seed_repo(org, repo_name, template_dir, hide_signature, student_id)
-                    
+                    if not self.seed_repo(org, repo_name, template_dir, hide_signature, student_id):
+                        console.print(f"[red]  ✘ {repo_name} : repo créé mais vide, invitation non envoyée.[/]")
+                        failed += 1
+                        progress.advance(task, 1)
+                        continue
+
                 if e["login"]:
                     self.invite_collaborateur(org, repo_name, e["login"])
                     
@@ -882,11 +1176,10 @@ class GitClassroomApp:
             console.print("[yellow]Aucun repo trouvé pour ce préfixe.[/]")
             return
             
-        dest_dir = Prompt.ask("Dossier de destination", default=os.getcwd()).strip().strip('"')
-        if not os.path.exists(dest_dir):
-            os.makedirs(dest_dir)
-            
-        console.print(f"[cyan]{len(to_clone)} repo(s) → {dest_dir}[/]")
+        dest_dir = clean_path(Prompt.ask("Dossier de destination", default=os.getcwd()))
+        os.makedirs(dest_dir, exist_ok=True)
+
+        console.print(f"[cyan]{len(to_clone)} repo(s) → {escape(dest_dir)}[/]")
         if not Confirm.ask("Confirmer ?", default=True):
             return
             
@@ -912,7 +1205,7 @@ class GitClassroomApp:
                     ok += 1
                 else:
                     failed += 1
-                    console.print(f"[red]  ✘ {name}: {stderr.strip()}[/]")
+                    console.print(f"[red]  ✘ {name}: {escape(stderr.strip())}[/]")
                 progress.advance(task, 1)
                 
         console.print()
@@ -1010,9 +1303,9 @@ class GitClassroomApp:
             
         console.print(table)
 
-    def supprimer_anciens(self):
-        """Find, select and delete repositories older than 1 year."""
-        console.print(Rule("[cyan]Supprimer les repos anciens (> 1 an)[/]", style="cyan"))
+    def supprimer_repos(self):
+        """Select and delete repositories of the organization, oldest listed first."""
+        console.print(Rule("[cyan]Supprimer des repos[/]", style="cyan"))
         console.print()
         
         org = self.get_or_prompt_org()
@@ -1045,9 +1338,12 @@ class GitClassroomApp:
             return
             
         to_delete_names = [s.split(' ')[0] for s in selected]
-        
+
         console.print()
-        console.print(f"[red bold]⚠  {len(to_delete_names)} repo(s) seront supprimés définitivement.[/]")
+        for s in selected:
+            console.print(f"[red]  • {escape(s)}[/]")
+        console.print()
+        console.print(f"[red bold]⚠  Ces {len(to_delete_names)} repo(s) seront supprimés définitivement.[/]")
         console.print("[red]Cette action est irréversible.[/]")
         console.print()
         
@@ -1075,7 +1371,7 @@ class GitClassroomApp:
                     ok += 1
                 else:
                     failed += 1
-                    console.print(f"[red]  ✘ {name}: {stderr.strip()}[/]")
+                    console.print(f"[red]  ✘ {name}: {escape(stderr.strip())}[/]")
                 progress.advance(task, 1)
                 
         console.print()
@@ -1089,9 +1385,9 @@ class GitClassroomApp:
         console.print(Rule("[cyan]Détecter les signatures stéganographiques[/]", style="cyan"))
         console.print()
         
-        path_to_scan = Prompt.ask("Dossier à analyser", default=os.getcwd()).strip().strip('"')
+        path_to_scan = clean_path(Prompt.ask("Dossier à analyser", default=os.getcwd()))
         if not os.path.exists(path_to_scan):
-            console.print(f"[red]✘ Dossier introuvable : {path_to_scan}[/]")
+            console.print(f"[red]✘ Dossier introuvable : {escape(path_to_scan)}[/]")
             return
             
         console.print("[dim]Analyse en cours...[/]")
@@ -1108,13 +1404,13 @@ class GitClassroomApp:
                 try:
                     with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
                         content = f.read()
-                    sig = decode_watermark(content)
-                    if sig:
+                    signatures = decode_watermarks(content)
+                    if signatures:
                         rel_path = os.path.relpath(full_path, path_to_scan)
                         findings.append({
                             "file": file,
                             "rel_path": rel_path,
-                            "signature": sig,
+                            "signatures": signatures,
                             "full_path": full_path
                         })
                 except Exception:
@@ -1135,28 +1431,93 @@ class GitClassroomApp:
         table.add_column("Statut / Alerte")
         
         for f in findings:
-            sig_parts = [part.strip().lower() for part in f["signature"].split(",")]
-            path_lower = f["rel_path"].lower()
-            
-            match_found = False
-            for part in sig_parts:
-                normalized_part = normalize_slug(part).lower()
-                if normalized_part and (normalized_part in path_lower or part in path_lower):
-                    match_found = True
-                    break
-            
-            status = "[green]OK[/]"
-            if not match_found and any(x in path_lower for x in ["-", "_"]):
+            owner = repo_owner_from_path(f["full_path"])
+            if owner is None:
+                status = "[dim]? Repo non reconnu[/]"
+            elif all(normalize_slug(sig) == owner for sig in f["signatures"]):
+                status = "[green]OK[/]"
+            else:
                 status = "[bold red]⚠ Discordance / Copie suspectée ![/]"
-                
+
             table.add_row(
-                f["file"],
-                f"[bold cyan]{f['signature']}[/]",
-                f["rel_path"],
+                escape(f["file"]),
+                f"[bold cyan]{escape(' + '.join(f['signatures']))}[/]",
+                escape(f["rel_path"]),
                 status
             )
             
         console.print(table)
+
+    def analyser_rythme(self):
+        """Report impossible work rhythms and explicit AI traces in locally cloned repos."""
+        console.print(Rule("[cyan]Rythme de travail et traces d'IA[/]", style="cyan"))
+        console.print()
+
+        path = clean_path(Prompt.ask("Dossier des repos clonés", default=os.getcwd()))
+        if not os.path.isdir(path):
+            console.print(f"[red]✘ Dossier introuvable : {escape(path)}[/]")
+            return
+
+        repos = find_local_repos(path)
+        if not repos:
+            console.print("[yellow]Aucun repo git trouvé dans ce dossier.[/]")
+            return
+
+        _, stdout, _ = run_git(path, "config", "user.email")
+        teacher_email = Prompt.ask(
+            "Courriel git de l'enseignant (ses commits sont ignorés)", default=stdout.strip()
+        ).strip().lower()
+
+        table = Table(
+            title=f"[cyan]{len(repos)} repo(s) analysé(s)[/]",
+            show_header=True,
+            header_style="bold"
+        )
+        table.add_column("Repo")
+        table.add_column("Commits", justify="right")
+        table.add_column("Lignes", justify="right")
+        table.add_column("Rythme max")
+        table.add_column("Signal")
+
+        details = []
+        for repo_dir in repos:
+            name = os.path.basename(os.path.abspath(repo_dir))
+            report = analyze_repo(repo_dir, teacher_email)
+            if "error" in report:
+                table.add_row(escape(name), "", "", "", f"[red]{escape(report['error'])}[/]")
+                continue
+
+            fastest = report["fastest"]
+            rhythm = "[dim]–[/]"
+            if fastest:
+                rhythm = f"{fastest['lines']} lignes en {fastest['minutes']:.0f} min ({fastest['rate']:.0f}/min)"
+
+            signals = []
+            if report["impossible"]:
+                signals.append(f"[bold red]{report['impossible']} rafale(s) impossible(s) à la frappe[/]")
+            if report["traces"]:
+                signals.append(f"[bold red]{len(report['traces'])} trace(s) d'IA[/]")
+                details.append((name, report["traces"]))
+
+            table.add_row(
+                escape(name),
+                str(report["commits"]),
+                str(report["lines"]),
+                rhythm,
+                " · ".join(signals) if signals else "[dim]–[/]"
+            )
+
+        console.print(table)
+        for name, traces in details:
+            console.print(f"\n[bold]{escape(name)}[/]")
+            for trace in traces:
+                console.print(f"  • {escape(trace)}")
+
+        console.print()
+        console.print(f"[dim]Impossible : plus de {MAX_LINES_PER_MINUTE} lignes/min sur au moins "
+                      f"{MIN_BURST_LINES} lignes. Du code collé ou écrit hors du repo donne le même résultat.[/]")
+        console.print("[dim]Ce sont des sujets à aborder à l'oral, pas des preuves. "
+                      "L'absence de signal ne prouve rien non plus.[/]")
 
     def run(self):
         """Submenu execution loop."""
@@ -1177,8 +1538,9 @@ class GitClassroomApp:
                     "📋 Lister les repos",
                     "📥 Cloner les repos d'un TP",
                     "💬 Repos avec commits étudiants",
-                    "🗑  Supprimer les repos anciens (> 1 an)",
+                    "🗑  Supprimer des repos",
                     "🕵️  Détecter les signatures stéganographiques",
+                    "⏱  Rythme de travail et traces d'IA",
                     retour
                 ]
             )
@@ -1199,9 +1561,11 @@ class GitClassroomApp:
             elif "commits" in choice:
                 self.lister_repos_avec_commits()
             elif "Supprimer" in choice:
-                self.supprimer_anciens()
+                self.supprimer_repos()
             elif "signatures" in choice:
                 self.detecter_signatures()
+            elif "Rythme" in choice:
+                self.analyser_rythme()
                 
             console.print("\n[dim]Appuyez sur Entrée pour revenir au menu principal...[/]")
             input()
