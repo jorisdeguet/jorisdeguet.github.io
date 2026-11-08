@@ -18,7 +18,7 @@ index  = 0;   // pour part = "bloc" (n° du bloc dans horaire) ou "statut" (0..3
 tuile  = 0;   // pour part = "tuile" (0 = bas, 1 = haut)
 
 /* [Conception] */
-fixation   = "tasseau";   // "tasseau" (accroche à 45°, par gravité) | "plots"
+fixation   = "tasseau";   // "tasseau" (lèvre pleine largeur) | "pions" (2 crochets par côté) | "plots"
 base_style = "grille";    // "grille" (ajourée, économe) | "pleine"
 
 /* [Prof] */

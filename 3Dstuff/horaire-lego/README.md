@@ -48,6 +48,17 @@ retire d'abord celui du haut (il faut 2 mm de jeu au-dessus d'un bloc pour
 le soulever). La bosse « Trou horaire » est en retrait de 3 mm exprès pour
 laisser soulever le bloc qui la suit.
 
+`fixation = "pions"` — **variante plus épurée** : même accroche à 45°, mais
+au lieu d'une lèvre sur toute la largeur, **deux petits crochets de 4 mm**
+par demi-heure, un de chaque côté de la journée, portés par les montants.
+En base grille, il n'y a plus de traverses : chaque journée est une colonne
+vide encadrée de deux montants, les jours se lisent beaucoup mieux (et la
+base utilise encore moins de plastique). Le dos des blocs a deux courtes
+rainures par demi-heure, qui centrent aussi le bloc dans sa journée. La
+case du trou horaire reste pleine sous la bosse.
+
+![Variante à crochets](apercu_pions.png)
+
 `fixation = "plots"` — plots Ø 5 mm et douilles (géométrie originale, pas
 LEGO), `plots_cols = [1, 2]` = une paire de plots par demi-heure.
 
@@ -204,7 +215,7 @@ trou horaire.
 | `jeu_poche` | 0,15 / côté | plaquette dans sa poche | augmenter | diminuer |
 | `eclisse_jeu` | 0,3 | éclisse dans sa poche | augmenter | diminuer |
 
-En mode tasseau, le coupon est un bout de base (1 journée × 2 h, dans le
+En mode tasseau ou pions, le coupon est un bout de base (1 journée × 2 h, dans le
 style `base_style`) et 4 blocs d'une heure marqués `15 25 35 45` (jeu en
 centièmes de mm) ; en mode plots, une base 4 × 2 plots et 5 blocs. Plus une
 poche + plaquette. Reporter les valeurs retenues dans votre `horaire.scad`
@@ -221,8 +232,8 @@ poche + plaquette. Reporter les valeurs retenues dans votre `horaire.scad`
 
 ## Paramètres principaux (dans `horaire_lego.scad`)
 
-- Fixation : `fixation` (`"tasseau"` / `"plots"`), `tas_t`, `tas_h`,
-  `jeu_tasseau`, `tas_retrait` ; plots : `plot_d`, `plot_h`, `jeu_plot`,
+- Fixation : `fixation` (`"tasseau"` / `"pions"` / `"plots"`), `tas_t`, `tas_h`,
+  `jeu_tasseau`, `tas_retrait` ; pions : `pion_l`, `pion_marge`, `pion_appui` ; plots : `plot_d`, `plot_h`, `jeu_plot`,
   `plots_cols`.
 - Base : `base_style` (`"grille"` / `"pleine"`), `base_e`, `montant_l`.
 - Grille : `pas` (10), `jour_l` (4), `heure_debut`/`heure_fin` (8/20),

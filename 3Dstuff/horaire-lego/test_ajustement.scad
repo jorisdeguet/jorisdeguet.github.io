@@ -2,7 +2,7 @@
 //  test_ajustement.scad — Coupon de réglage des jeux (≈ 20 min d'impression)
 //
 //  Suit le réglage `fixation` de horaire_lego.scad (ou redéfini ci-dessous) :
-//   • tasseau : un bout de base (1 journée × 4 demi-heures, style `base_style`)
+//   • tasseau / pions : un bout de base (1 journée × 4 demi-heures, style `base_style`)
 //     et 4 blocs d'une heure avec des jeux lèvre/rainure différents.
 //   • plots   : une petite base 4 × 2 plots et 5 blocs 2 × 2.
 //  Le jeu est gravé sur chaque bloc en centièmes de mm (« 30 » = 0,30 mm).
@@ -19,19 +19,23 @@ jeux_plot    = [-0.10, 0.00, 0.10, 0.20, 0.30];
 module etiquette(v, s = 3.5) linear_extrude(texte_h + 0.01)
     text(str(round(v * 100)), size = s, font = police, halign = "center", valign = "center");
 
-if (fixation == "tasseau") {
+if (fixation != "plots") {
     // Bout de base : 1 journée × 4 rangées, cadre de 5 mm
-    nr = 4; m = 5; lz = jour_l * pas;
+    nr = 4; m = 5; lz = jour_l * pas; md = montant_demi();
     difference() {
         linear_extrude(base_e) rrect(lz + 2 * m, nr * pas + 2 * m, 2);
         if (base_style == "grille")
-            translate([m + montant_l / 2, m, -1]) cube([lz - montant_l, nr * pas, base_e + 2]);
+            translate([m + md, m, -1]) cube([lz - 2 * md, nr * pas, base_e + 2]);
     }
     for (j = [0 : nr - 1]) {
-        if (base_style == "grille")
+        if (base_style == "grille" && fixation == "tasseau")
             translate([m, m + j * pas + tas_y0(), 0]) cube([lz, tas_t, base_e]);
-        translate([m + tas_retrait / 2, m + j * pas + tas_y0(), base_e - 0.01])
-            levre(lz - tas_retrait);
+        if (fixation == "tasseau")
+            translate([m + tas_retrait / 2, m + j * pas + tas_y0(), base_e - 0.01])
+                levre(lz - tas_retrait);
+        else
+            for (x = pions_x(jour_l))
+                translate([m + x, m + j * pas + tas_y0(), base_e - 0.01]) levre(pion_l);
     }
     // Blocs d'une heure
     for (k = [0 : len(jeux_tasseau) - 1])

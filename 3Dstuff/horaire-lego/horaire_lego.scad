@@ -15,6 +15,9 @@
 //        blocs a des rainures assorties : on pose le bloc 2 mm trop haut, on
 //        le plaque contre la base et on le laisse descendre ; la gravité le
 //        tire contre la porte. Rien à forcer, rien qui s'use.
+//    "pions" : comme "tasseau", mais seulement deux petits crochets de
+//        chaque côté de la journée (sur les montants) : le milieu des
+//        colonnes reste vide, les jours se lisent mieux.
 //    "plots" : plots Ø5 mm et douilles (géométrie originale, pas LEGO).
 //  Base au choix (`base_style`) : "grille" (ajourée : cadre, montants entre
 //  les jours, une traverse par demi-heure) ou "pleine".
@@ -47,7 +50,7 @@ plots_cols    = [1, 2]; // (plots) colonnes d'une journée (0 … jour_l-1) qui 
                         //   [0,1,2,3] = toutes ; [1,2] = paire centrale, plus sobre
 
 // ── Fixation et style de base ───────────────────────────────────────────────
-fixation      = "tasseau"; // "tasseau" | "plots"
+fixation      = "tasseau"; // "tasseau" | "pions" | "plots"
 base_style    = "grille";  // "grille" (ajourée, économe en plastique) | "pleine"
 tas_t         = 2.5;    // épaisseur de la lèvre à sa racine (mm, dans le sens de Y)
 tas_h         = 2.0;    // saillie de la lèvre (et profondeur d'accrochage)
@@ -55,6 +58,9 @@ jeu_tasseau   = 0.3;    // jeu entre lèvre et rainure (régler avec test_ajuste
 tas_retrait   = 10;     // lèvre plus courte que le bloc de cette valeur (centrage gauche-droite)
 tas_jeu_lat   = 0.4;    // jeu gauche-droite de la rainure autour de la lèvre
 montant_l     = 5;      // (grille) largeur des montants entre les jours
+pion_l        = 4;      // (pions) longueur d'un crochet
+pion_marge    = 2;      // (pions) distance entre le bord de la journée et le crochet
+pion_appui    = 1;      // (pions, grille) montant qui dépasse derrière le crochet
 $fn           = 32;
 
 // ── Plaque de base ───────────────────────────────────────────────────────────
@@ -166,6 +172,12 @@ function statut_x0()  = W() - marge - statut_cols * pas;
 function statut_y0()  = y_tete_bas() + (tete_h - statut_rangees) / 2 * pas;
 
 // Tasseau : hauteur de la rainure et position de la lèvre dans sa rangée.
+// Pions : position x des deux crochets dans une zone de nx pas (depuis son bord gauche).
+function pions_x(nx)  = [pion_marge, nx * pas - pion_marge - pion_l];
+// Grille : demi-largeur des montants (retrait des fenêtres).
+function montant_demi() = fixation == "pions" ? pion_marge + pion_l + pion_appui : montant_l / 2;
+function a_crochets() = fixation == "tasseau" || fixation == "pions";
+
 function tas_vide_h() = 2 * tas_h + tas_t + 4 * jeu_tasseau;
 function tas_y0()     = (pas - tas_vide_h()) / 2 + tas_h + 2 * jeu_tasseau;
 
@@ -245,6 +257,7 @@ module rainure(l, jeu = jeu_tasseau) {
 // Plaque nx × ny pas avec sa fixation au dos (origine au coin bas-gauche).
 //   plots   : douilles aux colonnes `cols` et rangées `rangs` (toutes par défaut)
 //   tasseau : une rainure par rangée
+//   pions   : deux courtes rainures par rangée, une de chaque côté
 module plaque_fixee(nx, ny, h, r = bloc_r, cols = undef, rangs = undef, jeu = undef) {
     cs = cols  == undef ? [for (i = [0 : nx - 1]) i] : cols;
     rs = rangs == undef ? [for (j = [0 : ny - 1]) j] : rangs;
@@ -255,6 +268,10 @@ module plaque_fixee(nx, ny, h, r = bloc_r, cols = undef, rangs = undef, jeu = un
             for (i = cs, j = rs)
                 translate([(i + 0.5) * pas - jeu_bloc / 2, (j + 0.5) * pas - jeu_bloc / 2, 0])
                     douille(jeu == undef ? jeu_plot : jeu);
+        } else if (fixation == "pions") {
+            for (j = [0 : ny - 1], x = pions_x(nx))
+                translate([x - jeu_bloc / 2 - tas_jeu_lat, j * pas + tas_y0() - jeu_bloc / 2, 0])
+                    rainure(pion_l + 2 * tas_jeu_lat, jeu == undef ? jeu_tasseau : jeu);
         } else {
             lv = nx * pas - tas_retrait + 2 * tas_jeu_lat;
             for (j = [0 : ny - 1])
@@ -310,7 +327,7 @@ function zones() = [
 // Rangée j d'une zone (j = 0 en bas) : est-ce qu'elle porte une fixation ?
 function rang_ok(z, j) = let(r = nb_demi() - 1 - j)
     !(z[6] >= 0 && dans_trou(z[6], r))
-    && (fixation == "tasseau" ? true
+    && (a_crochets() ? true
         : z[5] == undef ? true
         : len([for (k = z[5]) if (k == j) k]) > 0);
 
@@ -322,6 +339,9 @@ module attaches_base(y0 = -1e9, y1 = 1e9) {
             if (fixation == "tasseau")
                 translate([z[0] + tas_retrait / 2, yb + tas_y0(), base_e - 0.01])
                     levre(z[1] * pas - tas_retrait);
+            else if (fixation == "pions")
+                for (x = pions_x(z[1]))
+                    translate([z[0] + x, yb + tas_y0(), base_e - 0.01]) levre(pion_l);
             else
                 for (c = z[4])
                     translate([z[0] + (c + 0.5) * pas, yb + pas / 2, base_e]) plot();
@@ -330,7 +350,7 @@ module attaches_base(y0 = -1e9, y1 = 1e9) {
 }
 
 // Ossature : plaque pleine, ou grille = plaque ajourée + une traverse par rangée.
-function traverse_y() = fixation == "tasseau"
+function traverse_y() = a_crochets()
     ? [tas_y0(), tas_t]
     : [pas / 2 - plot_d / 2 - 1, plot_d + 2];
 
@@ -338,16 +358,26 @@ module ossature() {
     if (base_style == "pleine")
         linear_extrude(base_e) rrect(W(), H(), coin_r);
     else {
+        m = montant_demi();
         difference() {
             linear_extrude(base_e) rrect(W(), H(), coin_r);
-            for (z = zones())
-                translate([z[0] + montant_l / 2, z[2], -1])
-                    cube([z[1] * pas - montant_l, z[3] * pas, base_e + 2]);
+            difference() {
+                for (z = zones())
+                    translate([z[0] + m, z[2], -1])
+                        cube([z[1] * pas - 2 * m, z[3] * pas, base_e + 2]);
+                // la case du trou horaire reste pleine (elle porte la bosse)
+                if (trou_actif)
+                    translate([x_jour(trou_jour), y_trou_bas(), -2])
+                        cube([jour_l * pas, trou_duree * 2 * pas, base_e + 4]);
+            }
         }
-        ty = traverse_y();
-        for (z = zones(), j = [0 : z[3] - 1])
-            translate([z[0], z[2] + j * pas + ty[0], 0])
-                cube([z[1] * pas, ty[1], base_e]);
+        // traverses (pas en mode pions : les crochets sont sur les montants)
+        if (fixation != "pions") {
+            ty = traverse_y();
+            for (z = zones(), j = [0 : z[3] - 1])
+                translate([z[0], z[2] + j * pas + ty[0], 0])
+                    cube([z[1] * pas, ty[1], base_e]);
+        }
     }
 }
 
@@ -560,13 +590,13 @@ module infos() {
     echo(str("Plaque de base : ", W(), " × ", H(), " mm, ", nb_tuiles(), " tuile(s)"));
     for (k = [0 : len(cs) - 2])
         echo(str("  tuile ", k, " : y ", cs[k], " → ", cs[k + 1], "  (", W(), " × ", cs[k + 1] - cs[k], " mm)"));
-    relief = fixation == "tasseau" ? tas_h : plot_h;
+    relief = a_crochets() ? tas_h : plot_h;
     echo(str("Base : ", base_style, ", fixation : ", fixation));
     echo(str("Pauses couleur base : Z=", base_e, " (texte), Z=", base_e + texte_h,
              " (retour), Z=", base_e + trou_bosse, " (texte du trou horaire)"));
     if (trou_bosse < relief)
         echo("ATTENTION : trou_bosse < relief des fixations, la 3e pause colorera leur sommet");
-    if (fixation == "tasseau")
+    if (a_crochets())
         assert(tas_vide_h() < pas - 1.5, "Rainure trop haute pour le pas : réduire tas_t / tas_h");
     echo(str("Pause couleur blocs et statuts : Z=", bloc_h, " ; plaque nom : Z=", plaque_h,
              " ; plaquettes : Z=", plaquette_e));
