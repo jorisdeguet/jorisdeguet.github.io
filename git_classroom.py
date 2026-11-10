@@ -10,8 +10,6 @@ using the GitHub CLI (gh) and Git, styled beautifully with the rich library.
 import os
 import sys
 import re
-import io
-import csv
 import json
 import tempfile
 import shutil
@@ -79,10 +77,15 @@ AI_CONTENT_PATTERN = (
     r"|chatgpt\.com/(share|c/)|claude\.ai/(chat|share)|utm_source=chatgpt|oaicite"
 )
 
-# Regex to match official repository naming convention
-# Pattern: {Session}-{Cours}-{Travail}-{NomFamille}-{Prenom}
-# e.g.: H26-4N6-TP1-DUPONT-MARC
+# Official repository naming convention
+# Pattern: {Session}-{Cours}-{Travail}-{Groupe}-{Matricule}-{NomFamille}-{Prenom}
+# e.g.: A26-SN1-TP2-1050-1234567-DUPONT-MARC
 REPO_NAME_PATTERN = re.compile(
+    r"^([HAE]\d{2})-([A-Z0-9]+)-([A-Z0-9]+)-(\d+)-(\d+)-([A-Z0-9]+)-([A-Z0-9]+)$",
+    re.IGNORECASE
+)
+# Previous convention, without group nor student ID: H26-4N6-TP1-DUPONT-MARC
+LEGACY_REPO_NAME_PATTERN = re.compile(
     r"^([HAE]\d{2})-([A-Z0-9]+)-([A-Z0-9]+)-([A-Z0-9]+)-([A-Z0-9]+)$",
     re.IGNORECASE
 )
@@ -96,10 +99,15 @@ REPO_LIST_LIMIT = 1_000_000
 # Build output and IDE state that must never reach a student repo
 TEMPLATE_IGNORED = (".git", ".idea", ".vs", "bin", "obj")
 
-# Accepted column titles for student lists (CSV and Excel)
+# Accepted column titles for pasted student lists
 NOM_HEADERS = {"nom", "nom de famille", "lastname", "last name"}
 PRENOM_HEADERS = {"prénom", "prenom", "firstname", "first name", "given name"}
+MATRICULE_HEADERS = {"matricule", "da", "no da", "numéro de da", "student id", "id"}
+GROUPE_HEADERS = {"groupe", "gr", "gr.", "group", "no groupe"}
 LOGIN_HEADERS = {"login", "github", "username", "login github"}
+
+# Column order of a list pasted without a header row
+STUDENT_FIELDS = ("nom", "prenom", "matricule", "groupe", "login")
 
 # Letters that Unicode decomposition does not reduce to ASCII
 SLUG_TRANSLITERATION = str.maketrans({
@@ -122,12 +130,34 @@ def normalize_slug(s: str) -> str:
     return cleaned.upper()
 
 
-def build_repo_name(session: str, cours: str, travail: str, nom_famille: str, prenom: str) -> str:
+def build_repo_name(session: str, cours: str, travail: str, student: dict) -> str:
     """Build standardized repo name from metadata."""
-    return (
-        f"{normalize_slug(session)}-{normalize_slug(cours)}-{normalize_slug(travail)}"
-        f"-{normalize_slug(nom_famille)}-{normalize_slug(prenom)}"
-    )
+    return "-".join(normalize_slug(part) for part in (
+        session, cours, travail,
+        student["groupe"], student["matricule"], student["nom"], student["prenom"],
+    ))
+
+
+def parse_repo_name(name: str):
+    """Split a repo name following the convention (current or legacy). Return None otherwise."""
+    m = REPO_NAME_PATTERN.match(name)
+    if m:
+        session, cours, travail, groupe, matricule, nom, prenom = m.groups()
+    else:
+        m = LEGACY_REPO_NAME_PATTERN.match(name)
+        if not m:
+            return None
+        session, cours, travail, nom, prenom = m.groups()
+        groupe = matricule = ""
+    return {
+        "session": session.upper(), "cours": cours.upper(), "travail": travail.upper(),
+        "groupe": groupe, "matricule": matricule, "nom": nom.upper(), "prenom": prenom.upper(),
+    }
+
+
+def student_signature(student: dict) -> str:
+    """Identifier hidden in a student's files: the student ID, short and unique."""
+    return student["matricule"]
 
 
 # ── Subprocess Helpers ────────────────────────────────────────────────────────
@@ -234,12 +264,13 @@ def decode_watermarks(text: str) -> list:
 
 
 def repo_owner_from_path(file_path: str):
-    """Return the NOMPRENOM slug of the student repo holding a file, or None if not in one."""
+    """Return the signature slug expected in a student repo holding a file, or None if not in one."""
     folders = os.path.dirname(os.path.abspath(file_path)).split(os.sep)
     for folder in reversed(folders):
-        m = REPO_NAME_PATTERN.match(folder)
-        if m:
-            return (m.group(4) + m.group(5)).upper()
+        parsed = parse_repo_name(folder)
+        if parsed:
+            # Legacy repos have no student ID: they were signed "Nom,Prénom"
+            return parsed["matricule"] or parsed["nom"] + parsed["prenom"]
     return None
 
 
@@ -361,128 +392,105 @@ def inject_signatures_in_directory(dir_path: str, student_id: str) -> list:
 
 # ── Student List Loaders ──────────────────────────────────────────────────────
 
-def parse_student_line(line: str):
-    """Parse 'Nom Prénom [@login]' or 'Nom, Prénom[, login]'. Return None if ambiguous."""
-    if ',' in line or ';' in line:
-        parts = [p.strip() for p in re.split(r'[,;]', line)]
-        if len(parts) not in (2, 3) or not parts[0] or not parts[1]:
-            return None
-        login = parts[2] if len(parts) == 3 else ""
+def split_cells(line: str) -> list:
+    """Split a pasted line: tabs (copied from a spreadsheet), otherwise commas or semicolons."""
+    if '\t' in line:
+        cells = line.split('\t')
     else:
-        parts = line.split()
-        if len(parts) == 2:
-            login = ""
-        elif len(parts) == 3 and parts[2].startswith("@"):
-            login = parts[2]
-        else:
-            return None
-    login = login.lstrip("@")
-    if any(c.isspace() for c in login):
-        return None
-    return {"nom": parts[0], "prenom": parts[1], "login": login or None}
-
-
-def load_students_interactive() -> list:
-    """Manually input students via terminal."""
-    expected = "Nom Prénom \\[@login]  ou  Nom composé, Prénom\\[, login]"
-    students = []
-    console.print("[dim]Entrer les étudiants (ligne vide pour terminer).[/]")
-    console.print(f"[dim]Format : {expected}[/]")
-    while True:
-        line = input("  > ").strip()
-        if not line:
-            break
-        student = parse_student_line(line)
-        if not student:
-            console.print(f"[yellow]Format attendu : {expected}[/]")
-            continue
-        students.append(student)
-    return students
+        cells = re.split(r'[,;]', line)
+    return [cell.strip() for cell in cells]
 
 
 def parse_header(cells: list):
-    """Return the (nom, prenom, login) column indexes of a header row, or None if it is not one."""
+    """Return {field: column index} for a header row, or None if it is not one."""
+    aliases = {
+        "nom": NOM_HEADERS, "prenom": PRENOM_HEADERS, "matricule": MATRICULE_HEADERS,
+        "groupe": GROUPE_HEADERS, "login": LOGIN_HEADERS,
+    }
     lowered = [cell.lower() for cell in cells]
+    columns = {}
+    for field, names in aliases.items():
+        idx = next((i for i, cell in enumerate(lowered) if cell in names), None)
+        if idx is not None:
+            columns[field] = idx
+    return columns or None
 
-    def find(aliases):
-        return next((i for i, cell in enumerate(lowered) if cell in aliases), None)
 
-    columns = (find(NOM_HEADERS), find(PRENOM_HEADERS), find(LOGIN_HEADERS))
-    return None if columns == (None, None, None) else columns
+def student_from_cells(cells: list, columns: dict):
+    """Build a student from a row. Return (student, None) or (None, reason)."""
+    def cell(field):
+        idx = columns.get(field)
+        return cells[idx] if idx is not None and idx < len(cells) else ""
+
+    student = {field: cell(field) for field in STUDENT_FIELDS}
+    missing = [f for f in ("nom", "prenom", "matricule", "groupe") if not normalize_slug(student[f])]
+    if missing:
+        return None, f"champ(s) manquant(s) : {', '.join(missing)}"
+    for field in ("matricule", "groupe"):
+        if not student[field].isdigit():
+            return None, f"{field} non numérique : {student[field]}"
+    login = student["login"].lstrip("@")
+    if any(c.isspace() for c in login):
+        return None, f"login invalide : {login}"
+    student["login"] = login or None
+    return student, None
 
 
-def students_from_rows(rows: list) -> list:
-    """Build students from rows of stripped strings, first row being an optional header."""
-    rows = [row for row in rows if any(row) and not row[0].startswith('#')]
+def students_from_lines(lines: list) -> list:
+    """Parse pasted lines, the first one being an optional header row."""
+    rows = [split_cells(line) for line in lines if line.strip() and not line.lstrip().startswith('#')]
     if not rows:
         return []
 
     columns = parse_header(rows[0])
     if columns:
-        nom_col, prenom_col, login_col = columns
-        if nom_col is None or prenom_col is None:
-            console.print("[red]✘ L'en-tête doit contenir une colonne Nom et une colonne Prénom.[/]")
+        missing = [f for f in ("nom", "prenom", "matricule", "groupe") if f not in columns]
+        if missing:
+            console.print(f"[red]✘ Colonne(s) absente(s) de l'en-tête : {', '.join(missing)}.[/]")
             return []
         rows = rows[1:]
     else:
-        # Without a header, a third column could be anything: only names are positional
-        nom_col, prenom_col, login_col = 0, 1, None
+        columns = {field: i for i, field in enumerate(STUDENT_FIELDS)}
 
-    if login_col is None:
-        console.print("[yellow]⚠ Aucune colonne de login reconnue : aucune invitation ne sera envoyée.[/]")
-
-    def cell(row, col):
-        return row[col] if col is not None and col < len(row) else ""
-
-    students = []
+    students, seen = [], set()
     for row in rows:
-        nom, prenom = cell(row, nom_col), cell(row, prenom_col)
-        if nom and prenom:
-            students.append({"nom": nom, "prenom": prenom, "login": cell(row, login_col) or None})
+        student, reason = student_from_cells(row, columns)
+        if not student:
+            console.print(f"[yellow]⚠ Ligne ignorée ({escape(reason)}) : {escape(' | '.join(row))}[/]")
+            continue
+        if student["matricule"] in seen:
+            console.print(f"[yellow]⚠ Matricule en double ignoré : {escape(student['matricule'])}[/]")
+            continue
+        seen.add(student["matricule"])
+        students.append(student)
+
+    if students and not any(s["login"] for s in students):
+        console.print("[yellow]⚠ Aucun login fourni : aucune invitation ne sera envoyée.[/]")
     return students
 
 
-def load_students_from_csv(file_path: str) -> list:
-    """Load and parse students from a CSV file with auto-detected separators."""
+def load_students_interactive() -> list:
+    """Read students pasted (or typed) in the terminal, until an empty line."""
+    console.print("[dim]Coller les lignes copiées de Google Sheets (ligne vide pour terminer).[/]")
+    console.print("[dim]Colonnes : Nom, Prénom, Matricule, Groupe, Login (facultatif).[/]")
+    console.print("[dim]Séparateur : tabulation, virgule ou point-virgule. En-tête facultatif.[/]")
+    lines = []
+    while True:
+        line = input("  > ")
+        if not line.strip():
+            break
+        lines.append(line)
+    return students_from_lines(lines)
+
+
+def load_students_from_file(file_path: str) -> list:
+    """Load students from a text file in the same format as the pasted list."""
     try:
-        with open(file_path, 'rb') as f:
-            raw = f.read()
-        try:
-            text = raw.decode('utf-8-sig')
-        except UnicodeDecodeError:
-            # Excel on Windows saves "CSV" files as ANSI
-            text = raw.decode('cp1252', errors='replace')
-        delim = ';' if ';' in text[:2048] else ','
-        reader = csv.reader(io.StringIO(text, newline=''), delimiter=delim)
-        rows = [[cell.strip() for cell in row] for row in reader]
+        with open(file_path, encoding='utf-8-sig') as f:
+            return students_from_lines(f.read().splitlines())
     except Exception as ex:
-        console.print(f"[red]Erreur de lecture du fichier CSV : {escape(str(ex))}[/]")
+        console.print(f"[red]Erreur de lecture du fichier : {escape(str(ex))}[/]")
         return []
-    return students_from_rows(rows)
-
-
-def load_students_from_excel(file_path: str) -> list:
-    """Load students from an Excel (.xlsx) file using openpyxl."""
-    try:
-        import openpyxl
-    except ImportError:
-        console.print("[red]Le module 'openpyxl' est requis pour lire les fichiers Excel (.xlsx).[/]")
-        console.print("[dim]Veuillez l'installer avec : pip install openpyxl[/]")
-        return []
-
-    try:
-        wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
-        try:
-            rows = [
-                ["" if cell is None else str(cell).strip() for cell in row]
-                for row in wb.worksheets[0].iter_rows(values_only=True)
-            ]
-        finally:
-            wb.close()
-    except Exception as ex:
-        console.print(f"[red]Erreur de lecture du fichier Excel : {escape(str(ex))}[/]")
-        return []
-    return students_from_rows(rows)
 
 
 # ── Interactive Helpers ───────────────────────────────────────────────────────
@@ -580,20 +588,14 @@ def prompt_and_load_students() -> list:
     """Determine the student source and load them."""
     mode = prompt_selection(
         "Source de la liste d'étudiants",
-        ["✏  Saisir interactivement", "📄 Charger un CSV", "📊 Charger un Excel (.xlsx)"]
+        ["📋 Coller la liste", "📄 Charger un fichier texte (même format)"]
     )
-    if "CSV" in mode:
-        path = clean_path(Prompt.ask("Chemin du fichier CSV"))
+    if "fichier" in mode:
+        path = clean_path(Prompt.ask("Chemin du fichier"))
         if not os.path.exists(path):
             console.print("[red]✘ Fichier introuvable.[/]")
             return []
-        return load_students_from_csv(path)
-    if "Excel" in mode:
-        path = clean_path(Prompt.ask("Chemin du fichier Excel (.xlsx)"))
-        if not os.path.exists(path):
-            console.print("[red]✘ Fichier introuvable.[/]")
-            return []
-        return load_students_from_excel(path)
+        return load_students_from_file(path)
     return load_students_interactive()
 
 
@@ -997,8 +999,8 @@ class GitClassroomApp:
         
         org = self.get_or_prompt_org()
         session = prompt_session()
-        cours = Prompt.ask("Code du cours (ex: 4N6)").strip()
-        travail = Prompt.ask("Identifiant du travail (ex: TP1)").strip()
+        cours = Prompt.ask("Code du cours (ex: SN1)").strip()
+        travail = Prompt.ask("Identifiant du travail (ex: TP2)").strip()
         
         visibility = prompt_visibility()
         
@@ -1029,12 +1031,16 @@ class GitClassroomApp:
                       
         preview = Table(show_header=False, border_style="dim")
         preview.add_column("Repo")
+        preview.add_column("Groupe")
+        preview.add_column("Matricule")
         preview.add_column("Étudiant")
         preview.add_column("Login")
         for e in students:
-            name = build_repo_name(session, cours, travail, e["nom"], e["prenom"])
+            name = build_repo_name(session, cours, travail, e)
             preview.add_row(
                 name,
+                escape(e["groupe"]),
+                escape(e["matricule"]),
                 escape(f"{e['nom']} {e['prenom']}"),
                 f"[dim]{escape(e['login'])}[/]" if e["login"] else "[dim]–[/]"
             )
@@ -1053,7 +1059,7 @@ class GitClassroomApp:
         ) as progress:
             task = progress.add_task("Création des repos", total=len(students))
             for e in students:
-                repo_name = build_repo_name(session, cours, travail, e["nom"], e["prenom"])
+                repo_name = build_repo_name(session, cours, travail, e)
                 progress.update(task, description=repo_name)
                 
                 rc, _, stderr = run_gh("repo", "create", f"{org}/{repo_name}", visibility)
@@ -1064,8 +1070,7 @@ class GitClassroomApp:
                     continue
                     
                 if use_template:
-                    student_id = f"{e['nom']},{e['prenom']}"
-                    if not self.seed_repo(org, repo_name, template_dir, hide_signature, student_id):
+                    if not self.seed_repo(org, repo_name, template_dir, hide_signature, student_signature(e)):
                         console.print(f"[red]  ✘ {repo_name} : repo créé mais vide, invitation non envoyée.[/]")
                         failed += 1
                         progress.advance(task, 1)
@@ -1224,7 +1229,8 @@ class GitClassroomApp:
         org = self.get_or_prompt_org()
         session = Prompt.ask("Session (ex: H26) — laisser vide pour toutes", default="").strip()
         cours = Prompt.ask("Cours — laisser vide pour tous", default="").strip()
-        travail = Prompt.ask("Travail (ex: TP1) — laisser vide pour tous", default="").strip()
+        travail = Prompt.ask("Travail (ex: TP2) — laisser vide pour tous", default="").strip()
+        groupe = Prompt.ask("Groupe (ex: 1050) — laisser vide pour tous", default="").strip()
         
         console.print("[dim]Récupération des repos...[/]")
         repos = self.fetch_org_repos(org)
@@ -1235,23 +1241,18 @@ class GitClassroomApp:
         ses_slug = normalize_slug(session)
         cour_slug = normalize_slug(cours)
         trav_slug = normalize_slug(travail)
+        grp_slug = normalize_slug(groupe)
         
         candidates = []
         for r in repos:
-            m = REPO_NAME_PATTERN.match(r["name"])
-            if m:
-                ses, cour, trav, nom, pren = m.groups()
-                if (not ses_slug or ses.upper() == ses_slug) and \
-                   (not cour_slug or cour.upper() == cour_slug) and \
-                   (not trav_slug or trav.upper() == trav_slug):
-                    candidates.append({
-                        "session": ses,
-                        "cours": cour,
-                        "travail": trav,
-                        "nom": nom,
-                        "prenom": pren,
-                        "repo": r
-                    })
+            parsed = parse_repo_name(r["name"])
+            if parsed and \
+               (not ses_slug or parsed["session"] == ses_slug) and \
+               (not cour_slug or parsed["cours"] == cour_slug) and \
+               (not trav_slug or parsed["travail"] == trav_slug) and \
+               (not grp_slug or parsed["groupe"] == grp_slug):
+                parsed["repo"] = r
+                candidates.append(parsed)
                     
         if not candidates:
             console.print("[yellow]Aucun repo correspondant trouvé.[/]")
@@ -1281,7 +1282,9 @@ class GitClassroomApp:
             console.print("[yellow]Aucun repo avec commit étudiant trouvé.[/]")
             return
             
-        sorted_list = sorted(with_commits, key=lambda x: (x["session"], x["cours"], x["travail"], x["nom"]))
+        sorted_list = sorted(
+            with_commits, key=lambda x: (x["session"], x["cours"], x["travail"], x["groupe"], x["nom"])
+        )
         
         table = Table(
             title=f"[cyan]{len(sorted_list)} repo(s) avec commits étudiants[/]",
@@ -1291,15 +1294,21 @@ class GitClassroomApp:
         table.add_column("Session")
         table.add_column("Cours")
         table.add_column("Travail")
+        table.add_column("Groupe")
+        table.add_column("Matricule")
         table.add_column("Étudiant")
         
         last_group = None
         for r in sorted_list:
-            group = f"{r['session']}-{r['cours']}-{r['travail']}"
+            group = f"{r['session']}-{r['cours']}-{r['travail']}-{r['groupe']}"
             if last_group and group != last_group:
-                table.add_row("", "", "", "")
+                table.add_row("", "", "", "", "", "")
             last_group = group
-            table.add_row(r["session"], r["cours"], r["travail"], f"{r['nom']} {r['prenom']}")
+            table.add_row(
+                r["session"], r["cours"], r["travail"],
+                r["groupe"] or "[dim]–[/]", r["matricule"] or "[dim]–[/]",
+                f"{r['nom']} {r['prenom']}"
+            )
             
         console.print(table)
 
