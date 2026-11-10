@@ -149,6 +149,9 @@ def parse_repo_name(name: str):
             return None
         session, cours, travail, nom, prenom = m.groups()
         groupe = matricule = ""
+        if nom.isdigit():
+            # Session-Cours-Travail-Matricule-NomPrénom, e.g. A26-SN1-TP1RACINE-2554729-BEAUDRYLOUISFELIX
+            matricule, nom, prenom = nom, prenom, ""
     return {
         "session": session.upper(), "cours": cours.upper(), "travail": travail.upper(),
         "groupe": groupe, "matricule": matricule, "nom": nom.upper(), "prenom": prenom.upper(),
@@ -272,6 +275,63 @@ def repo_owner_from_path(file_path: str):
             # Legacy repos have no student ID: they were signed "Nom,Prénom"
             return parsed["matricule"] or parsed["nom"] + parsed["prenom"]
     return None
+
+
+def scan_signatures(path: str) -> list:
+    """Return the files under a folder that hide at least one signature."""
+    findings = []
+    for root, _, files in os.walk(path):
+        for file in files:
+            if os.path.splitext(file)[1].lower() not in TEXT_EXTENSIONS:
+                continue
+            full_path = os.path.join(root, file)
+            if is_likely_binary(full_path):
+                continue
+            try:
+                with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    signatures = decode_watermarks(f.read())
+            except Exception:
+                continue
+            if signatures:
+                findings.append({
+                    "file": file,
+                    "rel_path": os.path.relpath(full_path, path),
+                    "signatures": signatures,
+                    "full_path": full_path,
+                })
+    return findings
+
+
+def signature_status(finding: dict) -> str:
+    """'ok' if every signature matches the repo holding the file, 'suspect' or 'unknown' otherwise."""
+    owner = repo_owner_from_path(finding["full_path"])
+    if owner is None:
+        return "unknown"
+    if all(normalize_slug(sig) == owner for sig in finding["signatures"]):
+        return "ok"
+    return "suspect"
+
+
+def print_signature_findings(findings: list, title: str):
+    """Print signature findings as a table."""
+    labels = {
+        "ok": "[green]OK[/]",
+        "unknown": "[dim]? Repo non reconnu[/]",
+        "suspect": "[bold red]⚠ Discordance / Copie suspectée ![/]",
+    }
+    table = Table(title=f"[cyan]{title}[/]", show_header=True, header_style="bold")
+    table.add_column("Fichier")
+    table.add_column("Signature détectée")
+    table.add_column("Chemin relatif")
+    table.add_column("Statut / Alerte")
+    for f in findings:
+        table.add_row(
+            escape(f["file"]),
+            f"[bold cyan]{escape(' + '.join(f['signatures']))}[/]",
+            escape(f["rel_path"]),
+            labels[signature_status(f)]
+        )
+    console.print(table)
 
 
 def is_likely_binary(file_path: str) -> bool:
@@ -601,6 +661,24 @@ def prompt_and_load_students() -> list:
 
 # ── Organization & Repos List Helpers ─────────────────────────────────────────
 
+def short_date(iso: str) -> str:
+    """'2026-09-16T14:00:27Z' -> '2026-09-16'."""
+    try:
+        return datetime.strptime(iso[:19], "%Y-%m-%dT%H:%M:%S").strftime("%Y-%m-%d")
+    except Exception:
+        return iso
+
+
+def clone_repo(org: str, name: str, dest: str, shallow: bool = False) -> tuple:
+    """Clone a repo. Return (returncode, stderr)."""
+    args = ["repo", "clone", f"{org}/{name}", dest]
+    if shallow:
+        # Signatures only matter in the latest version: the history is not needed
+        args += ["--", "--depth", "1", "--quiet"]
+    rc, _, stderr = run_gh(*args)
+    return rc, stderr
+
+
 def fetch_user_orgs() -> list:
     """Fetch GitHub organizations the authenticated user belongs to."""
     rc, stdout, stderr = run_gh("api", "/user/orgs", "--paginate", "-q", ".[].login")
@@ -700,6 +778,18 @@ def check_repo_commits(r: dict, org: str) -> dict:
         except Exception:
             pass
     return None
+
+
+def github_user_exists(login: str) -> bool:
+    """True if a GitHub account has this login (inviting an unknown login fails with a 404)."""
+    rc, _, _ = run_gh("api", f"users/{login}", "--silent")
+    return rc == 0
+
+
+def repo_is_empty(org: str, repo_name: str) -> bool:
+    """True if the repo has no commit yet (e.g. created by a run whose push failed)."""
+    rc, stdout, _ = run_gh("repo", "view", f"{org}/{repo_name}", "--json", "isEmpty", "-q", ".isEmpty")
+    return rc == 0 and stdout.strip() == "true"
 
 
 # ── Work Rhythm & AI Traces ───────────────────────────────────────────────────
@@ -1023,12 +1113,23 @@ class GitClassroomApp:
             console.print("[yellow]⚠ Aucun étudiant chargé.[/]")
             return
             
+        console.print("[dim]Vérification des repos existants et des logins GitHub...[/]")
+        existing = {r["name"].lower() for r in self.fetch_org_repos(org)}
+        logins = sorted({e["login"] for e in students if e["login"]})
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            unknown_logins = {
+                login for login, found in zip(logins, executor.map(github_user_exists, logins))
+                if not found
+            }
+
         # Preview Table
         console.print()
-        with_login = sum(1 for e in students if e["login"])
-        console.print(f"[cyan]{len(students)} repo(s) à créer dans [bold]{org}[/]"
-                      f"{f' · {with_login} login(s) GitHub fourni(s)' if with_login > 0 else ''}[/]")
-                      
+        names = {e["matricule"]: build_repo_name(session, cours, travail, e) for e in students}
+        n_existing = sum(1 for name in names.values() if name.lower() in existing)
+        console.print(f"[cyan]{len(students) - n_existing} repo(s) à créer dans [bold]{org}[/]"
+                      f"{f' · {n_existing} déjà existant(s)' if n_existing else ''}"
+                      f" · {len(logins) - len(unknown_logins)} login(s) GitHub valide(s)[/]")
+
         preview = Table(show_header=False, border_style="dim")
         preview.add_column("Repo")
         preview.add_column("Groupe")
@@ -1036,21 +1137,33 @@ class GitClassroomApp:
         preview.add_column("Étudiant")
         preview.add_column("Login")
         for e in students:
-            name = build_repo_name(session, cours, travail, e)
+            name = names[e["matricule"]]
+            if not e["login"]:
+                login_cell = "[dim]–[/]"
+            elif e["login"] in unknown_logins:
+                login_cell = f"[red]{escape(e['login'])} (introuvable)[/]"
+            else:
+                login_cell = f"[dim]{escape(e['login'])}[/]"
             preview.add_row(
-                name,
+                f"[yellow]{name} (existe)[/]" if name.lower() in existing else name,
                 escape(e["groupe"]),
                 escape(e["matricule"]),
                 escape(f"{e['nom']} {e['prenom']}"),
-                f"[dim]{escape(e['login'])}[/]" if e["login"] else "[dim]–[/]"
+                login_cell
             )
         console.print(preview)
-        
+        if n_existing:
+            console.print("[dim]Repos existants : pas recréés ; remplis s'ils sont vides, puis invitation.[/]")
+        if unknown_logins:
+            console.print(f"[red]⚠ {len(unknown_logins)} login(s) sans compte GitHub : "
+                          f"aucune invitation pour ces étudiants. Corriger la liste et relancer.[/]")
+
         if not Confirm.ask("Confirmer la création ?", default=False):
             console.print("[dim]Annulé.[/]")
             return
             
-        ok, failed = 0, 0
+        ok, reused, failed = 0, 0, 0
+        not_invited = []
         with Progress(
             TextColumn("[dim]{task.description}[/]"),
             BarColumn(),
@@ -1059,135 +1172,151 @@ class GitClassroomApp:
         ) as progress:
             task = progress.add_task("Création des repos", total=len(students))
             for e in students:
-                repo_name = build_repo_name(session, cours, travail, e)
+                repo_name = names[e["matricule"]]
                 progress.update(task, description=repo_name)
-                
-                rc, _, stderr = run_gh("repo", "create", f"{org}/{repo_name}", visibility)
-                if rc != 0:
-                    console.print(f"[red]  ✘ {repo_name} : {escape(stderr.strip())}[/]")
-                    failed += 1
-                    progress.advance(task, 1)
-                    continue
-                    
-                if use_template:
-                    if not self.seed_repo(org, repo_name, template_dir, hide_signature, student_signature(e)):
-                        console.print(f"[red]  ✘ {repo_name} : repo créé mais vide, invitation non envoyée.[/]")
+
+                already = repo_name.lower() in existing
+                if not already:
+                    rc, _, stderr = run_gh("repo", "create", f"{org}/{repo_name}", visibility)
+                    if rc != 0:
+                        console.print(f"[red]  ✘ {repo_name} : {escape(stderr.strip())}[/]")
                         failed += 1
                         progress.advance(task, 1)
                         continue
 
-                if e["login"]:
+                if use_template and (not already or repo_is_empty(org, repo_name)):
+                    if not self.seed_repo(org, repo_name, template_dir, hide_signature, student_signature(e)):
+                        console.print(f"[red]  ✘ {repo_name} : repo vide, invitation non envoyée.[/]")
+                        failed += 1
+                        progress.advance(task, 1)
+                        continue
+
+                if e["login"] in unknown_logins:
+                    not_invited.append(e)
+                elif e["login"]:
                     self.invite_collaborateur(org, repo_name, e["login"])
-                    
-                ok += 1
+
+                if already:
+                    reused += 1
+                else:
+                    ok += 1
                 progress.advance(task, 1)
                 
         console.print()
         if ok > 0:
             console.print(f"[green]✔ {ok} repo(s) créé(s).[/]")
+        if reused > 0:
+            console.print(f"[yellow]⏭  {reused} repo(s) déjà existant(s), réutilisé(s).[/]")
         if failed > 0:
             console.print(f"[red]✘ {failed} échec(s).[/]")
+        if not_invited:
+            console.print(f"[red]✘ {len(not_invited)} invitation(s) non envoyée(s), login GitHub introuvable :[/]")
+            for e in not_invited:
+                console.print(f"[red]  • {escape(e['nom'])} {escape(e['prenom'])} ({escape(e['matricule'])}) : "
+                              f"{escape(e['login'])}[/]")
 
-    def lister_repos(self):
-        """List and group all repositories within the target organization."""
-        console.print(Rule("[cyan]Lister les repos[/]", style="cyan"))
-        console.print()
-        
-        org = self.get_or_prompt_org()
-        console.print("[dim]Récupération...[/]")
-        
-        repos = self.fetch_org_repos(org)
-        if not repos:
-            console.print("[yellow]Aucun repo trouvé.[/]")
-            return
-            
-        groups = detect_work_groups(repos)
-        
-        table = Table(
-            title=f"[cyan]Repos de {org} — {len(repos)} repo(s), {len(groups)} groupe(s)[/]",
-            show_header=True,
-            header_style="bold"
-        )
-        table.add_column("Groupe / Préfixe")
-        table.add_column("Année", justify="center")
-        table.add_column("Nb", justify="right")
-        table.add_column("Suffixe étudiant")
-        table.add_column("Créé le")
-        
-        for group in groups:
-            first = True
-            prefix = group["prefix"]
-            for r in group["repos"]:
-                name = r["name"]
-                suffix = name[len(prefix)+1:] if len(name) > len(prefix) + 1 else name
-                
-                created_at_str = r["createdAt"]
-                try:
-                    dt = datetime.strptime(created_at_str[:19], "%Y-%m-%dT%H:%M:%S")
-                    date_display = dt.strftime("%Y-%m-%d")
-                except Exception:
-                    date_display = created_at_str
-                
-                table.add_row(
-                    f"[white]{prefix}[/]" if first else "",
-                    f"[cyan]20{group['year']}[/]" if first and group["year"] else ("[dim]–[/]" if first else ""),
-                    f"[dim]{len(group['repos'])}[/]" if first else "",
-                    suffix,
-                    date_display
-                )
-                first = False
-            # Empty separator row between groups
-            table.add_row("", "", "", "", "")
-            
-        console.print(table)
-
-    def cloner_repos_tp(self):
-        """Clone all repositories belonging to a work group prefix."""
-        console.print(Rule("[cyan]Cloner les repos d'un TP[/]", style="cyan"))
-        console.print()
-        
-        org = self.get_or_prompt_org()
-        console.print("[dim]Récupération des repos...[/]")
-        
-        repos = self.fetch_org_repos(org)
-        if not repos:
-            console.print("[yellow]Aucun repo trouvé.[/]")
-            return
-            
+    def choisir_repos_tp(self, repos: list):
+        """Pick a TP, then a group if the TP has several. Return (label, repos) or None."""
         groups = detect_work_groups(repos)
         manual_entry = "✏  Saisir un préfixe manuellement..."
-        
         choices = []
         for g in groups:
             yr_suffix = f" · 20{g['year']}" if g['year'] else ""
             choices.append(f"{g['prefix']}  ({len(g['repos'])} repos{yr_suffix})")
         choices.append(manual_entry)
-        
-        picked = prompt_selection("Choisir le groupe / préfixe à cloner :", choices)
-        
-        to_clone = []
+
+        picked = prompt_selection("Choisir le TP", choices)
         if picked == manual_entry:
-            prefix = Prompt.ask("Préfixe (les repos commençant par ce texte)").strip()
-            to_clone = [r for r in repos if r["name"].lower().startswith(prefix.lower())]
-            to_clone = sorted(to_clone, key=lambda x: x["name"])
+            label = Prompt.ask("Préfixe (les repos commençant par ce texte)").strip()
+            selected = sorted(
+                (r for r in repos if r["name"].lower().startswith(label.lower())),
+                key=lambda x: x["name"]
+            )
         else:
-            prefix = picked.split("  (")[0]
-            for g in groups:
-                if g["prefix"].lower() == prefix.lower():
-                    to_clone = g["repos"]
-                    break
-                    
-        if not to_clone:
+            group = groups[choices.index(picked)]
+            label, selected = group["prefix"], group["repos"]
+
+        if not selected:
             console.print("[yellow]Aucun repo trouvé pour ce préfixe.[/]")
+            return None
+
+        by_group = {}
+        for r in selected:
+            parsed = parse_repo_name(r["name"])
+            by_group.setdefault(parsed["groupe"] if parsed else "", []).append(r)
+        if len(by_group) < 2:
+            return label, selected
+
+        keys = sorted(k for k in by_group if k) + ([""] if "" in by_group else [])
+        group_choices = [f"Tous les groupes  ({len(selected)} repos)"] + [
+            f"{f'Groupe {k}' if k else 'Sans groupe'}  ({len(by_group[k])} repos)" for k in keys
+        ]
+        idx = group_choices.index(prompt_selection("Choisir le groupe", group_choices))
+        if idx == 0:
+            return label, selected
+        key = keys[idx - 1]
+        return f"{label} · {f'groupe {key}' if key else 'sans groupe'}", by_group[key]
+
+    def afficher_repos_tp(self, label: str, repos: list):
+        """Show the repos of a TP, one line per student."""
+        table = Table(title=f"[cyan]{escape(label)} — {len(repos)} repo(s)[/]", show_header=True, header_style="bold")
+        table.add_column("Groupe")
+        table.add_column("Matricule")
+        table.add_column("Étudiant")
+        table.add_column("Créé le")
+        for r in sorted(repos, key=lambda x: x["name"]):
+            parsed = parse_repo_name(r["name"])
+            if parsed:
+                table.add_row(
+                    parsed["groupe"] or "[dim]–[/]", parsed["matricule"] or "[dim]–[/]",
+                    f"{parsed['nom']} {parsed['prenom']}", short_date(r["createdAt"])
+                )
+            else:
+                table.add_row("[dim]–[/]", "[dim]–[/]", escape(r["name"]), short_date(r["createdAt"]))
+        console.print(table)
+
+    def parcourir_repos(self):
+        """Browse the repos of a TP (and group), then act on them."""
+        console.print(Rule("[cyan]Parcourir les repos d'un TP[/]", style="cyan"))
+        console.print()
+
+        org = self.get_or_prompt_org()
+        console.print("[dim]Récupération des repos...[/]")
+        repos = self.fetch_org_repos(org)
+        if not repos:
+            console.print("[yellow]Aucun repo trouvé.[/]")
             return
-            
+
+        selection = self.choisir_repos_tp(repos)
+        if not selection:
+            return
+        label, selected = selection
+        console.print()
+        self.afficher_repos_tp(label, selected)
+
+        retour = "← Retour"
+        while True:
+            action = prompt_selection(
+                f"Action sur {escape(label)} ({len(selected)} repo(s))",
+                ["📥 Cloner", "🕵️  Chercher les signatures suspectes (clone temporaire)", retour]
+            )
+            console.print()
+            if action == retour:
+                return
+            if "Cloner" in action:
+                self.cloner_repos(org, selected)
+            else:
+                self.chercher_signatures_suspectes(org, selected)
+
+    def cloner_repos(self, org: str, repos: list):
+        """Clone repos into a folder, skipping those already there."""
         dest_dir = clean_path(Prompt.ask("Dossier de destination", default=os.getcwd()))
         os.makedirs(dest_dir, exist_ok=True)
 
-        console.print(f"[cyan]{len(to_clone)} repo(s) → {escape(dest_dir)}[/]")
+        console.print(f"[cyan]{len(repos)} repo(s) → {escape(dest_dir)}[/]")
         if not Confirm.ask("Confirmer ?", default=True):
             return
-            
+
         ok, skipped, failed = 0, 0, 0
         with Progress(
             TextColumn("[dim]{task.description}[/]"),
@@ -1195,8 +1324,8 @@ class GitClassroomApp:
             TaskProgressColumn(),
             console=console
         ) as progress:
-            task = progress.add_task("Clonage", total=len(to_clone))
-            for r in to_clone:
+            task = progress.add_task("Clonage", total=len(repos))
+            for r in repos:
                 name = r["name"]
                 progress.update(task, description=name)
                 repo_dest_dir = os.path.join(dest_dir, name)
@@ -1204,15 +1333,14 @@ class GitClassroomApp:
                     skipped += 1
                     progress.advance(task, 1)
                     continue
-                    
-                rc, _, stderr = run_gh("repo", "clone", f"{org}/{name}", repo_dest_dir)
+                rc, stderr = clone_repo(org, name, repo_dest_dir)
                 if rc == 0:
                     ok += 1
                 else:
                     failed += 1
                     console.print(f"[red]  ✘ {name}: {escape(stderr.strip())}[/]")
                 progress.advance(task, 1)
-                
+
         console.print()
         if ok > 0:
             console.print(f"[green]✔ {ok} cloné(s).[/]")
@@ -1220,6 +1348,52 @@ class GitClassroomApp:
             console.print(f"[yellow]⏭  {skipped} déjà présent(s) (ignoré(s)).[/]")
         if failed > 0:
             console.print(f"[red]✘ {failed} échec(s).[/]")
+
+    def chercher_signatures_suspectes(self, org: str, repos: list):
+        """Clone repos into a temporary folder, report suspicious signatures, then delete everything."""
+        tmp_dir = tempfile.mkdtemp(prefix="git_classroom_sig_")
+        try:
+            failed = {}
+            with Progress(
+                TextColumn("[dim]{task.description}[/]"),
+                BarColumn(),
+                TaskProgressColumn(),
+                console=console
+            ) as progress:
+                task = progress.add_task("Clonage temporaire", total=len(repos))
+                with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                    futures = {
+                        executor.submit(clone_repo, org, r["name"], os.path.join(tmp_dir, r["name"]), True): r["name"]
+                        for r in repos
+                    }
+                    for future in concurrent.futures.as_completed(futures):
+                        rc, stderr = future.result()
+                        if rc != 0:
+                            failed[futures[future]] = stderr.strip()
+                        progress.advance(task, 1)
+
+            for name, err in sorted(failed.items()):
+                console.print(f"[red]  ✘ {name}: {escape(err)}[/]")
+
+            findings = scan_signatures(tmp_dir)
+            suspects = [f for f in findings if signature_status(f) != "ok"]
+            signed_repos = {f["rel_path"].split(os.sep)[0] for f in findings}
+            unsigned = sorted(r["name"] for r in repos if r["name"] not in signed_repos and r["name"] not in failed)
+
+            console.print()
+            if suspects:
+                print_signature_findings(suspects, f"{len(suspects)} fichier(s) suspect(s)")
+            else:
+                console.print("[green]✔ Aucune signature suspecte.[/]")
+            console.print(f"[dim]{len(findings) - len(suspects)} fichier(s) signé(s) conforme(s) "
+                          f"dans {len(signed_repos)} repo(s).[/]")
+            if unsigned:
+                console.print(f"[dim]Aucune signature trouvée dans {len(unsigned)} repo(s) "
+                              f"(normal si le TP a été créé sans signature) :[/]")
+                for name in unsigned:
+                    console.print(f"[dim]  • {escape(name)}[/]")
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
     def lister_repos_avec_commits(self):
         """List repositories matching filters that contain active student commits."""
@@ -1400,62 +1574,11 @@ class GitClassroomApp:
             return
             
         console.print("[dim]Analyse en cours...[/]")
-        
-        findings = []
-        for root, _, files in os.walk(path_to_scan):
-            for file in files:
-                ext = os.path.splitext(file)[1].lower()
-                if ext not in TEXT_EXTENSIONS:
-                    continue
-                full_path = os.path.join(root, file)
-                if is_likely_binary(full_path):
-                    continue
-                try:
-                    with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
-                        content = f.read()
-                    signatures = decode_watermarks(content)
-                    if signatures:
-                        rel_path = os.path.relpath(full_path, path_to_scan)
-                        findings.append({
-                            "file": file,
-                            "rel_path": rel_path,
-                            "signatures": signatures,
-                            "full_path": full_path
-                        })
-                except Exception:
-                    pass
-                    
+        findings = scan_signatures(path_to_scan)
         if not findings:
             console.print("[yellow]Aucune signature stéganographique détectée dans ce dossier.[/]")
             return
-            
-        table = Table(
-            title=f"[cyan]{len(findings)} signature(s) détectée(s)[/]",
-            show_header=True,
-            header_style="bold"
-        )
-        table.add_column("Fichier")
-        table.add_column("Signature détectée")
-        table.add_column("Chemin relatif")
-        table.add_column("Statut / Alerte")
-        
-        for f in findings:
-            owner = repo_owner_from_path(f["full_path"])
-            if owner is None:
-                status = "[dim]? Repo non reconnu[/]"
-            elif all(normalize_slug(sig) == owner for sig in f["signatures"]):
-                status = "[green]OK[/]"
-            else:
-                status = "[bold red]⚠ Discordance / Copie suspectée ![/]"
-
-            table.add_row(
-                escape(f["file"]),
-                f"[bold cyan]{escape(' + '.join(f['signatures']))}[/]",
-                escape(f["rel_path"]),
-                status
-            )
-            
-        console.print(table)
+        print_signature_findings(findings, f"{len(findings)} signature(s) détectée(s)")
 
     def analyser_rythme(self):
         """Report impossible work rhythms and explicit AI traces in locally cloned repos."""
@@ -1544,8 +1667,7 @@ class GitClassroomApp:
                     "🔍 Diagnostic (gh, git, authentification)",
                     "🧪 Tester la création d'un repo",
                     "➕ Créer les repos d'un TP",
-                    "📋 Lister les repos",
-                    "📥 Cloner les repos d'un TP",
+                    "📋 Parcourir les repos d'un TP (cloner, signatures)",
                     "💬 Repos avec commits étudiants",
                     "🗑  Supprimer des repos",
                     "🕵️  Détecter les signatures stéganographiques",
@@ -1563,10 +1685,8 @@ class GitClassroomApp:
                 self.tester_creation_repo()
             elif "Créer" in choice:
                 self.creer_repos_etudiants()
-            elif "Lister les repos" in choice:
-                self.lister_repos()
-            elif "Cloner" in choice:
-                self.cloner_repos_tp()
+            elif "Parcourir" in choice:
+                self.parcourir_repos()
             elif "commits" in choice:
                 self.lister_repos_avec_commits()
             elif "Supprimer" in choice:
