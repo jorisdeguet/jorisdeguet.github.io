@@ -42,10 +42,13 @@ strip_t     = 0.8;   // épaisseur de la partie coincée entre mur et tablette
                      // (≥ 2 lignes d'extrusion avec une buse de 0.4)
 
 // Tablette et languette du haut
-shelf_t     = 25.4;  // épaisseur de la tablette (1 po)
+shelf_t     = 21.4;  // épaisseur de la tablette = longueur de la bande mince
+                     // (25.4 au départ : la bande dépassait de 4 mm)
 shelf_clear = 0.5;   // jeu vertical : la partie épaisse commence ce jeu sous la tablette
-tab_len     = 25;    // longueur de la languette posée sur la tablette (depuis le mur)
-tab_t       = 2.0;   // épaisseur de la languette
+tab_len     = 10;    // longueur du bloc posé sur la tablette (depuis le mur) :
+                     // il suffit qu'il accroche le bois
+tab_t       = 6.0;   // hauteur du bloc : court et épais pour ne pas plier
+                     // (2 mm × 25 mm se déformait sous la charge)
 tab_lip_h   = 0;     // rebord descendant au bout de la languette (0 = aucun).
                      // Pour enserrer l'avant de la tablette :
                      //   tab_len = strip_t + profondeur de la tablette + jeu + tab_t
@@ -61,8 +64,10 @@ lip_h       = 12;    // hauteur de la lèvre (au-dessus du fond intérieur)
 // Renforts
 fillet      = 2.5;   // gousset à 45° dans les angles intérieurs du crochet et
                      // de la descente (0 = angles vifs)
-top_fillet  = 0;     // gousset sous la languette (contre l'arête de la tablette :
-                     // laisser 0 si l'arête de la tablette est vive)
+top_fillet  = 0.6;   // gousset entre la bande mince et le bloc du haut. Il loge
+                     // dans l'arête arrière-haut de la tablette : celle-ci doit
+                     // être adoucie/poncée d'au moins cette valeur (sinon 0)
+tab_round   = 1.5;   // rayon des deux arêtes avant du bloc du haut
 
 // ── Fantômes (aperçu seulement) ───────────────────────────────────────────────
 shelf_depth = 250;   // profondeur de la tablette
@@ -90,10 +95,23 @@ module rect(x0, y0, x1, y1) translate([x0, y0]) square([x1 - x0, y1 - y0]);
 module gusset(x, y, s, sx, sy)
     if (s > 0) polygon([[x, y], [x + sx * s, y], [x, y + sy * s]]);
 
+// bloc du haut : rectangle dont les deux arêtes avant (haut et bas, celle
+// du bas touche la tablette) sont arrondies
+module knob_profile() {
+    r = min(tab_round, tab_t / 2, tab_len);
+    if (r <= 0) rect(0, 0, tab_len, tab_t);
+    else hull() {
+        rect(0, 0, tab_len - r, tab_t);
+        for (y = [r, tab_t - r])
+            translate([tab_len - r, y]) circle(r = r, $fn = 48);
+    }
+}
+
 module profile() {
     union() {
         // languette du haut, posée sur la tablette
-        rect(0, 0, tab_len, tab_t);
+        // bloc du haut, posé sur la tablette, arêtes avant arrondies
+        knob_profile();
         if (tab_lip_h > 0) rect(tab_len - tab_t, -tab_lip_h, tab_len, 0);
         // bande mince entre mur et tablette
         rect(0, y_thin_bot, strip_t, 0);

@@ -2,7 +2,7 @@
 
 Petite pièce imprimée pour suspendre un tableau blanc **sous une tablette appuyée contre un mur**, sans percer.
 
-- Une **languette** se pose sur le dessus de la tablette.
+- Un **bloc** court et épais (10 × 6 mm) se pose sur le dessus de la tablette et accroche le bois.
 - Une **bande mince** (0,8 mm) se glisse entre le mur et l'arrière de la tablette.
 - Sous la tablette, la bande s'épaissit (rampe à 45°) et **descend** jusqu'à un **crochet en U** qui reçoit le bord du haut du tableau.
 
@@ -18,10 +18,10 @@ Fichier : `whiteboard_hanger.scad` (OpenSCAD). `whiteboard_hanger.stl` contient 
 | `count` | 2 | nombre d'exemplaires sur le plateau |
 | `width` | 20 | largeur du crochet (= hauteur d'impression) |
 | `strip_t` | 0.8 | épaisseur de la bande coincée entre mur et tablette |
-| `shelf_t` | 25.4 | épaisseur de la tablette (1 po) |
+| `shelf_t` | 21.4 | épaisseur de la tablette = longueur de la bande mince |
 | `shelf_clear` | 0.5 | jeu : la partie épaisse commence ce jeu sous la tablette |
-| `tab_len` | 25 | longueur de la languette sur la tablette (depuis le mur) |
-| `tab_t` | 2.0 | épaisseur de la languette |
+| `tab_len` | 10 | longueur du bloc sur la tablette (depuis le mur) |
+| `tab_t` | 6.0 | hauteur du bloc (court et épais pour ne pas plier sous la charge) |
 | `tab_lip_h` | 0 | rebord descendant au bout de la languette (0 = aucun) |
 | `drop_len` | 60 | du dessous de la tablette au fond intérieur du crochet |
 | `below_t` | 3.5 | épaisseur de la bande sous la tablette |
@@ -30,7 +30,8 @@ Fichier : `whiteboard_hanger.scad` (OpenSCAD). `whiteboard_hanger.stl` contient 
 | `hook_t` | 4.0 | épaisseur du fond et de la lèvre du crochet |
 | `lip_h` | 12 | hauteur de la lèvre au-dessus du fond |
 | `fillet` | 2.5 | goussets dans les angles du crochet (0 = angles vifs) |
-| `top_fillet` | 0 | gousset sous la languette (laisser 0 si l'arête de la tablette est vive) |
+| `top_fillet` | 0.6 | gousset entre la bande mince et le bloc ; loge dans l'arête arrière-haut de la tablette, qui doit être adoucie d'au moins cette valeur (sinon 0) |
+| `tab_round` | 1.5 | rayon des deux arêtes avant du bloc du haut (dessus visible, dessous contre le bois) |
 
 Pour **enserrer l'avant de la tablette** (pièce impossible à faire glisser) : `tab_len = strip_t + profondeur de la tablette + jeu + tab_t` et `tab_lip_h` = 5 à 10 mm.
 
