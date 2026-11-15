@@ -39,6 +39,8 @@ ear_notch_width = 44.0;
 /* [Ouverture Decora] */
 opening_width = 33.3;
 opening_height = 66.7;
+// Jeu ajouté à l'ouverture pour que la prise entre sans forcer.
+opening_clearance = 0.6;
 opening_corner_radius = 3.0;
 screw_spacing = 96.8375;
 screw_diameter = 4.0;
@@ -71,7 +73,8 @@ module plaque_etagere() {
             cube([ear_notch_width, rim_width + 2, recess_depth + 0.01]);
 
         translate([0, 0, -1])
-            rounded_rectangle(opening_width, opening_height, opening_corner_radius, plate_thickness + 2);
+            rounded_rectangle(opening_width + opening_clearance, opening_height + opening_clearance,
+                              opening_corner_radius, plate_thickness + 2);
 
         countersunk_screw_hole(0, screw_spacing / 2, plate_thickness, screw_diameter, countersink_diameter);
         if (bottom_screw)

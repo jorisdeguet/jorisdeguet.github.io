@@ -32,6 +32,8 @@ recess_depth = 2.5;
 
 opening_width = 33.3;
 opening_height = 66.7;
+// Extra size added to the opening so the device face slips in without forcing.
+opening_clearance = 0.6;
 opening_corner_radius = 3.0;
 screw_spacing = 96.8375;
 screw_diameter = 4.0;
@@ -92,9 +94,10 @@ module countersunk_screw_hole(x, y, thickness, diameter, countersink_diameter) {
 
 module decorator_opening(x, thickness, opening_width, opening_height, opening_corner_radius,
                           screw_spacing, screw_diameter, countersink_diameter,
-                          include_screw_holes = true) {
+                          include_screw_holes = true, opening_clearance = 0.6) {
     translate([x, 0, -1])
-        rounded_rectangle(opening_width, opening_height, opening_corner_radius, thickness + 2);
+        rounded_rectangle(opening_width + opening_clearance, opening_height + opening_clearance,
+                          opening_corner_radius, thickness + 2);
 
     if (include_screw_holes) {
         countersunk_screw_hole(x, screw_spacing / 2, thickness, screw_diameter, countersink_diameter);
@@ -119,7 +122,8 @@ module decorator_plaque(
     screw_spacing = 96.8375,
     screw_diameter = 4,
     countersink_diameter = 7.2,
-    slot_screw_holes = []
+    slot_screw_holes = [],
+    opening_clearance = 0.6
 ) {
     plate_width = single_plate_width + (gang_count - 1) * gang_spacing;
     assert(gang_count >= 1, "gang_count must be at least 1");
@@ -145,7 +149,8 @@ module decorator_plaque(
                 decorator_opening(
                     x, plate_thickness, opening_width, opening_height, opening_corner_radius,
                     screw_spacing, screw_diameter, countersink_diameter,
-                    len(slot_screw_holes) == 0 ? true : slot_screw_holes[position]
+                    len(slot_screw_holes) == 0 ? true : slot_screw_holes[position],
+                    opening_clearance
                 );
             else
                 assert(slot_styles[position] == "flat", "Slot styles must be \"decora\" or \"flat\".");
@@ -196,7 +201,7 @@ module single_decorator_plaque() {
         gang_count, slot_styles, single_plate_width, plate_height, plate_thickness,
         plate_corner_radius, edge_rounding_radius, gang_spacing, rim_width, recess_depth,
         opening_width, opening_height, opening_corner_radius, screw_spacing, screw_diameter,
-        countersink_diameter
+        countersink_diameter, opening_clearance = opening_clearance
     );
 }
 
