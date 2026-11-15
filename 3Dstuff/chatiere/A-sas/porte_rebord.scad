@@ -1,44 +1,55 @@
 // =====================================================================
-//  Chatière d'hiver — concept A « SAS » : module de porte escamotable
+//  Chatière d'hiver — concept A « SAS » : module à porte relevable
 //
 //  Un MODULE imprimé s'insère dans une encoche du côté gauche du caisson
-//  (contreplaqué) : deux collerettes pincent le bois.
+//  (contreplaqué). Trois groupes de pièces, sans vis :
 //
 //   - CADRE (pièce principale, imprimée face sur le plateau) : peau côté sas
-//     avec collerette, toute l'épaisseur du mur sur les bords, canaux de la
-//     porte et des coulisseaux, poteaux d'élastiques, et quatre petits pivots à
-//     tête conique qui dépassent côté pièce.
-//   - COUVERCLE (peau côté pièce) : ses quatre trous en serrure passent sur les
-//     têtes des pivots, puis il descend de quelques mm et y reste suspendu par
-//     son poids, comme un cadre photo sur ses clous. Il porte le pivot du levier
-//     et des plots qui tiennent la plaque intermédiaire.
-//   - Dedans : la PORTE glisse verticalement et descend dans la poche du bas ;
-//     la PLAQUE INTERMÉDIAIRE la sépare du LEVIER ; deux COULISSEAUX traversent
-//     le module et portent un REBORD de chaque côté (queue d'aronde).
-//     Le chat pose les pattes sur un rebord -> le chariot descend -> le levier,
-//     appuyé près de son pivot, fait descendre la porte `rapport` fois plus.
-//     Des élastiques remontent le tout.
-//   - Aucune vis. Paramètre `echelle` : 1 = taille réelle, 0,4 = maquette
-//     (voir porte_rebord_maquette.scad).
+//     avec collerette, toute l'épaisseur du mur sur les bords, canal de la
+//     porte, canaux des coulisseaux, pivots des deux leviers, poteaux
+//     d'élastiques et quatre petits pivots à tête conique pour le couvercle.
+//   - PIÈCES MOBILES : la porte (sans aucun trou), deux leviers, deux
+//     coulisseaux, deux rebords.
+//   - COUVERCLE (côté pièce) : sa peau et un remplissage qui ferme la couche
+//     arrière. Ses quatre trous en serrure passent sur les têtes des pivots ;
+//     il descend de quelques mm et y reste suspendu par son poids.
+//
+//  L'ouverture est dans le BAS du module, la porte se range dans le HAUT.
+//  Mécanisme symétrique, en bascule :
+//   - les deux rebords (un de chaque côté du mur), juste sous l'ouverture,
+//     sont reliés par deux coulisseaux qui traversent le module ;
+//   - chaque coulisseau monte le long de l'ouverture jusqu'à son levier et
+//     appuie sur le bras court, à l'extérieur du pivot : quand le rebord
+//     descend, le bras long monte (levier inversé) ;
+//   - les deux leviers se croisent : celui de droite (vu du sas) est DEVANT
+//     la porte, celui de gauche DERRIÈRE ;
+//   - chaque levier porte un téton au bout, qui glisse dans une rainure
+//     borgne en HAUT de la porte (une sur chaque face, à ±x_teton).
+//     La porte n'a aucun trou traversant et s'imprime à plat.
+//   - la porte retombe par son poids ; les élastiques ne font qu'aider.
+//
+//  Couches, du sas vers la pièce :
+//    peau | levier avant | porte | levier arrière | couvercle
 //
 //  Repère (aperçu `assembled`) :
 //    X = le long du mur (0 = centre de l'ouverture), vu depuis le sas
 //    Z = hauteur, 0 = dessus du plancher du sas (bas du module)
 //    Y = épaisseur : y = 0 face extérieure côté sas, y croît vers la pièce
-//  Unités : mm. Plateau visé : 260 x 260.
+//  Unités : mm. Plateau visé : 260 x 260. `echelle` : 1 = réel, 0,4 = maquette.
 // =====================================================================
 
-part = "assembled"; // [assembled, eclate, cadre, couvercle, intermediaire, porte, levier, coulisseau, rebord, enjoliveur, planche_1, planche_2]
-echelle = 1;          // 1 = réel ; 0.4 = maquette
-ouvert = false;       // aperçu : porte ouverte (chariot enfoncé) ou fermée
-coupe = false;        // aperçu : sans couvercle ni enjoliveur côté pièce
+part = "assembled"; // [assembled, eclate, cadre, couvercle, porte, levier_avant, levier_arriere, coulisseau_avant, coulisseau_arriere, rebord, planche_1, planche_2]
+echelle = 1;          // 1 = réel ; 0.4 = maquette (voir porte_rebord_maquette.scad)
+ouvert = false;       // aperçu : porte ouverte (rebord enfoncé) ou fermée
+coupe = false;        // aperçu : sans couvercle (on voit le levier arrière)
+sans_cadre = false;   // aperçu : sans cadre (on voit le levier avant)
 
 /* [Cotes réelles (multipliées par echelle)] */
 ouv_l_r = 130;        // ouverture (largeur)
 ouv_h_r = 110;        // ouverture (hauteur)
-r_arche_r = 40;       // rayon des coins hauts (arche)
+r_coin_r = 12;        // rayon des coins de l'ouverture
 course_r = 20;        // descente du rebord sous les pattes
-bras_r = 160;         // pivot -> pointe du levier
+portee_r = 140;       // pivot -> téton du levier
 contreplaque = 12;    // épaisseur du côté du caisson (réel)
 chat_kg = 4.0;
 densite = 1.24;       // PLA
@@ -46,101 +57,130 @@ densite = 1.24;       // PLA
 E = echelle;
 $fn = E < 0.7 ? 32 : 48;
 eps = 0.01;
+reel = E >= 0.7;
 
 // ---- cotes dans le plan du mur ----
 ouv_l   = ouv_l_r * E;
 ouv_h   = ouv_h_r * E;
-r_arche = r_arche_r * E;
-r_bas   = 5 * E;
+r_coin  = r_coin_r * E;
 course  = course_r * E;
-bras    = bras_r * E;
-recouv  = 8 * E;
-recouv_hb = 5 * E;
-bordure = max(2, 4 * E);          // bord plein du cadre
+portee  = portee_r * E;
+recouv  = 8 * E;                  // porte / ouverture, sur les côtés
+recouv_b = 4 * E;                 // porte / ouverture, en bas
+bordure = max(2, 3 * E);          // bord plein du cadre (côtés, haut)
+bordure_b = max(1.5, 2 * E);      // fond du module
 colle   = 5 * E;                  // collerette qui recouvre le contreplaqué
-appui   = max(1.2, 3 * E);        // portée de la plaque intermédiaire
-levier_l = max(4, 12 * E);
+levier_l = max(5, 12 * E);
 coul_l  = max(5, 12 * E);
 tenon_l = max(3.5, 8 * E);
 tenon_l2 = tenon_l + max(1.2, 3 * E);
-tenon_h = max(2, 5 * E);
+tenon_h = max(2.5, 5 * E);
 tenon_sort = max(4, 10 * E);
 rebord_p = max(14, 35 * E);
 rebord_e = max(3.5, 8 * E);
-h_axe   = 30 * E;
-poteau_d = max(2, 5 * E);         // poteaux d'élastiques
-pivot_d = max(2.5, 6 * E);        // pivot du levier (sur le couvercle)
-axe_ch_d = max(1.6, 3 * E);       // tige des pivots de fixation du couvercle
-enj_l   = 12 * E;
-enj_h   = max(1.2, 3 * E);
+// pivots et ergots : minimums relevés après l'essai au 1/5 (trop fragiles)
+poteau_d = max(2.5, 5 * E);       // poteaux d'élastiques
+pivot_d = max(3, 6 * E);          // pivots des leviers
+ergot_d = max(3, 6 * E);          // ergot du coulisseau qui pousse le levier
+teton_d = max(3, 5 * E);          // tétons des leviers
+axe_ch_d = max(2.4, 3 * E);       // tige des pivots de fixation du couvercle
+paroi   = max(1.2, 2.5 * E);      // matière autour des fentes du levier
 
 // ---- épaisseurs (minimums imprimables) ----
 peau_e  = max(1.2, 3 * E);
-porte_e = max(1.2, 3 * E);
-feutre_e = E >= 0.7 ? 1 : 0;
+porte_e = max(1.6, 3 * E);
+feutre_e = reel ? 1 : 0;
 jeu     = max(0.3, 0.6 * E);
-inter_e = max(0.8, 1.5 * E);
-levier_e = max(2, 5 * E);
-c_porte = porte_e + 2 * feutre_e + jeu;
+levier_e = max(2.5, 5 * E);
+bande_e = porte_e + max(feutre_e, 1);          // bande du haut de la porte, où sont les rainures
+c_porte = feutre_e + bande_e + jeu;
 c_meca  = levier_e + max(0.5, 1 * E);
 
-y_p1    = peau_e;                  // couche porte
-y_int   = y_p1 + c_porte;          // plaque intermédiaire
-y_m1    = y_int + inter_e;         // couche mécanisme
-y_cv    = y_m1 + c_meca;           // couvercle
+y_f     = peau_e;                  // couche levier avant
+y_d     = y_f + c_meca;            // couche porte
+y_b     = y_d + c_porte;           // couche levier arrière
+y_cv    = y_b + c_meca;            // peau du couvercle
 epais   = y_cv + peau_e;
-y_porte = y_p1 + feutre_e + jeu / 2;
-y_levier = y_m1 + (c_meca - levier_e) / 2;
+y_porte = y_d + feutre_e + jeu / 2;            // face avant de la porte (et de sa bande)
+y_lev_av = y_f + (c_meca - levier_e) / 2;
+y_lev_ar = y_b + (c_meca - levier_e) / 2;
 
 // ---- géométrie du mécanisme ----
 porte_l = ouv_l + 2 * recouv;
-porte_h = ouv_h + 2 * recouv_hb;
-bas_ouv_porte = bordure + max(0.5, 1 * E);       // bas de la porte, ouverte
-levee   = porte_h - recouv_hb + max(1, 2 * E);
-z_porte_f = bas_ouv_porte + levee;
-z_bas   = z_porte_f + recouv_hb;
-z_haut  = z_bas + ouv_h;
-haut_porte = z_porte_f + porte_h;
-poche_x = porte_l / 2 + jeu + appui;            // demi-largeur du logement de la plaque intermédiaire
-x_coul  = poche_x + max(1.2, 2 * E) + jeu + coul_l / 2;
+levee   = ouv_h + recouv_b + max(1, 1 * E);     // la porte monte au-dessus de l'ouverture
 rapport = levee / course;
-theta   = asin((levee / 2) / bras);
-a_bras  = bras / rapport * cos(theta);
-P_x     = x_coul + a_bras;
-z_pin_f = z_porte_f + h_axe;
-P_z     = z_pin_f - levee / 2;
-x_pin_min = P_x - bras;
-x_pin_max = P_x - bras * cos(theta);
-L2      = P_x + levier_l / 2 + 2 * E + jeu + bordure;   // demi-largeur du corps
-H       = haut_porte + jeu + bordure + max(3, 4 * E);   // hauteur du corps
+P_x     = porte_l / 2 + jeu + max(1.2, 2 * E) + pivot_d / 2;   // pivot du levier de droite (avant), hors du canal de la porte
+theta   = asin((levee / 2) / portee);           // rotation ± theta
+a_erg   = course / (2 * tan(theta));            // pivot -> ergot du coulisseau (bras court)
+x_coul  = P_x + a_erg;                          // coulisseau à l'extérieur du pivot : bascule
+x_teton = P_x - portee;                         // téton avant au plus près du centre (négatif : à gauche)
+rainure = portee * (1 - cos(theta + 1));        // course horizontale du téton dans sa rainure
+marge_a = 1;                                    // degrés de marge des débattements
+w_bout  = teton_d + 2 * paroi;                  // largeur du bout du levier
+r_bout  = portee;                               // centre du bout du levier (le téton)
+r_fin   = r_bout + w_bout / 2;
+lev_w_erg = levier_l + 4 * E;                   // largeur du levier au pivot et au bras court
+r_court = a_erg / cos(theta + marge_a) + ergot_d / 2 + jeu + paroi;   // bout du bras court
+// hauteur du bout du levier sous le téton, porte fermée (et au-dessus, porte ouverte)
+delta   = portee * (sin(theta + marge_a) - sin(theta)) + w_bout / 2 + jeu;
+h_teton = teton_d / 2 + jeu + max(0.8, 1.2 * E); // rainure sous le haut de la porte
+prof    = bande_e - max(0.8, 1.2 * E);          // profondeur des rainures borgnes
+joint   = max(1.5, 3 * E);                      // portée du feutre au-dessus de l'ouverture
+recouv_haut = h_teton + delta + joint;
+porte_h = recouv_b + ouv_h + recouv_haut;
+z_rb_f  = bordure_b + jeu + course;             // bas du rebord (et du coulisseau), relevé
+z_rebord_f = z_rb_f + rebord_e;                 // dessus du rebord
+z_bas   = z_rebord_f + 2 * E;
+z_haut  = z_bas + ouv_h;
+z_porte_f = z_bas - recouv_b;                   // bas de la porte fermée
+z_teton_f = z_porte_f + porte_h - h_teton;
+P_z     = z_teton_f + levee / 2;
+haut_porte = z_porte_f + porte_h + levee;       // haut de la porte ouverte
+H       = max(haut_porte, z_teton_f + levee + delta) + jeu + bordure;
+L2      = max(P_x + r_court + jeu + bordure,
+              x_coul + coul_l / 2 + jeu + 2.4 * axe_ch_d + 6 * jeu + bordure);
+colle_h = reel ? max(2, min(colle, 258 - H)) : colle;   // collerette du haut, réduite pour le plateau
 z_crochet = H - bordure - max(2, 4 * E) - poteau_d / 2;
-x_ch    = (x_coul + coul_l / 2 + jeu + L2 - bordure) / 2;  // pivots de fixation, entre canal et bord
+x_ch    = (x_coul + coul_l / 2 + jeu + L2 - bordure) / 2;
 
-function z_levier(x, ang) = P_z + (P_x - x) * tan(ang);
-z_lev_f = z_levier(x_coul, theta);
-z_rebord_f = z_bas - 2 * E;
-coul_z0 = z_lev_f - levier_l / 2 - max(2, 5 * E);
-coul_z1 = z_rebord_f - rebord_e + tenon_h;
-coul_h  = coul_z1 - coul_z0;
+// coulisseau : du rebord (en bas) jusqu'au-dessus de son ergot
+z_erg_f = P_z + a_erg * tan(theta);             // ergot, porte fermée (coulisseau en haut)
+encoche = (lev_w_erg / 2) / cos(theta + marge_a) + (coul_l / 2 + jeu) * tan(theta + marge_a) + jeu;
+coul_z0 = z_rb_f;
+coul_h  = z_erg_f + max(encoche, ergot_d / 2) + max(3, 6 * E) - coul_z0;
 
+// fixation du couvercle
+tete_d  = 2.4 * axe_ch_d;
+tete_h  = 0.7 * axe_ch_d + max(0.4, 0.6 * E);
+chute   = (tete_d + axe_ch_d) / 2 + 2 * jeu;    // le couvercle se pose `chute` plus haut puis descend
+function pivots() = [for (s = [-1, 1], z = [H - bordure - 1 - axe_ch_d / 2 - jeu,
+                                            bordure_b + 1 + chute + tete_d / 2 + jeu]) [s * x_ch, z]];
+
+// forces : la porte retombe par son poids ; les rebords et coulisseaux (côté bras court) s'y opposent
 m_porte = porte_l * porte_h * porte_e / 1000 * densite;
-F_elast = (m_porte * 0.00981 + (E >= 0.7 ? 0.5 : 0.05)) * rapport * 1.3;
+m_bas   = 2 * ((2 * x_coul + tenon_l2) * rebord_p * rebord_e + coul_l * coul_h * (y_cv - y_f)) / 1000 * densite * 0.5;
+F_frott = reel ? 0.5 : 0.05;                    // frottement du feutre, ramené à la porte (N)
+F_elast = max(0, 1.3 * (m_bas * 0.00981 + F_frott * rapport) - m_porte * 0.00981 * rapport);
+F_chat  = (m_porte * 0.00981 + F_frott) * rapport - m_bas * 0.00981 + F_elast;
 
 echo(str("[echelle ", E, "] corps ", 2 * L2, " x ", H, " x ", epais, " mm ; avec collerettes ",
-         2 * (L2 + colle), " x ", H + colle));
+         2 * (L2 + colle), " x ", H + colle_h));
 echo(str("Ouverture ", ouv_l, " x ", ouv_h, " de z = ", z_bas, " à ", z_haut, " ; porte ", porte_l, " x ", porte_h,
-         " (", round(m_porte), " g), descend de ", levee));
-echo(str("Levier ", bras, " mm, rapport ", round(rapport * 10) / 10, ", rotation ±", round(theta),
-         "° ; élastiques ~", round(F_elast * 10) / 10, " N au total"));
-if (E >= 0.7) echo(str("Encoche dans le contreplaqué : ", 2 * L2 + 1, " x ", H + 0.5,
-                       " mm depuis le bas ; le module dépasse de ", epais - 2 * peau_e - contreplaque, " mm"));
+         " (", round(m_porte), " g), monte de ", levee));
+echo(str("Leviers : portée ", portee, ", bras court ", a_erg, ", rapport ", round(rapport * 10) / 10,
+         ", rotation ±", round(theta * 10) / 10, "°, tétons à x = ±", -x_teton,
+         " ; élastiques ~", round(F_elast * 10) / 10, " N au total ; le chat appuie ~", round(F_chat * 10) / 10, " N"));
+if (reel) echo(str("Encoche dans le contreplaqué : ", 2 * L2 + 1, " x ", H + 0.5,
+                   " mm depuis le bas ; écart entre collerettes ", y_cv - peau_e, " mm (contreplaqué ", contreplaque, ")"));
+if (reel && (2 * (L2 + colle) > 258 || H + colle_h > 258))
+    echo(str("ATTENTION : le cadre (", 2 * (L2 + colle), " x ", H + colle_h, ") ne tient pas sur un plateau de 260 mm."));
 
-assert(z_haut + enj_l <= H, "L'ouverture est trop haute : réduire ouv_h.");
-assert(x_pin_min > -porte_l / 2 + 3 * levier_l / 2, "La pointe du levier sort de la porte : réduire bras.");
-assert(E < 0.7 || 2 * (L2 + colle) <= 258, "Le cadre dépasse le plateau de 260 mm.");
-assert(E < 0.7 || H + colle <= 258, "Le cadre dépasse le plateau de 260 mm (hauteur).");
+assert(P_x - r_fin > -(x_coul - coul_l / 2 - jeu - 1), "Le bout d'un levier touche le coulisseau d'en face.");
+assert(-x_teton + teton_d / 2 + jeu + max(1.2, 3 * E) < porte_l / 2, "Les rainures sortent de la porte.");
+assert(coul_z0 + coul_h + max(5, 10 * E) < z_crochet, "Pas de place pour l'élastique au-dessus du coulisseau.");
+assert(P_z - r_court * sin(theta + marge_a) - lev_w_erg / 2 > z_haut + joint, "Le bras court passe devant l'ouverture.");
 assert(chute < course, "Les tenons sortiraient des fentes à la pose du couvercle.");
-assert(E < 0.7 || F_elast < chat_kg * 9.81 * 0.6, "Les élastiques sont trop forts pour le chat.");
+assert(!reel || F_chat < chat_kg * 9.81 * 0.6, "Le rebord est trop dur pour le chat.");
 
 // ---------------------------------------------------------------------
 // Contours 2D (plan X-Z)
@@ -148,41 +188,45 @@ assert(E < 0.7 || F_elast < chat_kg * 9.81 * 0.6, "Les élastiques sont trop for
 module rect2(x0, z0, x1, z1) translate([x0, z0]) square([x1 - x0, z1 - z0]);
 module rrect2(x0, z0, x1, z1, r) translate([x0 + r, z0 + r]) offset(r = r) square([x1 - x0 - 2 * r, z1 - z0 - 2 * r]);
 module corps2() rect2(-L2, 0, L2, H);
-// collerettes : côtés et haut arrondis, bas droit (posé sur le plancher)
-module collerette2() hull() {
+module interieur2() rect2(-L2 + bordure, bordure_b, L2 - bordure, H - bordure);
+module collerette2() hull() {          // bas droit (posé sur le plancher), haut arrondi
     rect2(-L2 - colle, 0, L2 + colle, 1);
-    for (s = [-1, 1]) translate([s * (L2 + colle - 3 * E), H + colle - 3 * E]) circle(r = 3 * E);
+    for (s = [-1, 1]) translate([s * (L2 + colle - 3 * E), H + colle_h - 3 * E]) circle(r = 3 * E);
 }
-module ouverture2(m = 0) offset(delta = m) hull() for (s = [-1, 1]) {
-    translate([s * (ouv_l / 2 - r_arche), z_haut - r_arche]) circle(r = r_arche, $fn = 96);
-    translate([s * (ouv_l / 2 - r_bas), z_bas + r_bas]) circle(r = r_bas);
+module ouverture2() rrect2(-ouv_l / 2, z_bas, ouv_l / 2, z_haut, r_coin);
+module canal_porte2() rect2(-porte_l / 2 - jeu, z_porte_f - jeu, porte_l / 2 + jeu, haut_porte + jeu);
+module canaux2() for (s = [-1, 1]) hull() {     // fond plat : le pied du coulisseau est carré
+    rect2(s * x_coul - coul_l / 2 - jeu, coul_z0 - course - 0.5, s * x_coul + coul_l / 2 + jeu, coul_z0 - course);
+    translate([s * x_coul, z_crochet + poteau_d / 2 + jeu + coul_l / 2]) circle(d = coul_l + 2 * jeu);
 }
-module canal_porte2() rect2(-porte_l / 2 - jeu, bordure, porte_l / 2 + jeu, haut_porte + jeu);
-module poche2() rect2(-poche_x, bordure, poche_x, H - bordure);
-module canaux2() for (s = [-1, 1])
-    hull() for (z = [coul_z0 - course - 0.5 + coul_l / 2, z_crochet + poteau_d / 2 + jeu + coul_l / 2])
-        translate([s * x_coul, z]) circle(d = coul_l + 2 * jeu);
-module balayage2() hull() {
-    translate([P_x, P_z]) circle(d = levier_l + 4 * E + 2 * jeu);
-    for (a = [-theta - 2, 0, theta + 2]) translate([P_x, P_z]) rotate(180 - a) translate([bras, 0]) circle(d = levier_l + 4 * E);
-}
-module lumiere2() hull() for (x = [x_pin_min, x_pin_max], z = [z_pin_f, z_pin_f - levee])
-    translate([x, z]) circle(d = levier_l * 0.45 + 2 * jeu);
 module fentes2() for (s = [-1, 1])
-    rect2(s * x_coul - tenon_l2 / 2 - jeu, coul_z1 - tenon_h - course - jeu, s * x_coul + tenon_l2 / 2 + jeu, coul_z1 + jeu);
-// pivots de fixation du couvercle : tige + tête conique (imprimable sans support)
-tete_d  = 2.4 * axe_ch_d;
-tete_h  = 0.7 * axe_ch_d + max(0.4, 0.6 * E);
-chute   = (tete_d + axe_ch_d) / 2 + 2 * jeu;     // le couvercle se pose `chute` plus haut puis descend
-function pivots() = [for (s = [-1, 1], z = [H - bordure - tete_d / 2 - 2 * E, chute + tete_d / 2 + bordure]) [s * x_ch, z]];
-// trou en serrure du couvercle : gros trou en bas (passe la tête), fente au-dessus (tient la tige)
+    rect2(s * x_coul - tenon_l2 / 2 - jeu, coul_z0 - course - jeu, s * x_coul + tenon_l2 / 2 + jeu, coul_z0 + tenon_h + jeu);
 module serrure2(p) {
     translate([p[0], p[1] - chute]) circle(d = tete_d + 2 * jeu);
     hull() for (dz = [-chute, 0]) translate([p[0], p[1] + dz]) circle(d = axe_ch_d + 2 * jeu);
 }
-// plots du couvercle qui tiennent la plaque intermédiaire
-function plots() = [[-poche_x + 4 * E, H - bordure - 5 * E], [poche_x - 4 * E, H - bordure - 5 * E],
-                    [-poche_x + 4 * E, bordure + 6 * E], [poche_x - 6 * E, bordure + 6 * E]];
+
+// levier : pivot à l'origine, bras long vers -x (téton), bras court vers +x (ergot)
+module levier_contour2() {
+    hull() { circle(d = lev_w_erg); translate([r_court - lev_w_erg / 2, 0]) circle(d = lev_w_erg); }
+    hull() { circle(d = lev_w_erg); translate([-0.35 * r_bout, 0]) circle(d = levier_l); }
+    hull() { translate([-0.35 * r_bout, 0]) circle(d = levier_l); translate([-r_bout, 0]) circle(d = w_bout); }
+}
+module levier2() difference() {
+    levier_contour2();
+    circle(d = pivot_d + 2 * jeu);
+    // fente de l'ergot du coulisseau (radiale, sur le bras court)
+    hull() for (r = [a_erg, a_erg / cos(theta + marge_a)]) translate([r, 0]) circle(d = ergot_d + 2 * jeu);
+    for (k = [0.4, 0.58, 0.76]) translate([-r_bout * k, 0])
+        hull() { circle(d = levier_l * 0.42); translate([r_bout * 0.08, 0]) circle(d = levier_l * 0.25); }
+}
+// zone balayée par le levier de droite (le gauche est son miroir) : vrai balayage, par pas de ~2°,
+// éventuellement prolongé de `dz` vers le haut ou le bas (pose du couvercle)
+n_bal = ceil(2 * (theta + marge_a) / 2);
+function a_bal(i) = -(theta + marge_a) + i * 2 * (theta + marge_a) / n_bal;
+module balayage2(dz = 0) for (i = [0 : n_bal - 1]) hull() for (a = [a_bal(i), a_bal(i + 1)], d = [0, dz])
+    translate([P_x, P_z + d]) rotate(a) offset(r = jeu) levier_contour2();
+module balayage_chute2(sens) balayage2(sens * chute);
 
 // ---------------------------------------------------------------------
 // Pièces en place (repère du mur)
@@ -192,23 +236,24 @@ module couche(y0, e) en_place(y0) linear_extrude(e) children();
 module bride_y(x, z, d, y0, y1) translate([x, y0, z]) rotate([-90, 0, 0]) cylinder(d = d, h = y1 - y0);
 
 module cadre_monde() {
-    difference() {
-        union() {
-            couche(0, peau_e) difference() { collerette2(); ouverture2(); fentes2(); }
-            couche(y_p1 - eps, c_porte + 2 * eps) difference() { corps2(); canal_porte2(); canaux2(); }
-            couche(y_int, inter_e + eps) difference() { corps2(); poche2(); canaux2(); }
-            couche(y_m1, c_meca) difference() { corps2(); poche2(); balayage2(); canaux2(); }
-        }
-        // logement de la pointe du pivot du levier, allongé vers le haut pour la pose du couvercle
-        hull() for (dz = [0, chute]) bride_y(P_x, P_z + dz, pivot_d + 2 * jeu, y_m1 - 1.2 * E - jeu, y_m1 + 1);
-    }
+    couche(0, peau_e) difference() { collerette2(); ouverture2(); fentes2(); }
+    // couche levier avant : pleine sauf la zone du levier de droite
+    couche(y_f - eps, c_meca + 2 * eps) difference() { corps2(); ouverture2(); balayage2(); canaux2(); }
+    // couche porte : canal de la porte ; la zone du levier avant est ouverte hors de la porte
+    // (pour le poser), le bossage du couvercle la referme
+    couche(y_d, c_porte + eps) difference() { corps2(); canal_porte2(); canaux2(); balayage_chute2(1); }
+    // couche levier arrière : seulement le bord (toute l'épaisseur du mur)
+    couche(y_b, c_meca) difference() { corps2(); interieur2(); }
+    // pivots des leviers
+    bride_y(P_x, P_z, pivot_d, y_f - eps, y_d - 0.2);
+    bride_y(-P_x, P_z, pivot_d, y_b - eps, y_cv - 0.2);
     // poteaux d'élastiques (dans les canaux)
-    for (s = [-1, 1]) bride_y(s * x_coul, z_crochet, poteau_d, y_p1 - eps, y_cv - jeu);
-    // pivots de fixation du couvercle : traversent la peau côté pièce, tête apparente
-    for (p = pivots()) translate([p[0], y_cv - eps, p[1]]) rotate([-90, 0, 0]) {
-        cylinder(d = axe_ch_d, h = peau_e + jeu + eps);
-        translate([0, 0, peau_e + jeu]) cylinder(d1 = axe_ch_d, d2 = tete_d, h = 0.7 * axe_ch_d);
-        translate([0, 0, peau_e + jeu + 0.7 * axe_ch_d - eps]) cylinder(d = tete_d, h = tete_h - 0.7 * axe_ch_d + eps);
+    for (s = [-1, 1]) bride_y(s * x_coul, z_crochet, poteau_d, y_f - eps, y_cv - jeu);
+    // pivots de fixation du couvercle : traversent le couvercle, tête apparente
+    for (p = pivots()) translate([p[0], y_b - eps, p[1]]) rotate([-90, 0, 0]) {
+        cylinder(d = axe_ch_d, h = c_meca + peau_e + jeu + eps);
+        translate([0, 0, c_meca + peau_e + jeu]) cylinder(d1 = axe_ch_d, d2 = tete_d, h = 0.7 * axe_ch_d);
+        translate([0, 0, c_meca + peau_e + jeu + 0.7 * axe_ch_d - eps]) cylinder(d = tete_d, h = tete_h - 0.7 * axe_ch_d + eps);
     }
 }
 
@@ -217,59 +262,73 @@ module couvercle_monde() {
         collerette2(); ouverture2(); fentes2();
         for (p = pivots()) serrure2(p);
     }
-    // pivot du levier
-    bride_y(P_x, P_z, pivot_d, y_m1 - 1.2 * E, y_cv + eps);
-    // plots
-    for (p = plots()) bride_y(p[0], p[1], max(3, 7 * E), y_m1 + 0.1, y_cv + eps);
-}
-
-module intermediaire2() difference() {
-    rect2(-poche_x + jeu / 2, bordure + jeu / 2, poche_x - jeu / 2, H - bordure - jeu / 2);
-    ouverture2(); lumiere2();
-}
-
-module porte2() difference() {
-    rrect2(-porte_l / 2, 0, porte_l / 2, porte_h, 3 * E);
-    hull() for (x = [x_pin_min, x_pin_max]) translate([x, h_axe]) circle(d = levier_l * 0.45 + 2 * jeu);
-}
-
-module levier() {
-    // pivot à l'origine, pointe vers -x, à plat ; téton vers -z (côté porte)
-    e = levier_e;
-    td = levier_l * 0.45;
-    tl = y_levier - (y_porte + porte_e * 0.25);
-    difference() {
-        union() {
-            linear_extrude(e) hull() { circle(d = levier_l + 4 * E); translate([-bras * 0.35, 0]) circle(d = levier_l); }
-            linear_extrude(e) hull() { translate([-bras * 0.35, 0]) circle(d = levier_l); translate([-bras, 0]) circle(d = levier_l * 0.8); }
-            translate([-bras, 0, -tl]) cylinder(d = td, h = tl + e / 2);
-            translate([-bras, 0, -tl]) sphere(d = td);
-        }
-        translate([0, 0, -1]) cylinder(d = pivot_d + 2 * jeu, h = e + 2);
-        for (k = [0.45, 0.62, 0.79]) translate([-bras * k, 0, -1]) linear_extrude(e + 2)
-            hull() { circle(d = levier_l * 0.42); translate([bras * 0.09, 0]) circle(d = levier_l * 0.25); }
+    // remplissage de la couche arrière : appui de la porte, sauf la zone du levier de gauche
+    couche(y_b + 0.1, c_meca - 0.1 + eps) difference() {
+        offset(delta = -jeu / 2) interieur2();
+        ouverture2(); canaux2();
+        mirror([1, 0]) balayage_chute2(-1);
+        for (p = pivots()) serrure2(p);
     }
+    // bossage qui referme la couche porte autour du levier avant, hors de la porte
+    couche(y_d + 0.2, c_porte - 0.1 + eps) difference() {
+        intersection() {
+            offset(delta = -jeu / 2) balayage2();
+            rect2(porte_l / 2 + 1.5 * jeu, -1, L2, H + 1);
+        }
+        offset(delta = jeu / 2) canaux2();
+        translate([P_x, P_z]) circle(d = pivot_d + 2 * jeu);
+    }
+}
+
+// porte : x centré, y = 0 face avant (côté sas), z = 0 bas de la porte.
+// Face avant et bande du haut dans le même plan : elle s'imprime à plat, face avant sur le plateau.
+// Deux rainures borgnes horizontales dans la bande : avant à x_teton, arrière à -x_teton.
+module rainure2(s = 1) hull() for (dx = [0, rainure]) translate([s * (x_teton + dx), porte_h - h_teton]) circle(d = teton_d + 2 * jeu);
+module porte() difference() {
+    union() {
+        couche(0, porte_e) rrect2(-porte_l / 2, 0, porte_l / 2, porte_h, 3 * E);
+        couche(0, bande_e) rrect2(-porte_l / 2, porte_h - 2 * h_teton, porte_l / 2, porte_h, min(3 * E, 0.8 * h_teton));
+    }
+    couche(-1, prof + 1) rainure2();
+    couche(bande_e - prof, prof + 1) rainure2(-1);
+}
+
+// longueur des tétons des leviers : jusqu'au fond de la rainure, moins le jeu
+l_av = (y_porte - (y_lev_av + levier_e)) + prof - jeu;
+l_ar = (y_lev_ar - (y_porte + bande_e)) + prof - jeu;
+
+// levier : à plat, téton vers le haut (+z). Les deux leviers ne diffèrent que par la
+// longueur du téton (le feutre avant éloigne un peu la porte du levier avant).
+module levier(avant = true) {
+    linear_extrude(levier_e) levier2();
+    translate([-portee, 0, levier_e - eps]) cylinder(d = teton_d, h = (avant ? l_av : l_ar) + eps);
 }
 
 module queue_aronde2(m = 0) polygon([[-tenon_l / 2 - m, -tenon_h - m], [tenon_l / 2 + m, -tenon_h - m],
                                     [tenon_l2 / 2 + m, m], [-tenon_l2 / 2 - m, m]]);
-module coulisseau() {
-    // x centré, z = 0 au bas, y = 0 face extérieure côté sas
+// coulisseau : x centré, z = 0 au bas (queue d'aronde dans le rebord), y = repère du mur.
+// avant = true : celui de droite, qui pousse le levier avant ; sinon celui de gauche.
+module coulisseau(avant = true) {
     r = min(2, coul_l / 4);
+    z_e = z_erg_f - coul_z0;
+    y_c0 = avant ? y_f : y_b;                           // couche de son levier
     difference() {
         union() {
-            translate([0, y_p1 + jeu, 0]) rotate([-90, 0, 0]) mirror([0, 1, 0])
-                linear_extrude(y_cv - y_p1 - 2 * jeu) rrect2(-coul_l / 2, 0, coul_l / 2, coul_h - tenon_h / 2, r);
-            translate([0, -tenon_sort, coul_h]) rotate([-90, 0, 0]) mirror([0, 1, 0])
+            translate([0, y_f + jeu, 0]) rotate([-90, 0, 0]) mirror([0, 1, 0])
+                linear_extrude(y_cv - y_f - 2 * jeu) rrect2(-coul_l / 2, 0, coul_l / 2, coul_h, r);
+            translate([0, -tenon_sort, tenon_h]) rotate([-90, 0, 0]) mirror([0, 1, 0])
                 linear_extrude(epais + 2 * tenon_sort) queue_aronde2();
         }
-        // fenêtre du levier
-        translate([-coul_l, y_levier - jeu, z_lev_f - coul_z0 - levier_l / 2 - jeu])
-            cube([2 * coul_l, levier_e + 2 * jeu, levier_l + 2 * jeu]);
-        // trou pour la boucle d'élastique, sous la queue d'aronde
-        translate([0, epais / 2, coul_h - tenon_h - max(1.5, 3 * E)]) rotate([0, 90, 0])
+        // encoche : le bras court du levier passe dans sa couche, au-dessus
+        translate([-coul_l, avant ? y_f - 1 : y_b - jeu, z_e - encoche])
+            cube([2 * coul_l, (avant ? y_d - y_f + 1 : y_cv - y_b + 1) + jeu, coul_h]);
+        // trou pour la boucle d'élastique, en haut
+        translate([0, epais / 2, coul_h - max(1.5, 3 * E)]) rotate([0, 90, 0])
             cylinder(d = max(1.2, 2.5 * E), h = coul_l + 2, center = true);
     }
+    // ergot qui traverse la fente du levier
+    if (avant) translate([0, y_d + jeu + eps, z_e]) rotate([90, 0, 0]) cylinder(d = ergot_d, h = y_d + jeu - y_c0 - 0.3 + eps);
+    else       translate([0, y_b - jeu - eps, z_e]) rotate([-90, 0, 0]) cylinder(d = ergot_d, h = c_meca + jeu - 0.3 + eps);
 }
 
 module patte2(s) scale(s) {
@@ -293,55 +352,34 @@ module rebord() {
     }
 }
 
-module arche2(w) intersection() { offset(r = w) ouverture2(); rect2(-500, z_bas + r_bas, 500, 1000); }
-module enjoliveur() {
-    // z = 0 contre la peau ; lèvre vers -z
-    n = 6;
-    lw = max(0.8, 1.6 * E);
-    difference() {
-        for (i = [0 : n - 1]) {
-            a0 = 90 * i / n; a1 = 90 * (i + 1) / n;
-            hull() {
-                translate([0, 0, enj_h * sin(a0)]) linear_extrude(eps) arche2(enj_l * cos(a0));
-                translate([0, 0, enj_h * sin(a1) - eps]) linear_extrude(eps) arche2(max(0.3, enj_l * cos(a1)));
-            }
-        }
-        translate([0, 0, -1]) linear_extrude(enj_h + 2) ouverture2(-lw);
-    }
-    translate([0, 0, -peau_e]) linear_extrude(peau_e + eps) difference() {
-        intersection() { ouverture2(-0.1); rect2(-500, z_bas + r_bas, 500, 1000); }
-        ouverture2(-lw);
-    }
-}
-
 // ---------------------------------------------------------------------
 // Assemblage
 // ---------------------------------------------------------------------
 module assemblage(ecarte = 0) {
     p   = ouvert ? 1 : 0;
-    ang = ouvert ? -theta : theta;
+    rot = ouvert ? -theta : theta;     // fermée : bout du bras long en bas
     dz  = -p * course;
     e   = ecarte;
-    color("Peru") translate([0, -2 * e, 0]) cadre_monde();
-    color("Sienna") en_place(-2 * e) mirror([0, 0, 1]) enjoliveur();
-    if (!coupe) {
-        color("BurlyWood", 0.85) translate([0, 3 * e, 0]) couvercle_monde();
-        color("Sienna") en_place(epais + 3 * e) enjoliveur();
+    if (!sans_cadre) color("Peru") translate([0, -2 * e, 0]) cadre_monde();
+    if (!coupe) color("BurlyWood", 0.85) translate([0, 3 * e, 0]) couvercle_monde();
+    color("SteelBlue") translate([0, y_porte, z_porte_f + p * levee]) porte();
+    color("Gold") en_place(y_lev_av - e) translate([P_x, P_z, 0]) rotate([0, 0, rot]) levier(true);
+    color("Orange") mirror([1, 0, 0]) en_place(y_lev_ar + levier_e + e) translate([P_x, P_z, 0]) rotate([0, 0, rot])
+        mirror([0, 0, 1]) levier(false);
+    color("ForestGreen") {
+        translate([x_coul, 0, coul_z0 + dz]) coulisseau(true);
+        translate([-x_coul, 0, coul_z0 + dz]) coulisseau(false);
     }
-    color("White", 0.4) couche(y_int + e, inter_e) intermediaire2();
-    color("SteelBlue") en_place(y_porte - e) translate([0, z_porte_f - p * levee]) linear_extrude(porte_e) porte2();
-    color("Gold") en_place(y_levier + 2 * e) translate([P_x, P_z]) rotate(-ang) levier();
-    color("ForestGreen") for (s = [-1, 1]) translate([s * x_coul, 0, coul_z0 + dz]) coulisseau();
     color("Green") {
-        translate([0, -2 * e, z_rebord_f - rebord_e + dz]) mirror([0, 1, 0]) rebord();
-        translate([0, epais + 3 * e, z_rebord_f - rebord_e + dz]) rebord();
+        translate([0, -2 * e, z_rb_f + dz]) mirror([0, 1, 0]) rebord();
+        translate([0, epais + 3 * e, z_rb_f + dz]) rebord();
     }
     color("Red") for (s = [-1, 1]) hull() {
-        translate([s * x_coul, epais / 2, coul_z0 + coul_h - tenon_h - max(1.5, 3 * E) + dz]) sphere(d = max(0.8, 2 * E));
+        translate([s * x_coul, epais / 2, coul_z0 + coul_h - max(1.5, 3 * E) + dz]) sphere(d = max(0.8, 2 * E));
         translate([s * x_coul, epais / 2, z_crochet]) sphere(d = max(0.8, 2 * E));
     }
-    if (E >= 0.7 && !coupe) color("Tan", 0.35) difference() {        // côté en contreplaqué avec l'encoche
-        translate([-137.5, y_p1 + (c_porte + inter_e + c_meca - contreplaque) / 2, 0]) cube([275, contreplaque, 285]);
+    if (reel && !coupe && !sans_cadre) color("Tan", 0.35) difference() {   // côté en contreplaqué avec l'encoche
+        translate([-137.5, peau_e, 0]) cube([275, contreplaque, H + 30]);
         translate([-L2 - 0.5, -1, -1]) cube([2 * L2 + 1, 40, H + 1.5]);
     }
 }
@@ -349,11 +387,10 @@ module assemblage(ecarte = 0) {
 // ---------------------------------------------------------------------
 // Pièces à plat pour l'impression
 // ---------------------------------------------------------------------
-module cadre_plat()      rotate([90, 0, 0]) cadre_monde();                                      // face sas sur le plateau
-module couvercle_plat()  translate([0, 0, epais]) rotate([-90, 0, 0]) couvercle_monde();        // face pièce sur le plateau
-module levier_plat()     rotate([180, 0, 0]) translate([0, 0, -levier_e]) levier();             // téton vers le haut
-module coulisseau_plat() translate([0, 0, max(coul_l, tenon_l2) / 2]) rotate([0, 90, 0]) coulisseau();
-module enjoliveur_plat() translate([0, 0, peau_e]) enjoliveur();
+module cadre_plat()      rotate([90, 0, 0]) cadre_monde();                               // face sas sur le plateau
+module couvercle_plat()  translate([0, 0, epais]) rotate([-90, 0, 0]) couvercle_monde(); // face pièce sur le plateau
+module porte_plat()      rotate([90, 0, 0]) porte();                                     // à plat, face avant dessous
+module coulisseau_plat(avant) translate([0, 0, max(coul_l, tenon_l2) / 2]) rotate([0, 90, 0]) coulisseau(avant); // couché
 
 // maquette : deux planches de 260 x 260
 module planche_1() {
@@ -362,25 +399,29 @@ module planche_1() {
     translate([(L2 + colle) + g / 2, 0, 0]) couvercle_plat();
 }
 module planche_2() {
-    g = 5;
-    linear_extrude(inter_e) intermediaire2();
-    translate([-poche_x - g - porte_h, porte_l / 2 + bordure, 0]) rotate(-90) linear_extrude(porte_e) porte2();
-    translate([poche_x + g + levier_l, g, 0]) rotate(90) translate([bras, 0, 0]) levier_plat();
-    for (k = [0, 1]) translate([poche_x + 3 * g + 1.5 * levier_l + k * (coul_h + g + 4), bras + 3 * g, 0]) coulisseau_plat();
-    for (k = [0, 1]) translate([0, H + g + k * (rebord_p + g), 0]) rebord();
-    for (s = [-1, 1]) translate([s * (ouv_l / 2 + enj_l + g / 2), H + 2 * (rebord_p + g) - z_bas - r_bas, 0]) enjoliveur_plat();
+    g = 6;
+    lw = lev_w_erg;
+    y_l = g + lw / 2;                              // porte à plat en y < 0, le reste en y > 0
+    y_r = y_l + 1.5 * lw + 2 * g;
+    y_c = y_r + 2 * rebord_p + 2 * g + tenon_sort;
+    porte_plat();
+    for (k = [0, 1]) translate([(r_fin - r_court) / 2, y_l + k * (lw + g), 0]) levier(k == 0);
+    for (k = [0, 1]) translate([0, y_r + k * (rebord_p + g), 0]) rebord();
+    // coulisseaux couchés côte à côte, le long de x
+    translate([-coul_h - g / 2, y_c, 0]) coulisseau_plat(true);
+    translate([g / 2, y_c, 0]) coulisseau_plat(false);
 }
 
 // ---------------------------------------------------------------------
-if      (part == "assembled")     assemblage();
-else if (part == "eclate")        assemblage(E >= 0.7 ? 15 : 6);
-else if (part == "cadre")         cadre_plat();
-else if (part == "couvercle")     couvercle_plat();
-else if (part == "intermediaire") linear_extrude(inter_e) intermediaire2();
-else if (part == "porte")         linear_extrude(porte_e) porte2();
-else if (part == "levier")        levier_plat();
-else if (part == "coulisseau")    coulisseau_plat();
-else if (part == "rebord")        rebord();
-else if (part == "enjoliveur")    enjoliveur_plat();
-else if (part == "planche_1")     planche_1();
-else if (part == "planche_2")     planche_2();
+if      (part == "assembled")          assemblage();
+else if (part == "eclate")             assemblage(reel ? 15 : 6);
+else if (part == "cadre")              cadre_plat();
+else if (part == "couvercle")          couvercle_plat();
+else if (part == "porte")              porte_plat();
+else if (part == "levier_avant")       levier(true);
+else if (part == "levier_arriere")     levier(false);
+else if (part == "coulisseau_avant")   coulisseau_plat(true);
+else if (part == "coulisseau_arriere") coulisseau_plat(false);
+else if (part == "rebord")             rebord();
+else if (part == "planche_1")          planche_1();
+else if (part == "planche_2")          planche_2();

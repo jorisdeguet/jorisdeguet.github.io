@@ -301,128 +301,84 @@ Le design est fait pour **éviter de couper**. Si un jour il le faut :
 * La vitre se trouve dans une zone de passage du chat. Elle est protégée par les sabots et les pinces,
   mais il faut adoucir les arêtes. Un chat peut sauter sur le couvercle : le contreplaqué de 12 mm tient.
 
-## 13. Variante : module de porte escamotable (à la place du volet 2)
+## 13. Variante : module de porte relevable (à la place du volet 2)
 
 Fichiers :
 - `porte_rebord.scad` : le module, avec un paramètre `echelle` (1 = taille réelle) ;
-- `porte_rebord_maquette.scad` : le même modèle à `echelle = 0.4`, en deux planches, pour tester le mécanisme.
+- `porte_rebord_maquette.scad` : le même modèle à `echelle = 0.4`, en deux planches.
 
-Aperçus :
-- `apercu_mur_fermee.png` et `apercu_mur_ouverte.png` : vus depuis la pièce, sans le couvercle ;
-- `apercu_mur_eclate.png` : vue éclatée, avec le contreplaqué et son encoche ;
-- `apercu_cadre.png` : le cadre tel qu'il sort de l'imprimante ;
-- `apercu_mini.png` et `apercu_mini_2.png` : les deux planches de la maquette.
+L'autre module possible pour cet emplacement, plus simple, est le battant pivotant du concept **[B](../B-battant/)**. La comparaison est dans le [README de la chatière](../README.md).
 
-### Principe
+![Fermée](apercu_mur_fermee.png) ![Ouverte](apercu_mur_ouverte.png)
 
-On découpe une **encoche** de 248 × 251 mm dans le côté gauche du caisson, depuis le bas. Un **module imprimé** de 19 mm d'épaisseur s'y glisse. Il contient tout le mécanisme et se compose de deux grandes pièces :
+L'ouverture est dans le **bas** du module, juste au-dessus des rebords. La porte se range dans le **haut**.
 
-- **Cadre** (pièce principale, 256 × 256 mm avec sa collerette) : la peau côté sas et toute l'épaisseur du mur sur les bords. Il contient le canal de la porte, les canaux des coulisseaux, les poteaux des élastiques et quatre petits **pivots à tête conique** qui dépassent côté pièce.
-- **Couvercle** (peau côté pièce) : il a quatre **trous en serrure**. On le pose 6 mm plus haut, les grosses têtes passent dans les trous, puis il descend et reste suspendu par son poids, comme un cadre photo sur ses clous. Il porte le pivot du levier et quatre plots qui tiennent la plaque intermédiaire.
+1. **Les rebords sont reliés à travers le mur.** Un rebord de chaque côté glisse en queue d'aronde sur le pied des deux coulisseaux : c'est un seul chariot, qui descend de 20 mm sous les pattes.
+2. **Chaque coulisseau monte le long de l'ouverture** jusqu'à son levier et tire sur le bras court (22 mm), à l'extérieur du pivot. Quand le rebord descend, le bras long (140 mm) monte : c'est un levier en bascule, de rapport 5,8. Il tourne de ±24°.
+3. **Les deux leviers se croisent**, dans deux couches : le levier de droite (vu du sas) passe devant la porte, celui de gauche derrière.
+4. **La porte est entraînée de façon équilibrée.** Chaque levier a un téton au bout, qui glisse dans une rainure borgne d'une **bande en haut de la porte**, une sur chaque face, à 61 mm du centre. La porte n'a aucun trou et s'imprime à plat.
+5. **La porte retombe par son poids** (70 g). Ramené au rebord, ce poids fait déjà environ 4 N vers le haut ; les élastiques ne servent qu'à vaincre le frottement du feutre et le poids des rebords (environ 1,4 N au total). Le chat appuie d'environ 7 N, bien moins que les 24 N de ses pattes avant.
 
-Les deux collerettes débordent de 5 mm tout autour et pincent le contreplaqué. Il reste 1 mm de jeu : une bande de mousse autocollante sur le chant de l'encoche assure l'étanchéité.
+Les leviers ne passent jamais devant l'ouverture : leur bout reste 3 mm au-dessus, porte fermée, pour que le feutre porte tout autour.
+
+**Logements des leviers.** Sur le premier essai, les logements des leviers étaient l'enveloppe de trois positions seulement (fermé, milieu, ouvert). L'arc décrit par le bout du levier sortait de cette enveloppe de 3 mm en taille réelle (0,6 mm au 1/5), d'où le frottement. Ils sont maintenant le vrai balayage, calculé tous les 2°.
+
+**Hauteur.** Le rebord a besoin de 30 mm sous l'ouverture et la porte de 115 mm au-dessus : le module fait 280 mm de haut, trop pour le plateau de 260. Le fichier affiche un avertissement. Pour le faire tenir, il faudrait réduire l'ouverture à environ 95 mm de haut (`ouv_h_r`), ou imprimer le cadre ailleurs.
 
 ```
- sas │ peau 3 │ couche porte 5,6 │ plaque intermédiaire 1,5 │ couche mécanisme 6 │ couvercle 3 │ pièce
-     └──────────────────────── cadre (une seule pièce) ─────────────────────────┘
+ sas │ peau 3 │ levier avant 6 │ porte 5,6 │ levier arrière 6 │ couvercle 3 │ pièce
 ```
 
-- **Ouverture** : en arche, 130 × 110 mm, de 127 à 237 mm au-dessus du plancher. Un **enjoliveur** en quart de rond s'emboîte de chaque côté.
-- **Porte** : elle glisse verticalement et descend de 117 mm dans la poche du bas, ce qui libère toute l'ouverture. Du feutre sur ses deux faces assure l'étanchéité.
-- **Plaque intermédiaire** : une pièce séparée, posée dans son logement du cadre. Elle ne peut pas être imprimée avec le cadre, car elle passerait en pont au-dessus de la porte.
-- **Rebords** : un de chaque côté, sous l'ouverture, décorés de pattes de chat. Ils glissent en **queue d'aronde** sur les tenons de deux **coulisseaux** qui traversent le module : c'est un seul chariot, qui descend de 20 mm sous les pattes.
-- **Levier** de 160 mm : le coulisseau de droite l'appuie à 25 mm de son pivot. Un **téton** à la pointe entraîne la porte par une boutonnière, avec un rapport de 5,9 : 20 mm de rebord donnent 117 mm de porte.
-- **Élastiques** : un dans le canal de chaque coulisseau, entre le trou du coulisseau et le poteau du haut. Ils remontent le chariot, le levier et la porte.
-- Tant que le chat a des pattes sur un des deux rebords, la porte reste en bas.
+| Pièce | Qté | Impression |
+|---|---|---|
+| `cadre` | 1 | Face côté sas sur le plateau. Les pivots s'impriment sans support (tête à 45°). |
+| `couvercle` | 1 | Face côté pièce sur le plateau. Il s'accroche sur quatre pivots à tête par des trous en serrure : on le pose 6 mm plus haut, il descend et reste suspendu par son poids. |
+| `porte` | 1 | À plat, face avant dessous. Feutre de 1 mm sur les deux faces, sous la bande du haut. |
+| `levier_avant`, `levier_arriere` | 1 + 1 | À plat, téton vers le haut. Le téton avant est 1 mm plus long, à cause du feutre. |
+| `coulisseau_avant`, `coulisseau_arriere` | 1 + 1 | Couchés. |
+| `rebord` | 2 | Pattes vers le haut. |
 
-### Sans vis
+Montage :
 
-| Liaison | Comment |
-|---|---|
-| Cadre ↔ couvercle | 4 pivots à tête conique et trous en serrure. Le couvercle tient par son poids. |
-| Pivot du levier | Un plot du couvercle. Sa pointe entre dans un logement du cadre. |
-| Ancrage des élastiques | Deux poteaux imprimés avec le cadre. |
-| Axe porte / levier | Le téton est imprimé avec le levier. La plaque intermédiaire l'empêche de sortir. |
-| Rebords | Queue d'aronde, glissés depuis l'extérieur. On les enlève en tirant. |
-| Enjoliveurs | Lèvre serrée dans l'ouverture. Un point de colle si ça ne tient pas. |
-| Module ↔ caisson | Pincé entre les deux collerettes. |
+1. Poser le cadre à plat, face côté sas en dessous. Mettre le levier avant sur son pivot, à droite.
+2. Enfiler les coulisseaux dans leurs canaux, pied en bas : l'avant à droite, ergot dans la fente du bras court du levier avant ; l'arrière à gauche. Passer les élastiques dans le trou du haut du coulisseau et autour des poteaux.
+3. Poser la porte dans son canal, face avant dessous, la rainure avant sur le téton du levier avant.
+4. Mettre le levier arrière sur son pivot, à gauche, téton vers le bas : ergot du coulisseau arrière dans sa fente, téton dans la rainure arrière.
+5. Présenter le couvercle 6 mm plus haut, les têtes des pivots dans les gros trous. Le faire descendre.
+6. Glisser le module dans l'encoche, côté sas, puis les rebords sur les queues d'aronde.
+7. Appuyer de 20 mm sur un rebord doit lever la porte en entier ; la relâcher doit la laisser retomber.
+
+![Éclaté](apercu_mur_eclate.png)
+
+### Maquette (`maquette/`, échelle 0,4)
+
+![Planche 1](apercu_mini.png) ![Planche 2](apercu_mini_2.png)
+
+- `planche_1.stl` : cadre et couvercle (226 × 237 mm) ; `planche_2.stl` : le reste (185 × 144 mm) ; une STL par pièce.
+- Le 1/5 était trop petit : les pivots et les fixations cassaient. Les pivots, tétons et ergots ont maintenant au moins 3 mm de diamètre, à toutes les échelles.
+- Buse de 0,4 mm, couches de 0,2 mm, PLA. Pas de feutre. Élastiques à cheveux ou d'orthodontie, s'il en faut.
+- Si les pièces mobiles se soudent ou frottent, augmenter `jeu`.
+- Les STL ne sont pas dans git. Régénérer : `openscad -D echelle=0.4 -D 'part="planche_1"' -o maquette/planche_1.stl porte_rebord.scad` (idem `planche_2` et chaque pièce).
 
 ### Le PLA, est-ce un problème ?
 
-Pas pour ce module, qui est à l'**intérieur**, entre le sas et la pièce. Les points à surveiller :
+Pas pour ce module, qui est à l'**intérieur**, entre le sas et la pièce.
 
-- **Ramollissement vers 55 °C** : sans importance ici. Ne pas le laisser au soleil derrière la vitre ni près d'un radiateur.
-- **Fragilité au froid** : le sas descend peut-être vers 5 à 10 °C, ce qui ne pose pas de problème. Le PLA devient cassant sous 0 °C et sous les chocs : il est donc à éviter pour le **volet 1, dans la fenêtre** (section 4), où le PETG reste conseillé.
-- **Fluage sous charge constante** : aucune pièce de ce module n'est sous charge permanente. Les élastiques tirent sur les poteaux, mais faiblement (environ 4 N chacun). Le couvercle pèse sur ses pivots, mais très peu.
-- **Pièces à soigner** : imprimer le levier, les coulisseaux et les rebords avec 4 périmètres et 30 % de remplissage. Le chat atterrit sur les rebords.
-- **Le levier frotte sur son pivot** : un peu de graphite ou de savon sec si ça accroche.
-
-### Forces (affichées dans la console)
-
-- La porte de 3 mm pèse environ 65 g.
-- Il faut environ **9 N d'élastique** au total, en comptant le frottement du feutre et 30 % de marge.
-- Un chat de 4 kg qui atterrit appuie bien plus que ça, environ 24 N au repos sur les pattes avant.
-- La porte remonte contre le ventre du chat avec moins de 2 N.
-
-### Élastiques
-
-Tendus entre le coulisseau (z ≈ 117) et le poteau (z ≈ 240), ils mesurent environ 120 mm au repos et 140 mm rebord enfoncé.
-
-- **Choix** : un élastique de bureau #64 (89 × 6 mm) en boucle simple.
-- **Réglage** : si la porte ne remonte pas en entier, doubler l'élastique.
-- **Remplacement** : environ une fois par an. Il suffit de décrocher le couvercle.
-
-### Pièces (`part=`)
-
-Toutes entrent sur le plateau de 260 × 260 mm.
-
-| Pièce | Qté | Taille réelle | Remarque |
-|---|---|---|---|
-| `cadre` | 1 | 256 × 256 × 19 | Face côté sas sur le plateau. Les pivots s'impriment sans support (tête à 45°). |
-| `couvercle` | 1 | 256 × 256 × 10 | Face côté pièce sur le plateau. |
-| `intermediaire` | 1 | 153 × 242 × 1,5 | À plat. |
-| `porte` | 1 | 146 × 120 × 3 | À plat. Feutre de 1 mm collé sur les deux faces. |
-| `levier` | 1 | 173 × 16 | Téton vers le haut. |
-| `coulisseau` | 2 | 30 × 39 × 12 | Couché. |
-| `rebord` | 2 | 189 × 42 × 8 | Pattes vers le haut. |
-| `enjoliveur` | 2 | 154 × 117 × 6 | D'une autre couleur pour le contraste. |
-
-Il reste à acheter le feutre de 1 mm, la mousse autocollante et les élastiques.
-
-### Maquette (`porte_rebord_maquette.scad`)
-
-Elle sert à vérifier le mouvement et à régler les jeux avant d'imprimer en grand.
-
-- **Dimensions** : module de 105 × 105 × 7 mm, ouverture de 52 × 44 mm, même rapport de levier.
-- **Épaisseurs** : elles ne descendent pas sous les minimums imprimables (peaux 1,2 mm, plaque intermédiaire 0,8 mm). Il n'y a pas de feutre.
-- **Élastique** : un élastique à cheveux ou d'orthodontie.
-- **Planches** :
-  - `planche_1` : cadre et couvercle (214 × 210 mm) ;
-  - `planche_2` : tout le reste (169 × 186 mm).
-- **Impression** : buse de 0,4 mm, couches de 0,2 mm, PLA. Imprimer les petites pièces à vitesse réduite.
-
-N'importe quelle autre échelle fonctionne : `-D echelle=0.6` par exemple.
-
-### Montage
-
-1. Poser le cadre à plat, face côté sas en dessous. Poser la porte avec son feutre dans son canal et vérifier qu'elle glisse librement.
-2. Poser la plaque intermédiaire dans son logement, puis le levier, téton dans la boutonnière de la porte.
-3. Glisser les deux coulisseaux dans leurs canaux, le levier passant dans la fenêtre de celui de droite. Passer les élastiques dans leur trou et autour des poteaux.
-4. Présenter le couvercle 6 mm plus haut, les têtes des pivots dans les gros trous et les tenons dans les fentes. Le faire descendre.
-5. Glisser le module dans l'encoche du contreplaqué, côté sas, puis glisser les rebords sur les queues d'aronde et clipser les enjoliveurs.
-6. Appuyer de 20 mm sur un rebord doit ouvrir la porte en entier, et la relâcher doit la refermer.
+- **Ramollissement vers 55 °C** : ne pas le laisser au soleil derrière la vitre ni près d'un radiateur.
+- **Fragilité au froid** : le sas reste vers 5 à 10 °C. Le PLA devient cassant sous 0 °C : il reste à éviter pour le **volet 1, dans la fenêtre** (section 4), où le PETG est conseillé.
+- **Pièces à soigner** : leviers, coulisseaux et rebords avec 4 périmètres et 30 % de remplissage.
+- **Frottements** : un peu de graphite ou de savon sec sur les pivots et les fentes.
 
 ### Points à vérifier (non testé)
 
-- **Feutre** : il doit effleurer. S'il serre, la porte reste en bas. Le paramètre `jeu` règle l'épaisseur des canaux.
-- **Pivots de fixation** : la tête déborde de 1,5 mm de chaque côté de la fente. Si le couvercle se décroche quand on manipule le module, ajouter un point de colle chaude, qui s'enlève facilement.
-- **Fentes des coulisseaux** : elles traversent les peaux sous les rebords, qui les cachent presque entièrement. Ajouter du feutre si on sent de l'air.
-- **Réglages** : tous les paramètres sont vérifiés par des `assert`. Le fichier refuse de générer si la porte ne libère pas l'ouverture, si le levier sort de la porte, si les élastiques sont trop forts pour le chat ou si une pièce dépasse le plateau.
+- **Feutre** : il doit effleurer. Le paramètre `jeu` règle les canaux.
+- **Retour** : la porte doit retomber seule sur la maquette ; sinon, ajouter les élastiques.
+- **Réglages** : les paramètres sont vérifiés par des `assert` (levier qui touche un coulisseau, rainures hors de la porte, bras court devant l'ouverture, rebord trop dur pour le chat).
 
 ## Fichiers
 
 * `chatiere_sas.scad` : pièces paramétriques et `part="assembled"` pour l'aperçu (`couvercle_ouvert=true` soulève le couvercle).
 * `apercu_assemble.png` : rendu de l'aperçu.
-* `porte_rebord.scad` : module de porte escamotable sans vis (section 13). Les options `echelle`, `ouvert`, `coupe` et `part="eclate"` servent aux aperçus. La console affiche les cotes, l'encoche à découper et les forces.
-* `porte_rebord_maquette.scad` : la maquette à l'échelle 0,4.
+* `porte_rebord.scad` : module de porte relevable sans vis (section 13). Les options `echelle`, `ouvert`, `coupe`, `sans_cadre` et `part="eclate"` servent aux aperçus. La console affiche les cotes, l'encoche à découper et les forces.
+* `porte_rebord_maquette.scad` : la maquette à l'échelle 0,4 ; STL dans `maquette/` (hors git).
 * `apercu_mur_fermee.png`, `apercu_mur_ouverte.png`, `apercu_mur_eclate.png`, `apercu_cadre.png`, `apercu_mini.png`, `apercu_mini_2.png`.
