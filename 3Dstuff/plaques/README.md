@@ -18,5 +18,6 @@ and back-clearance parameters. In the multi-position files, set an individual
 `"decora"` to create the opening and its two countersunk screw holes. Adjust
 the dimensions to match the installed device before printing.
 | `plaque_etagere.scad` | Une position Decora pour une prise posée juste au-dessus d'une étagère : la plaque s'arrête au ras du bois, une lèvre de 1 mm descend derrière l'étagère et remplace la vis du bas. Mesurer `shelf_below_screw` (centre du trou de vis du bas → dessus de l'étagère, ~3 mm sur la photo). Imprimer **dos sur le plateau** (mode `print`) pour que la lèvre n'ait pas besoin de support. |
+| `plaque-extra2mm.scad` | Une position Decora, avec un rebord arrière plus profond de 2 mm (`extra_lip`) pour une boîte électrique qui dépasse un peu du mur. La face avant est identique ; la plaque fait 6 mm d'épaisseur au lieu de 4. |
 
-STL prêts dans `stl/` : `plaque_decora_standard.stl` (×5 en noir) et `plaque_etagere.stl`.
+STL prêts dans `stl/` : `plaque_decora_standard.stl` (×5 en noir) `plaque_etagere.stl` et `plaque-extra2mm.stl`.
