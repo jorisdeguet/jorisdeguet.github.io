@@ -1,0 +1,110 @@
+;  Test de mouvements SANS impression (buse et plateau froids, pas de filament nécessaire)
+;  Chaque section est séparée par une pause de 5 s : écouter d'où vient le bruit.
+;  Zone parcourue : X 20..200, Y 20..200 (modifier si le plateau est plus petit).
+G28 ; origine de tous les axes
+G90
+M400
+
+; ---- 1 Z haut 10mm
+M117 1 Z haut 10mm
+G1 Z10 F600
+M400
+G4 S5
+
+; ---- 2 X seul lent
+M117 2 X seul lent
+G1 X20 Y110 F3000
+G1 X200 F3000
+G1 X20 F3000
+G1 X200 F3000
+G1 X20 F3000
+G1 X200 F3000
+G1 X20 F3000
+G1 X200 F3000
+G1 X20 F3000
+M400
+G4 S5
+
+; ---- 3 Y seul lent
+M117 3 Y seul lent
+G1 X110 Y20 F3000
+G1 Y200 F3000
+G1 Y20 F3000
+G1 Y200 F3000
+G1 Y20 F3000
+G1 Y200 F3000
+G1 Y20 F3000
+G1 Y200 F3000
+G1 Y20 F3000
+M400
+G4 S5
+
+; ---- 2 X seul rapide
+M117 2 X seul rapide
+G1 X20 Y110 F9000
+G1 X200 F9000
+G1 X20 F9000
+G1 X200 F9000
+G1 X20 F9000
+G1 X200 F9000
+G1 X20 F9000
+G1 X200 F9000
+G1 X20 F9000
+M400
+G4 S5
+
+; ---- 3 Y seul rapide
+M117 3 Y seul rapide
+G1 X110 Y20 F9000
+G1 Y200 F9000
+G1 Y20 F9000
+G1 Y200 F9000
+G1 Y20 F9000
+G1 Y200 F9000
+G1 Y20 F9000
+G1 Y200 F9000
+G1 Y20 F9000
+M400
+G4 S5
+
+; ---- 4 Z seul monte-descend
+M117 4 Z seul monte-descend
+G1 Z40 F600
+G1 Z5 F600
+G1 Z40 F600
+G1 Z5 F600
+G1 Z40 F600
+G1 Z5 F600
+M400
+G4 S5
+
+; ---- 5 diagonales (X+Y)
+M117 5 diagonales (X+Y)
+G1 X20 Y20 F6000
+G1 X200 Y200 F6000
+G1 X20 Y20 F6000
+G1 X200 Y200 F6000
+G1 X20 Y20 F6000
+G1 X200 Y200 F6000
+G1 X20 Y20 F6000
+M400
+G4 S5
+
+; ---- 6 Z 1mm pres du plateau
+M117 6 Z 1mm pres du plateau
+G1 Z1 F600
+G1 X20 Y20 F3000
+G1 X200 F3000
+G1 Y200 F3000
+G1 X20 F3000
+G1 Y20 F3000
+G1 X200 F3000
+G1 Y200 F3000
+G1 X20 F3000
+G1 Y20 F3000
+M400
+G4 S5
+
+G1 Z20 F600
+M84 ; moteurs relâchés
+M117 Test termine
