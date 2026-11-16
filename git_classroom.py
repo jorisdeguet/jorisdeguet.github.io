@@ -16,7 +16,7 @@ import shutil
 import unicodedata
 import subprocess
 import concurrent.futures
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 # Import rich elements for high-fidelity UI
 from rich.console import Console
@@ -679,6 +679,69 @@ def clone_repo(org: str, name: str, dest: str, shallow: bool = False) -> tuple:
     return rc, stderr
 
 
+# ── Due Date ──────────────────────────────────────────────────────────────────
+
+def eastern_utc_offset(day: date) -> timedelta:
+    """UTC offset of Eastern time (Montréal) at the end of a day.
+
+    EDT from the second Sunday of March to the first Sunday of November (the change happens
+    at 2 a.m., so 23:59 on those Sundays already uses the new offset). No tzdata needed.
+    """
+    def nth_sunday(month: int, n: int) -> date:
+        first = date(day.year, month, 1)
+        return first + timedelta(days=(6 - first.weekday()) % 7 + 7 * (n - 1))
+    summer = nth_sunday(3, 2) <= day < nth_sunday(11, 1)
+    return timedelta(hours=-4 if summer else -5)
+
+
+def parse_due_date(text: str, today: date = None):
+    """'2026-11-04' (or empty for today) -> date. Return None if the text is not a date."""
+    text = text.strip()
+    if not text:
+        return today or date.today()
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def due_deadline(day: date) -> datetime:
+    """23:59:59, Eastern time, on the due date."""
+    return datetime(day.year, day.month, day.day, 23, 59, 59, tzinfo=timezone(eastern_utc_offset(day)))
+
+
+def git_date(moment: datetime) -> str:
+    """A date git parses without ambiguity: '2026-11-04 23:59:59 -0500'."""
+    return moment.strftime("%Y-%m-%d %H:%M:%S %z")
+
+
+def checkout_at_deadline(repo_dir: str, deadline: datetime) -> dict:
+    """Put a clone on the last commit of the default branch made before the deadline.
+
+    Dates are those of the commits (committer date): git cannot tell when they were pushed.
+    Return {"commit", "date", "late"} or {"error"}; "commit" is None if nothing was committed in time.
+    """
+    branch = "origin/HEAD"
+    if run_git(repo_dir, "rev-parse", "--verify", "--quiet", branch)[0] != 0:
+        branch = "HEAD"
+    rc, stdout, stderr = run_git(
+        repo_dir, "rev-list", "-1", "--date-order", f"--before={git_date(deadline)}", branch
+    )
+    if rc != 0:
+        return {"error": stderr.strip()}
+    sha = stdout.strip()
+    if not sha:
+        rc, stdout, _ = run_git(repo_dir, "rev-list", "--count", branch)
+        return {"commit": None, "date": None, "late": int(stdout.strip()) if rc == 0 and stdout.strip() else 0}
+
+    rc, _, stderr = run_git(repo_dir, "checkout", "--quiet", "--detach", sha)
+    if rc != 0:
+        return {"error": stderr.strip()}
+    _, when, _ = run_git(repo_dir, "log", "-1", "--format=%ci", sha)
+    _, late, _ = run_git(repo_dir, "rev-list", "--count", f"{sha}..{branch}")
+    return {"commit": sha, "date": when.strip(), "late": int(late.strip() or 0)}
+
+
 def fetch_user_orgs() -> list:
     """Fetch GitHub organizations the authenticated user belongs to."""
     rc, stdout, stderr = run_gh("api", "/user/orgs", "--paginate", "-q", ".[].login")
@@ -1309,15 +1372,27 @@ class GitClassroomApp:
                 self.chercher_signatures_suspectes(org, selected)
 
     def cloner_repos(self, org: str, repos: list):
-        """Clone repos into a folder, skipping those already there."""
+        """Clone repos into a folder, then put each one on its last commit before the due date.
+
+        Repos already in the folder are not cloned again, only updated and put on that commit.
+        """
         dest_dir = clean_path(Prompt.ask("Dossier de destination", default=os.getcwd()))
+        while True:
+            due = parse_due_date(Prompt.ask("Date de remise (AAAA-MM-JJ, Entrée pour aujourd'hui)", default=""))
+            if due:
+                break
+            console.print("[red]Format attendu : AAAA-MM-JJ (ex: 2026-11-04)[/]")
+        deadline = due_deadline(due)
         os.makedirs(dest_dir, exist_ok=True)
 
         console.print(f"[cyan]{len(repos)} repo(s) → {escape(dest_dir)}[/]")
+        console.print(f"[cyan]Dernier commit avant le {due:%Y-%m-%d} à 23 h 59 (heure de l'Est, "
+                      f"UTC{deadline:%z}).[/]")
         if not Confirm.ask("Confirmer ?", default=True):
             return
 
         ok, skipped, failed = 0, 0, 0
+        positions = {}
         with Progress(
             TextColumn("[dim]{task.description}[/]"),
             BarColumn(),
@@ -1329,25 +1404,61 @@ class GitClassroomApp:
                 name = r["name"]
                 progress.update(task, description=name)
                 repo_dest_dir = os.path.join(dest_dir, name)
-                if os.path.exists(repo_dest_dir):
+                if os.path.exists(os.path.join(repo_dest_dir, ".git")):
                     skipped += 1
+                    rc, _, stderr = run_git(repo_dest_dir, "fetch", "--quiet", "origin")
+                    if rc != 0:
+                        console.print(f"[yellow]  ⚠ {name}: fetch échoué, position selon la copie locale "
+                                      f"({escape(stderr.strip())})[/]")
+                elif os.path.exists(repo_dest_dir):
+                    failed += 1
+                    console.print(f"[red]  ✘ {name}: le dossier existe mais n'est pas un repo git.[/]")
                     progress.advance(task, 1)
                     continue
-                rc, stderr = clone_repo(org, name, repo_dest_dir)
-                if rc == 0:
-                    ok += 1
                 else:
-                    failed += 1
-                    console.print(f"[red]  ✘ {name}: {escape(stderr.strip())}[/]")
+                    rc, stderr = clone_repo(org, name, repo_dest_dir)
+                    if rc != 0:
+                        failed += 1
+                        console.print(f"[red]  ✘ {name}: {escape(stderr.strip())}[/]")
+                        progress.advance(task, 1)
+                        continue
+                    ok += 1
+                positions[name] = checkout_at_deadline(repo_dest_dir, deadline)
                 progress.advance(task, 1)
 
         console.print()
+        self.afficher_positions(positions, due)
         if ok > 0:
             console.print(f"[green]✔ {ok} cloné(s).[/]")
         if skipped > 0:
-            console.print(f"[yellow]⏭  {skipped} déjà présent(s) (ignoré(s)).[/]")
+            console.print(f"[yellow]⏭  {skipped} déjà présent(s) : mis à jour, pas reclonés.[/]")
         if failed > 0:
             console.print(f"[red]✘ {failed} échec(s).[/]")
+
+    def afficher_positions(self, positions: dict, due: date):
+        """Show the commit each clone was put on, and what was committed after the due date."""
+        if not positions:
+            return
+        table = Table(title=f"[cyan]Remise du {due:%Y-%m-%d}[/]", show_header=True, header_style="bold")
+        table.add_column("Repo")
+        table.add_column("Commit remis")
+        table.add_column("Date du commit")
+        table.add_column("Commits après", justify="right")
+        for name in sorted(positions):
+            p = positions[name]
+            if "error" in p:
+                table.add_row(escape(name), f"[red]{escape(p['error'])}[/]", "", "")
+            elif p["commit"] is None:
+                table.add_row(escape(name), "[bold red]Aucun commit avant la date[/]",
+                              "[dim]repo laissé tel quel[/]", str(p["late"]))
+            else:
+                late = f"[yellow]{p['late']}[/]" if p["late"] else "[dim]0[/]"
+                table.add_row(escape(name), p["commit"][:8], escape(p["date"]), late)
+        console.print(table)
+        console.print("[dim]Repos en HEAD détaché sur le commit remis. Pour revenir à la dernière "
+                      "version : git switch main (ou master).[/]")
+        console.print("[dim]La date est celle du commit, pas du push : un commit daté d'avant "
+                      "mais poussé en retard n'est pas détecté.[/]")
 
     def chercher_signatures_suspectes(self, org: str, repos: list):
         """Clone repos into a temporary folder, report suspicious signatures, then delete everything."""
