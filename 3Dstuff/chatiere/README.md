@@ -11,13 +11,13 @@ Concepts :
 
 | | A. Porte relevable | B. Battant pivotant |
 |---|---|---|
-| Principe | Le chat appuie sur un rebord, deux leviers en bascule montent la porte. | Le chat pousse un battant qui tourne autour d'un axe vertical, un peu à droite du milieu. |
-| Pièces | 9 : cadre, couvercle, porte, 2 leviers, 2 coulisseaux, 2 rebords | 3 : cadre, couvercle, battant |
-| Passage | 130 × 110, un seul passage, rien à pousser | 210 × 125 divisé par le battant : 89 mm de large en sortant du sas, 112 mm en venant de la pièce |
+| Principe | Le chat appuie sur un rebord, deux leviers en bascule montent la porte. | Le chat pousse un battant qui tourne autour d'un axe vertical, au milieu. |
+| Pièces | 9 : cadre, couvercle, porte, 2 leviers, 2 coulisseaux, 2 rebords | 4 imprimées + 4 molettes : cadre (avec 4 tiges filetées), couvercle, battant, came ; un élastique, des aimants |
+| Passage | 130 × 110, un seul passage, rien à pousser | 210 × 125 divisé par le battant : 98 mm de large dans chaque sens |
 | Seuil au-dessus du plancher | 33 mm | 30 mm (réglable) |
-| Taille réelle | 252 × 282 × 24 : **ne tient pas sur un plateau de 260** | 253 × 184 × 24 : tient |
+| Taille réelle | 252 × 282 × 24 : **ne tient pas sur un plateau de 260** | 253 × 182 × 24 : tient |
 | Étanchéité | Feutre sur les deux faces de la porte | Butées à recouvrement sur les quatre côtés de chaque moitié, feutre |
-| Retour | Poids de la porte, élastiques en appoint | Un élastique en haut ; le vent du dehors le referme aussi |
+| Retour | Poids de la porte, élastiques en appoint | Élastique sur une came en spirale (rappel doux, qui faiblit à l'ouverture), puis aimants pour verrouiller |
 | Pour le chat | Il faut qu'il pose les pattes sur le rebord ; la porte ne touche pas son dos | Il pousse de la tête, comme une chatière classique, mais **toujours sur sa droite** |
 | Points faibles | Hauteur, nombre de pièces, frottements à régler | Passages plus étroits ; si le chat pousse du mauvais côté, le battant ne bouge pas |
 
