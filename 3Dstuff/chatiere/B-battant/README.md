@@ -37,11 +37,13 @@ On ne remplit qu'une paire ou deux, et on choisit la distance. Plus l'aimant est
 
 **Ouverture maximale.** Vers 100°, la moitié qui s'ouvre vers la pièce bute sur le couvercle, près de l'axe. La came est calculée jusque-là (`angle_max`).
 
-## Battant nervuré
+## Battant à triangles imprimés
 
-![Battant, face côté pièce : nervures et poches d'aimants](apercu_battant.png)
+![Battant, face côté pièce : triangles imprimés et poches d'aimants](apercu_battant.png)
 
-Un grand panneau plat de 6 mm risque de se voiler avec le temps, et l'étanchéité en souffrirait. Le battant garde donc une **bande d'appui plate** tout autour (sans arrondi sur la face qui touche la butée : la face avant pour la moitié droite, la face arrière pour la gauche). À l'intérieur de l'ouverture, sa face côté pièce porte une nervure de contour et un **treillis triangulé** (triangles de 35 mm, nervures de 2 × 5 mm). Le treillis raidit dans toutes les directions et en torsion, et il passe dans les ouvertures de la peau et du couvercle sans toucher les butées. Le battant pèse 259 g au lieu de 237. Les nervures sont sur le dessus à l'impression, sans support. On peut les retirer (`nervures = false`) ou changer la maille et la hauteur.
+Un grand panneau plat de 6 mm risque de se voiler avec le temps, et l'étanchéité en souffrirait. Le battant garde donc une **bande d'appui plate** tout autour (sans arrondi sur la face qui touche la butée : la face avant pour la moitié droite, la face arrière pour la gauche). Le battant reste une plaque plate de 6 mm. À l'intérieur de l'ouverture, des **triangles y sont imprimés en damier depuis chaque face** : les triangles pointe en haut sont creusés côté sas, les triangles pointe en bas côté pièce, sur 4,8 mm, avec 1,2 mm de fond. Il reste un **treillis triangulé dans l'épaisseur** (parois de 2 mm sur toute l'épaisseur, triangles de 30 mm), qui raidit dans toutes les directions et en torsion, avec un fond alterné sur chaque face. Les deux faces montrent le motif, et rien ne dépasse de la plaque : le battant passe partout où passait la plaque pleine. Il pèse 111 g au lieu de 237 g plein. Il est un peu moins raide qu'une plaque pleine de 6 mm, mais nettement plus raide pour son poids.
+
+À l'impression, face côté sas dessous, le fond des triangles creusés par-dessous est un pont d'environ 26 mm, que les trancheurs font bien en PLA ou en PETG. Si c'est trop, baisser `nerv_maille_r`. Options : `nervures = false` (plaque pleine), `nerv_maille_r`, `nerv_fond_r`, et `nerv_h_r` (surépaisseur côté pièce dans l'ouverture si le battant manque de raideur, par exemple 5 mm pour une zone de 11 mm).
 
 **Axe.** En bas, un tourillon octogonal du battant ; en haut, le tourillon rond de la came. Ils tournent dans des paliers du cadre ouverts vers l'arrière, que deux taquets du couvercle referment. Le battant repose sur le bout du tourillon du bas.
 
@@ -53,7 +55,7 @@ Un grand panneau plat de 6 mm risque de se voiler avec le temps, et l'étanchéi
 |---|---|---|
 | `cadre` | 1 | Face côté sas sur le plateau ; paliers, chambre de la came, poteaux et tiges filetées vers le haut. |
 | `couvercle` | 1 | Face côté pièce sur le plateau ; butée et taquets vers le haut. |
-| `battant` | 1 | À plat, face avant dessous, nervures vers le haut. |
+| `battant` | 1 | À plat, face côté sas dessous ; le fond des triangles creusés par-dessous est un pont. |
 | `molette` | 4 | À plat, chanfrein d'entrée en bas. |
 | `came` | 1 | Came sur le plateau, tenon vers le haut. |
 
@@ -78,11 +80,11 @@ Montage :
 
 - **Rappel** : choisir l'élastique et le poteau. Si le battant ne revient pas jusqu'aux aimants, reculer d'un poteau ou réimprimer une came plus grande ou moins dégressive (`ratio_couple` plus près de 1).
 - **Aimants** : leur force n'est pas connue ; commencer à 15 mm de l'axe.
-- **Nervures** : vérifier qu'elles ne frottent pas sur le bord de l'ouverture du couvercle (3 mm de marge).
+- **Triangles imprimés** : vérifier la qualité des ponts au fond des triangles creusés côté sas.
 - **Molettes** : le filet a 0,35 mm de jeu (`jeu_f`) ; l'augmenter si elles serrent trop.
 - **Butées** : le battant doit être bloqué dans le mauvais sens et tourner librement de 0 à 90° dans le bon (vérifié sur le modèle aux deux échelles).
 
 ## Fichiers
 
-* `battant.scad` : le module. Options : `echelle`, `angle` (angle d'ouverture du battant dans l'aperçu, de -5 à 90°), `coupe`, `part` (`assembled`, `eclate`, une pièce, `planche`), `part_gauche`, la came (`came_r0_r`, `pretension_r`, `ratio_couple`, `poteau`, `k_elast`), les aimants (`aim_d_r`, `aim_e_r`, `aim_dist_r`), les nervures (`nervures`, `nerv_maille_r`, `nerv_h_r`). La console affiche les cotes, les passages, le profil de la came, les poussées et les leviers des aimants.
+* `battant.scad` : le module. Options : `echelle`, `angle` (angle d'ouverture du battant dans l'aperçu, de -5 à 90°), `coupe`, `part` (`assembled`, `eclate`, une pièce, `planche`), `part_gauche`, la came (`came_r0_r`, `pretension_r`, `ratio_couple`, `poteau`, `k_elast`), les aimants (`aim_d_r`, `aim_e_r`, `aim_dist_r`), les triangles imprimés (`nervures`, `nerv_maille_r`, `nerv_fond_r`, `nerv_h_r`), et pour la conception `arrondis = false` (sans arrondis des bords) et `rapide = true` (sans arrondis, filets lisses, moins de facettes ; pas pour imprimer). La console affiche les cotes, les passages, le profil de la came, les poussées et les leviers des aimants.
 * `apercu_ferme_piece.png`, `apercu_ouvert_piece.png`, `apercu_ouvert_sas.png`, `apercu_eclate.png`, `apercu_came.png`, `apercu_battant.png`, `apercu_maquette.png`.

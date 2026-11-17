@@ -20,15 +20,16 @@
 //   - VERROU : des aimants en vis-à-vis dans la bande d'appui du battant et
 //     dans la butée (peau du cadre à droite, butée du couvercle à gauche).
 //     Poches à plusieurs distances de l'axe : plus près, moins dur à pousser.
-//  Le battant porte des nervures en treillis triangulé sur sa face côté
-//  pièce, à l'intérieur de l'ouverture ; les bandes d'appui restent plates.
+//  Le battant reste une plaque plate ; dans l'ouverture, des triangles y
+//  sont imprimés en damier depuis chaque face (treillis triangulé dans
+//  l'épaisseur). Les bandes d'appui restent plates.
 //
 //  Pièces, sans vis :
 //   - CADRE (face côté sas sur le plateau) : peau avec collerette et butée,
 //     toute l'épaisseur du mur, paliers de l'axe ouverts vers l'arrière,
 //     chambre de la came avec 3 poteaux d'élastique, 4 tiges filetées
 //     imprimées dans les coins, poches d'aimants dans la peau ;
-//   - BATTANT (à plat, nervures vers le haut) : tourillon octogonal en bas,
+//   - BATTANT (à plat, face côté sas dessous) : tourillon octogonal en bas,
 //     mortaise en haut pour la came, poches d'aimants ;
 //   - CAME (came sur le plateau) : came, tourillon rond du haut et tenon ;
 //   - COUVERCLE (face côté pièce sur le plateau) : peau avec collerette,
@@ -40,7 +41,7 @@
 //  Y épaisseur, y = 0 face côté sas). L'axe est en x = 0.
 // =====================================================================
 
-part = "eclate"; // [assembled, eclate, cadre, couvercle, battant, came, molette, planche]
+part = "assembled"; // [assembled, eclate, cadre, couvercle, battant, came, molette, planche]
 echelle = 1;          // 1 = réel ; 0.4 = maquette
 part_gauche = 0.5;    // part du battant à gauche de l'axe (vu du sas) ; > 0.5 : le vent du dehors le referme
 
@@ -48,6 +49,8 @@ part_gauche = 0.5;    // part du battant à gauche de l'axe (vu du sas) ; > 0.5 
 // angle d'ouverture du battant dans l'aperçu (0 fermé, 90 grand ouvert ; négatif = bloqué par les butées)
 angle = 0; // [-5:5:90]
 coupe = false;        // aperçu : sans couvercle
+rapide = false;       // rendu rapide pour regarder : filets lisses, arrondis grossiers, moins de facettes (pas pour imprimer)
+arrondis = true;      // arrondis des bords (peaux, battant) ; à couper pendant la conception, rapide les coupe aussi
 
 /* [Cotes réelles (multipliées par echelle)] */
 ouv_l_r = 210;        // ouverture totale : deux passages d'environ 100 mm
@@ -66,15 +69,16 @@ aim_d_r = 6;          // aimant disque Ø x épaisseur (maquette : Ø2 x 1)
 aim_e_r = 2;
 aim_dist_r = [15, 30, 45, 60, 80];   // distances des poches à l'axe
 /* [Nervures du battant] */
-nervures = true;
-nerv_maille_r = 35;   // côté des triangles du treillis
-nerv_h_r = 5;         // hauteur des nervures (côté pièce)
+nervures = true;      // triangles imprimés dans le battant, en damier depuis chaque face ; sinon plaque pleine
+nerv_maille_r = 30;   // côté des triangles (le fond des triangles côté sas est un pont à l'impression)
+nerv_fond_r = 1.2;    // épaisseur laissée au fond de chaque triangle
+nerv_h_r = 0;         // surépaisseur optionnelle de la zone imprimée, côté pièce (0 : battant plat d'origine)
 epais_r = 23.6;       // épaisseur du module (comme porte_rebord.scad)
 contreplaque = 12;
 densite = 1.24;
 
 E = echelle;
-$fn = E < 0.7 ? 32 : 48;
+$fn = rapide ? 20 : E < 0.7 ? 32 : 48;
 eps = 0.01;
 reel = E >= 0.7;
 
@@ -112,10 +116,14 @@ aim_e  = reel ? aim_e_r * E : 1;
 aim_p  = aim_e + 0.2;              // profondeur des poches
 aim_dist = [for (d = aim_dist_r) d * E];
 // nervures
-nerv_h = max(2, nerv_h_r * E);
+nerv_h = nerv_h_r * E;
 nerv_l = max(1.2, 2 * E);
 nerv_m = max(2, 3 * E);            // retrait par rapport au bord de l'ouverture
-nerv_p = max(10, nerv_maille_r * E) * sin(60);   // écart entre nervures parallèles
+nerv_a = max(10, nerv_maille_r * E);              // côté des triangles
+nerv_p = nerv_a * sin(60);                        // écart entre nervures parallèles
+nerv_s = max(0.8, nerv_fond_r * E);               // fond des triangles
+nerv_r = max(0.8, 1.5 * E);                       // arrondi des coins des alvéoles
+nerv_T = batt_e + nerv_h;                         // épaisseur totale de la zone alvéolée
 // tiges filetées imprimées avec le cadre, molettes taraudées imprimées
 // filet imprimable : cercle excentré tordu en hélice (profil arrondi, sans support)
 tige_d = reel ? 10 : 6;            // diamètre extérieur du filet
@@ -160,7 +168,7 @@ function came_ymin() = min([for (t = [0 : 5 : angle_max]) for (a = [0 : 5 : angl
 function came_ymax() = max([for (t = [0 : 5 : angle_max]) for (a = [0 : 5 : angle_max]) (came_r(t) + came_j) * sin(90 - t + a)]);
 
 zone_aire = ouv_l * ouv_h - (4 - PI) * r_coin * r_coin;
-m_nerv = nervures ? zone_aire * 3 * nerv_l / nerv_p * nerv_h / 1000 * densite : 0;
+m_nerv = nervures ? zone_aire * (nerv_h - (1 - 3 * nerv_l / nerv_p) * (nerv_T - nerv_s)) / 1000 * densite : 0;
 m_batt = (porte_l * (f_t - f_b) - (4 - PI) * r_batt * r_batt) * batt_e / 1000 * densite + m_nerv;
 passage_d = ouv_l / 2 - x_ax - g_ax;          // côté droit (vu du sas) : le chat qui sort du sas
 passage_g = ouv_l / 2 + x_ax - g_ax;
@@ -171,7 +179,7 @@ vent = pow(porte_l / 2 + x_ax, 2) / pow(porte_l / 2 - x_ax, 2);
 echo(str("[echelle ", E, "] corps ", 2 * L2, " x ", H, " x ", epais, " mm ; avec collerettes ",
          2 * (L2 + colle), " x ", H + colle_h));
 echo(str("Ouverture ", ouv_l, " x ", ouv_h, " de z = ", z_bas, " à ", z_haut, " ; passages de ", passage_d, " (droite, vu du sas) et ", passage_g,
-         " ; battant ", porte_l, " x ", f_t - f_b, " x ", batt_e, (nervures ? str(" + nervures de ", nerv_h) : ""), " (", round(m_batt), " g)"));
+         " ; battant ", porte_l, " x ", f_t - f_b, " x ", batt_e, (nervures ? str(", triangles de ", nerv_a, " imprimés sur ", nerv_T - nerv_s, " de profondeur", nerv_h > 0 ? str(", ", nerv_T, " dans l'ouverture") : "") : ""), " (", round(m_batt), " g)"));
 echo(str("Came : rayon ", round(came_r(0) * 10) / 10, " fermé, ", round(came_r(45) * 10) / 10, " à 45°, ", round(came_r(90) * 10) / 10,
          " à 90°, ", round(came_r(angle_max) * 10) / 10, " à ", angle_max, "° ; l'élastique s'allonge de ", round(allong(angle_max) * 10) / 10,
          " mm en plus des ", x0_el, " du repos"));
@@ -200,7 +208,9 @@ module en_place(y0) translate([0, y0, 0]) rotate([90, 0, 0]) mirror([0, 0, 1]) c
 module couche(y0, e) en_place(y0) linear_extrude(e) children();
 // plaque d'épaisseur e, bords arrondis (quart de rond r) sur la face z = 0 (bas) et/ou z = e (haut)
 function retrait(t, r) = r - sqrt(max(0, r * r - (r - t) * (r - t)));
-module plaque(e, r, bas = false, haut = false, n = 5) {
+module plaque(e, r, bas0 = false, haut0 = false, n = 5) {
+    bas = bas0 && arrondis && !rapide;
+    haut = haut0 && arrondis && !rapide;
     z0 = bas ? r : 0;
     z1 = haut ? e - r : e;
     translate([0, 0, z0 - eps]) linear_extrude(z1 - z0 + 2 * eps) children();
@@ -231,8 +241,9 @@ function tiges() = [for (sx = [-1, 1], haut = [true, false]) let(
         u = (k - c) / norm(k - c))
     c + u * (r_cav + max(1.5, 3 * E) + tige_d / 2 + jeu_f)];
 l_tige = peau_e + mol_h + (reel ? 2 : 1);      // dépasse du dos du cadre
-module filet(d, h, j = 0) linear_extrude(h, twist = -360 * h / pas, slices = max(8, ceil(h / pas * 24)), convexity = 6)
-    translate([prof_f / 2, 0]) circle(r = d / 2 - prof_f / 2 + j, $fn = 32);
+module filet(d, h, j = 0) if (rapide) cylinder(d = d - prof_f + 2 * j, h = h, $fn = 16);
+    else linear_extrude(h, twist = -360 * h / pas, slices = max(8, ceil(h / pas * 24)), convexity = 6)
+        translate([prof_f / 2, 0]) circle(r = d / 2 - prof_f / 2 + j, $fn = 32);
 
 // paliers : fente ronde au bout, ouverte vers l'arrière (y = y_cv)
 module palier(z0, z1, r) hull() {
@@ -311,15 +322,21 @@ module couvercle_monde() {
         cube([2 * r, y_cv - (y_ax + tour_rc + jeu) + eps, p[1] - p[0] - jeu]);
 }
 
-// nervures (2D) : contour et treillis triangulé, à l'intérieur de l'ouverture
+// triangles imprimés (2D) : pavage de triangles équilatéraux centré sur l'axe ; les triangles pointe en haut sont creusés
+// depuis la face côté sas, les triangles pointe en bas depuis la face côté pièce. Les parois entre eux traversent l'épaisseur.
 module zone_nerv2() offset(delta = -nerv_m) rrect2(-ouv_l / 2, z_bas, ouv_l / 2, z_haut, r_coin);
-module nervures2() {
-    difference() { zone_nerv2(); offset(delta = -nerv_l) zone_nerv2(); }
-    n = ceil(norm([ouv_l, ouv_h]) / 2 / nerv_p) + 1;
-    intersection() {
-        zone_nerv2();
-        translate([x_ax, (z_bas + z_haut) / 2]) for (a = [0, 60, 120], i = [-n : n]) rotate(a)
-            translate([-ouv_l, i * nerv_p - nerv_l / 2]) square([2 * ouv_l, nerv_l]);
+module alveoles2(haut) {
+    nj = ceil(ouv_h / 2 / nerv_p) + 1;
+    nk = ceil(ouv_l / nerv_a) + 2;
+    zc = (z_bas + z_haut) / 2;
+    // ouverture : supprime les éclats de bord trop étroits
+    offset(r = rapide ? 0 : nerv_r) offset(r = rapide ? 0 : -nerv_r) intersection() {
+        offset(delta = -nerv_l) zone_nerv2();
+        translate([x_ax, zc]) for (j = [-nj : nj], k = [-nk : nk]) let(x0 = (k + j / 2) * nerv_a, z0 = j * nerv_p)
+            let(c = haut ? [x0 + nerv_a / 2, z0 + nerv_p / 3] : [x0 + nerv_a, z0 + nerv_p * 2 / 3], f = 1 - nerv_l * sqrt(3) / nerv_a,
+                v = haut ? [[x0, z0], [x0 + nerv_a, z0], [x0 + nerv_a / 2, z0 + nerv_p]]
+                         : [[x0 + nerv_a / 2, z0 + nerv_p], [x0 + nerv_a * 3 / 2, z0 + nerv_p], [x0 + nerv_a, z0]])
+                polygon([for (p = v) c + f * (p - c)]);
     }
 }
 // battant : repère du mur, fermé. Bande d'appui plate : la moitié droite s'appuie de sa face avant, la gauche de sa face
@@ -334,8 +351,12 @@ module battant_monde() difference() {
             couche_arrondie(y_pf, batt_e, batt_e * 0.4, bas = true) battant2();
             translate([x_ax - porte_l, -1, -1]) cube([porte_l, epais + 2, H + 2]);
         }
-        if (nervures) couche(y_pf + batt_e - eps, nerv_h + eps) nervures2();
+        if (nervures && nerv_h > 0) couche(y_pf + batt_e - eps, nerv_h + eps) zone_nerv2();
         translate([x_ax, y_ax, f_b - tour_l]) rotate([0, 0, 22.5]) cylinder(r = tour_rc, h = tour_l + eps, $fn = 8);
+    }
+    if (nervures) {
+        couche(y_pf - eps, nerv_T - nerv_s + eps) alveoles2(true);              // ouvertes côté sas
+        couche(y_pf + nerv_s, nerv_T - nerv_s + eps) alveoles2(false);          // ouvertes côté pièce
     }
     translate([x_ax - ten_w / 2 - jt, y_ax - ten_e / 2 - jt, f_t - ten_p - jt]) cube([ten_w + 2 * jt, ten_e + 2 * jt, ten_p + jt + 1]);
     for (a = aimants()) translate([a[0], 0, a[1]])
