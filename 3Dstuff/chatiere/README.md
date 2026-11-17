@@ -8,6 +8,7 @@ Concepts :
 
 - **[A. SAS](A-sas/)** : une boîte en contreplaqué sur l'appui forme un sas, avec un volet dans la fenêtre. Côté pièce, un module imprimé à **porte relevable** s'ouvre quand le chat pose les pattes sur un rebord (section 13 du README de A).
 - **[B. Battant](B-battant/)** : à la place de la porte relevable, dans la même encoche, un module imprimé à **battant pivotant** sur un axe vertical.
+- **[C. Mur en L](C-mur/)** : l'embrasure devient le sas. Deux modules B : un dans une paroi perpendiculaire à la fenêtre, un dans la fenêtre à la place de la chatière d'été. La vitre est en façade et tout tient par friction sur de la mousse. Le côté gauche de l'embrasure reste libre.
 
 | | A. Porte relevable | B. Battant pivotant |
 |---|---|---|
@@ -21,7 +22,7 @@ Concepts :
 | Pour le chat | Il faut qu'il pose les pattes sur le rebord ; la porte ne touche pas son dos | Il pousse de la tête, comme une chatière classique, mais **toujours sur sa droite** |
 | Points faibles | Hauteur, nombre de pièces, frottements à régler | Passages plus étroits ; si le chat pousse du mauvais côté, le battant ne bouge pas |
 
-La vitre de 411 × 309 sert de façade, sans la couper. La fuite estimée passe d'environ 90 W avec la serviette à environ 15 W.
+La vitre de 411 × 309 sert de façade, sans la couper. La chatière d'été actuelle (cadre gris, porte hexagonale) est dans [../chatiere_ete](../chatiere_ete/). La fuite estimée passe d'environ 90 W avec la serviette à environ 15 W.
 
 Deux autres concepts ont été étudiés puis abandonnés : un panneau isolé dans la coulisse, et une contre-fenêtre qui fermait toute l'embrasure. Ils restent dans l'historique git (commit 8cdf705).
 
