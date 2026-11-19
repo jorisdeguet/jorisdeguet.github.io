@@ -849,6 +849,25 @@ def github_user_exists(login: str) -> bool:
     return rc == 0
 
 
+def repo_access(org: str, repo_name: str) -> dict:
+    """Direct collaborators and invitations (pending or expired) of a repo, or an error."""
+    rc, stdout, stderr = run_gh(
+        "api", f"repos/{org}/{repo_name}/collaborators?affiliation=direct&per_page=100",
+        "-q", "[.[].login]"
+    )
+    if rc != 0:
+        return {"error": stderr.strip()}
+    collaborators = json.loads(stdout or "[]")
+    rc, stdout, stderr = run_gh(
+        "api", f"repos/{org}/{repo_name}/invitations?per_page=100",
+        "-q", "[.[] | {id, login: .invitee.login, expired, created_at}]"
+    )
+    if rc != 0:
+        return {"error": stderr.strip()}
+    invitations = [i for i in json.loads(stdout or "[]") if i["login"]]
+    return {"collaborators": collaborators, "invitations": invitations}
+
+
 def repo_is_empty(org: str, repo_name: str) -> bool:
     """True if the repo has no commit yet (e.g. created by a run whose push failed)."""
     rc, stdout, _ = run_gh("repo", "view", f"{org}/{repo_name}", "--json", "isEmpty", "-q", ".isEmpty")
@@ -1361,15 +1380,103 @@ class GitClassroomApp:
         while True:
             action = prompt_selection(
                 f"Action sur {escape(label)} ({len(selected)} repo(s))",
-                ["📥 Cloner", "🕵️  Chercher les signatures suspectes (clone temporaire)", retour]
+                ["📥 Cloner", "🕵️  Chercher les signatures suspectes (clone temporaire)",
+                 "✉️  Réinviter les étudiants (invitations expirées)", retour]
             )
             console.print()
             if action == retour:
                 return
             if "Cloner" in action:
                 self.cloner_repos(org, selected)
+            elif "Réinviter" in action:
+                self.reinviter_etudiants(org, selected)
             else:
                 self.chercher_signatures_suspectes(org, selected)
+
+    def reinviter_etudiants(self, org: str, repos: list):
+        """Resend the invitations of students who have not accepted yet (GitHub expires them after 7 days).
+
+        An expired invitation is deleted then sent again. A repo with neither collaborator nor
+        invitation (login missing at creation) can be invited from the student list, by matricule.
+        """
+        accepted, pending, expired, nobody, errors = [], [], [], [], []
+        with Progress(
+            TextColumn("[dim]{task.description}[/]"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console
+        ) as progress:
+            task = progress.add_task("Lecture des invitations", total=len(repos))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                futures = {executor.submit(repo_access, org, r["name"]): r["name"] for r in repos}
+                for future in concurrent.futures.as_completed(futures):
+                    name = futures[future]
+                    access = future.result()
+                    if "error" in access:
+                        errors.append((name, access["error"]))
+                    else:
+                        if access["collaborators"]:
+                            accepted.append(name)
+                        for inv in access["invitations"]:
+                            (expired if inv["expired"] else pending).append((name, inv))
+                        if not access["collaborators"] and not access["invitations"]:
+                            nobody.append(name)
+                    progress.advance(task, 1)
+
+        for name, err in sorted(errors):
+            console.print(f"[red]  ✘ {name}: {escape(err)}[/]")
+
+        table = Table(title="[cyan]Invitations à renvoyer ou en attente[/]", show_header=True, header_style="bold")
+        table.add_column("Repo")
+        table.add_column("Login")
+        table.add_column("Invité le")
+        table.add_column("État")
+        for name, inv in sorted(expired + pending, key=lambda x: x[0]):
+            state = "[red]expirée[/]" if inv["expired"] else "[yellow]en attente[/]"
+            table.add_row(name, escape(inv["login"]), short_date(inv["created_at"]), state)
+        for name in sorted(nobody):
+            table.add_row(name, "[dim]–[/]", "[dim]–[/]", "[dim]aucune invitation[/]")
+        if expired or pending or nobody:
+            console.print(table)
+        console.print(f"[green]✔ {len(accepted)} repo(s) avec invitation acceptée[/] · "
+                      f"[red]{len(expired)} expirée(s)[/] · [yellow]{len(pending)} en attente[/] · "
+                      f"[dim]{len(nobody)} sans invitation[/]")
+
+        to_send = [(name, inv["login"], inv["id"]) for name, inv in expired]
+        if pending and Confirm.ask(
+            f"Renvoyer aussi les {len(pending)} invitation(s) en attente (repart pour 7 jours) ?", default=False
+        ):
+            to_send += [(name, inv["login"], inv["id"]) for name, inv in pending]
+
+        if nobody and Confirm.ask(
+            f"Inviter les {len(nobody)} repo(s) sans invitation à partir de la liste d'étudiants ?", default=False
+        ):
+            by_matricule = {s["matricule"]: s for s in prompt_and_load_students() if s["login"]}
+            for name in nobody:
+                parsed = parse_repo_name(name)
+                student = by_matricule.get(parsed["matricule"]) if parsed and parsed["matricule"] else None
+                if not student:
+                    console.print(f"[yellow]  ⚠ {name}: matricule absent de la liste ou sans login.[/]")
+                elif not github_user_exists(student["login"]):
+                    console.print(f"[red]  ✘ {name}: login GitHub introuvable ({escape(student['login'])}).[/]")
+                else:
+                    to_send.append((name, student["login"], None))
+
+        if not to_send:
+            console.print("[dim]Aucune invitation à envoyer.[/]")
+            return
+        if not Confirm.ask(f"Envoyer {len(to_send)} invitation(s) ?", default=True):
+            console.print("[dim]Annulé.[/]")
+            return
+
+        for name, login, invitation_id in sorted(to_send):
+            console.print(f"[dim]{name}[/]")
+            if invitation_id is not None:
+                # Without deleting it first, GitHub keeps the old (expired) invitation and sends nothing
+                rc, _, stderr = run_gh("api", "-X", "DELETE", f"repos/{org}/{name}/invitations/{invitation_id}")
+                if rc != 0:
+                    console.print(f"  [yellow]⚠ Ancienne invitation non supprimée : {escape(stderr.strip())}[/]")
+            self.invite_collaborateur(org, name, login)
 
     def cloner_repos(self, org: str, repos: list):
         """Clone repos into a folder, then put each one on its last commit before the due date.
@@ -1778,7 +1885,7 @@ class GitClassroomApp:
                     "🔍 Diagnostic (gh, git, authentification)",
                     "🧪 Tester la création d'un repo",
                     "➕ Créer les repos d'un TP",
-                    "📋 Parcourir les repos d'un TP (cloner, signatures)",
+                    "📋 Parcourir les repos d'un TP (cloner, signatures, réinviter)",
                     "💬 Repos avec commits étudiants",
                     "🗑  Supprimer des repos",
                     "🕵️  Détecter les signatures stéganographiques",
