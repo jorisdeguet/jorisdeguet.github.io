@@ -11,6 +11,7 @@ import os
 import sys
 import re
 import json
+import codecs
 import tempfile
 import shutil
 import unicodedata
@@ -23,7 +24,7 @@ from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
 from rich.rule import Rule
-from rich.prompt import Prompt, Confirm
+from rich.prompt import Prompt as RichPrompt, Confirm as RichConfirm
 from rich.progress import Progress, BarColumn, TextColumn, TaskProgressColumn, SpinnerColumn
 
 # Initialize rich console with standard styling
@@ -98,6 +99,9 @@ REPO_LIST_LIMIT = 1_000_000
 
 # Build output and IDE state that must never reach a student repo
 TEMPLATE_IGNORED = (".git", ".idea", ".vs", "bin", "obj")
+
+# GitHub logins of the students, per organization and repo, to reinvite them without the list
+LOGIN_STORE = os.path.join(os.path.expanduser("~"), ".ghtcls")
 
 # Accepted column titles for pasted student lists
 NOM_HEADERS = {"nom", "nom de famille", "lastname", "last name"}
@@ -534,9 +538,13 @@ def load_students_interactive() -> list:
     console.print("[dim]Coller les lignes copiées de Google Sheets (ligne vide pour terminer).[/]")
     console.print("[dim]Colonnes : Nom, Prénom, Matricule, Groupe, Login (facultatif).[/]")
     console.print("[dim]Séparateur : tabulation, virgule ou point-virgule. En-tête facultatif.[/]")
+    console.print("[dim]Échap puis Entrée pour annuler.[/]")
     lines = []
     while True:
+        # Builtin input: a pasted block must not be read key by key
         line = input("  > ")
+        if "\x1b" in line:
+            raise BackToMenu
         if not line.strip():
             break
         lines.append(line)
@@ -551,6 +559,117 @@ def load_students_from_file(file_path: str) -> list:
     except Exception as ex:
         console.print(f"[red]Erreur de lecture du fichier : {escape(str(ex))}[/]")
         return []
+
+
+# ── Keyboard Input (Escape returns to the menu) ───────────────────────────────
+
+class BackToMenu(Exception):
+    """Escape pressed at a prompt: the current action is abandoned."""
+
+
+def read_line_posix() -> str:
+    """Read a line in cbreak mode, so that a lone Escape is seen at once."""
+    import termios, tty, select
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    chars = []
+    out = sys.stdout
+    try:
+        # TCSANOW: TCSAFLUSH (the default) would drop the rest of a pasted text
+        tty.setcbreak(fd, termios.TCSANOW)
+        while True:
+            b = os.read(fd, 1)
+            if not b:
+                raise EOFError
+            if b == b"\x1b":
+                if not select.select([fd], [], [], 0.05)[0]:
+                    raise BackToMenu
+                # Arrow keys and other escape sequences: ignored
+                if os.read(fd, 1) in (b"[", b"O"):
+                    while True:
+                        c = os.read(fd, 1)
+                        if not c or 0x40 <= c[0] <= 0x7e:
+                            break
+                continue
+            if b in (b"\n", b"\r"):
+                out.write("\n")
+                out.flush()
+                return "".join(chars)
+            if b in (b"\x7f", b"\x08"):
+                if chars:
+                    chars.pop()
+                    out.write("\b \b")
+                    out.flush()
+                continue
+            if b == b"\x04" and not chars:
+                raise EOFError
+            ch = decoder.decode(b)
+            if not ch or (ch < " " and ch != "\t"):
+                continue
+            chars.append(ch)
+            out.write(ch)
+            out.flush()
+    finally:
+        termios.tcsetattr(fd, termios.TCSANOW, old)
+
+
+def read_line_windows() -> str:
+    import msvcrt
+    chars = []
+    while True:
+        ch = msvcrt.getwch()
+        if ch == "\x1b":
+            raise BackToMenu
+        if ch in ("\x00", "\xe0"):
+            msvcrt.getwch()  # arrow keys and function keys
+            continue
+        if ch == "\x03":
+            raise KeyboardInterrupt
+        if ch in ("\r", "\n"):
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            return "".join(chars)
+        if ch == "\x08":
+            if chars:
+                chars.pop()
+                sys.stdout.write("\b \b")
+                sys.stdout.flush()
+            continue
+        if ch < " " and ch != "\t":
+            continue
+        chars.append(ch)
+        sys.stdout.write(ch)
+        sys.stdout.flush()
+
+
+def read_line() -> str:
+    """Read a typed line. Escape raises BackToMenu (only in a real terminal)."""
+    if not sys.stdin.isatty():
+        return input()
+    sys.stdout.flush()
+    try:
+        if os.name == "nt":
+            return read_line_windows()
+        return read_line_posix()
+    except (ImportError, OSError):
+        return input()
+
+
+class Prompt(RichPrompt):
+    @classmethod
+    def get_input(cls, console, prompt, password, stream=None):
+        if password or stream:
+            return console.input(prompt, password=password, stream=stream)
+        console.print(prompt, end="")
+        return read_line()
+
+
+class Confirm(RichConfirm):
+    @classmethod
+    def get_input(cls, console, prompt, password, stream=None):
+        console.print(prompt, end="")
+        return read_line()
 
 
 # ── Interactive Helpers ───────────────────────────────────────────────────────
@@ -622,15 +741,20 @@ def prompt_multi_selection(title: str, choices: list) -> list:
         console.print("[red]Sélection invalide. Veuillez réessayer.[/]")
 
 
+def current_session(today: date = None) -> str:
+    """Session of a date: H (January to May), E (June, July), A (August to December), then the year."""
+    today = today or date.today()
+    code = "H" if today.month <= 5 else "E" if today.month <= 7 else "A"
+    return f"{code}{today.year % 100:02d}"
+
+
 def prompt_session() -> str:
-    """Prompt for CEGEP session (e.g. H26 for Hiver 2026)."""
-    saison = prompt_selection("Saison", ["H – Hiver", "A – Automne", "E – Été"])
-    code = saison[0]
+    """Prompt for CEGEP session (e.g. H26 for Hiver 2026), the current one by default."""
     while True:
-        annee = Prompt.ask("Année (2 chiffres, ex: 26)").strip()
-        if len(annee) == 2 and annee.isdigit():
-            return f"{code}{annee}"
-        console.print("[red]2 chiffres requis (ex: 26)[/]")
+        session = Prompt.ask("Session (H, A ou E + année, ex: H27)", default=current_session()).strip().upper()
+        if re.fullmatch(r"[HAE]\d{2}", session):
+            return session
+        console.print("[red]Format attendu : H, A ou E suivi de 2 chiffres (ex: A26)[/]")
 
 
 def prompt_visibility() -> str:
@@ -657,6 +781,46 @@ def prompt_and_load_students() -> list:
             return []
         return load_students_from_file(path)
     return load_students_interactive()
+
+
+# ── Login Store (~/.ghtcls) ────────────────────────────────────────────────────
+
+def load_login_store() -> dict:
+    """{org: {repo name: login}}, all in lowercase except the logins."""
+    try:
+        with open(LOGIN_STORE, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except Exception as ex:
+        console.print(f"[yellow]⚠ {escape(LOGIN_STORE)} illisible : {escape(str(ex))}[/]")
+        return {}
+
+
+def stored_logins(org: str) -> dict:
+    """{repo name (lowercase): login} remembered for an organization."""
+    return load_login_store().get(org.lower(), {})
+
+
+def remember_logins(org: str, logins: dict):
+    """Remember {repo name: login}, the newest login of a repo replacing the old one."""
+    logins = {name.lower(): login for name, login in logins.items() if login}
+    if not logins:
+        return
+    store = load_login_store()
+    repos = store.setdefault(org.lower(), {})
+    if all(repos.get(name) == login for name, login in logins.items()):
+        return
+    repos.update(logins)
+    tmp = LOGIN_STORE + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(store, f, indent=1, sort_keys=True, ensure_ascii=False)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, LOGIN_STORE)
+    except Exception as ex:
+        console.print(f"[yellow]⚠ Logins non enregistrés dans {escape(LOGIN_STORE)} : {escape(str(ex))}[/]")
 
 
 # ── Organization & Repos List Helpers ─────────────────────────────────────────
@@ -1243,7 +1407,13 @@ class GitClassroomApp:
         if not Confirm.ask("Confirmer la création ?", default=False):
             console.print("[dim]Annulé.[/]")
             return
-            
+
+        # Kept on this computer to reinvite later without the student list
+        remember_logins(org, {
+            names[e["matricule"]]: e["login"] for e in students
+            if e["login"] and e["login"] not in unknown_logins
+        })
+
         ok, reused, failed = 0, 0, 0
         not_invited = []
         with Progress(
@@ -1386,12 +1556,15 @@ class GitClassroomApp:
             console.print()
             if action == retour:
                 return
-            if "Cloner" in action:
-                self.cloner_repos(org, selected)
-            elif "Réinviter" in action:
-                self.reinviter_etudiants(org, selected)
-            else:
-                self.chercher_signatures_suspectes(org, selected)
+            try:
+                if "Cloner" in action:
+                    self.cloner_repos(org, selected)
+                elif "Réinviter" in action:
+                    self.reinviter_etudiants(org, selected)
+                else:
+                    self.chercher_signatures_suspectes(org, selected)
+            except BackToMenu:
+                console.print("\n[dim]Annulé.[/]")
 
     def reinviter_etudiants(self, org: str, repos: list):
         """Resend the invitations of students who have not accepted yet (GitHub expires them after 7 days).
@@ -1426,6 +1599,11 @@ class GitClassroomApp:
         for name, err in sorted(errors):
             console.print(f"[red]  ✘ {name}: {escape(err)}[/]")
 
+        # An invitation names the student of the repo: remembered for the next reinvitation
+        remember_logins(org, {name: inv["login"] for name, inv in sorted(
+            expired + pending, key=lambda x: x[1]["created_at"]
+        )})
+
         table = Table(title="[cyan]Invitations à renvoyer ou en attente[/]", show_header=True, header_style="bold")
         table.add_column("Repo")
         table.add_column("Login")
@@ -1448,11 +1626,24 @@ class GitClassroomApp:
         ):
             to_send += [(name, inv["login"], inv["id"]) for name, inv in pending]
 
-        if nobody and Confirm.ask(
-            f"Inviter les {len(nobody)} repo(s) sans invitation à partir de la liste d'étudiants ?", default=False
+        known = stored_logins(org)
+        remembered = [(name, known[name.lower()]) for name in nobody if name.lower() in known]
+        unknown = [name for name in nobody if name.lower() not in known]
+        if remembered:
+            console.print(f"[cyan]{len(remembered)} repo(s) sans invitation dont le login est connu "
+                          f"({escape(LOGIN_STORE)}) :[/]")
+            for name, login in sorted(remembered):
+                console.print(f"  [dim]{name}[/] → {escape(login)}")
+            if Confirm.ask("Les inviter ?", default=True):
+                to_send += [(name, login, None) for name, login in remembered]
+
+        if unknown and Confirm.ask(
+            f"Inviter les {len(unknown)} repo(s) sans invitation ni login connu à partir de la liste d'étudiants ?",
+            default=False
         ):
             by_matricule = {s["matricule"]: s for s in prompt_and_load_students() if s["login"]}
-            for name in nobody:
+            found = {}
+            for name in unknown:
                 parsed = parse_repo_name(name)
                 student = by_matricule.get(parsed["matricule"]) if parsed and parsed["matricule"] else None
                 if not student:
@@ -1460,7 +1651,9 @@ class GitClassroomApp:
                 elif not github_user_exists(student["login"]):
                     console.print(f"[red]  ✘ {name}: login GitHub introuvable ({escape(student['login'])}).[/]")
                 else:
+                    found[name] = student["login"]
                     to_send.append((name, student["login"], None))
+            remember_logins(org, found)
 
         if not to_send:
             console.print("[dim]Aucune invitation à envoyer.[/]")
@@ -1877,45 +2070,53 @@ class GitClassroomApp:
             console.print(Rule("[cyan]Git Classroom (Python)[/]", style="cyan"))
             if self.org:
                 console.print(f"[dim]Organisation active : {self.org}[/]")
-            console.print()
-            
-            choice = prompt_selection(
-                "Choisir une action",
-                [
-                    "🔍 Diagnostic (gh, git, authentification)",
-                    "🧪 Tester la création d'un repo",
-                    "➕ Créer les repos d'un TP",
-                    "📋 Parcourir les repos d'un TP (cloner, signatures, réinviter)",
-                    "💬 Repos avec commits étudiants",
-                    "🗑  Supprimer des repos",
-                    "🕵️  Détecter les signatures stéganographiques",
-                    "⏱  Rythme de travail et traces d'IA",
-                    retour
-                ]
-            )
-            
+            console.print("[dim]Échap à une question : abandonner l'action et revenir au menu.[/]")
+            try:
+                choice = prompt_selection(
+                    "Choisir une action",
+                    [
+                        "🔍 Diagnostic (gh, git, authentification)",
+                        "🧪 Tester la création d'un repo",
+                        "➕ Créer les repos d'un TP",
+                        "📋 Parcourir les repos d'un TP (cloner, signatures, réinviter)",
+                        "💬 Repos avec commits étudiants",
+                        "🗑  Supprimer des repos",
+                        "🕵️  Détecter les signatures stéganographiques",
+                        "⏱  Rythme de travail et traces d'IA",
+                        retour
+                    ]
+                )
+            except BackToMenu:
+                continue
+
             console.print()
             if choice == retour:
                 break
-            elif "Diagnostic" in choice:
-                self.diagnostic()
-            elif "Tester" in choice:
-                self.tester_creation_repo()
-            elif "Créer" in choice:
-                self.creer_repos_etudiants()
-            elif "Parcourir" in choice:
-                self.parcourir_repos()
-            elif "commits" in choice:
-                self.lister_repos_avec_commits()
-            elif "Supprimer" in choice:
-                self.supprimer_repos()
-            elif "signatures" in choice:
-                self.detecter_signatures()
-            elif "Rythme" in choice:
-                self.analyser_rythme()
-                
+            try:
+                if "Diagnostic" in choice:
+                    self.diagnostic()
+                elif "Tester" in choice:
+                    self.tester_creation_repo()
+                elif "Créer" in choice:
+                    self.creer_repos_etudiants()
+                elif "Parcourir" in choice:
+                    self.parcourir_repos()
+                elif "commits" in choice:
+                    self.lister_repos_avec_commits()
+                elif "Supprimer" in choice:
+                    self.supprimer_repos()
+                elif "signatures" in choice:
+                    self.detecter_signatures()
+                elif "Rythme" in choice:
+                    self.analyser_rythme()
+            except BackToMenu:
+                continue
+
             console.print("\n[dim]Appuyez sur Entrée pour revenir au menu principal...[/]")
-            input()
+            try:
+                read_line()
+            except BackToMenu:
+                pass
 
 
 if __name__ == "__main__":
