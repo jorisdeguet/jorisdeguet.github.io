@@ -783,6 +783,30 @@ def prompt_and_load_students() -> list:
     return load_students_interactive()
 
 
+def prompt_missing_logins(count: int) -> list:
+    """Ask for a student list to complete the missing logins. Empty if the teacher skips it."""
+    while True:
+        mode = prompt_selection(
+            f"Compléter les {count} login(s) manquant(s)",
+            ["📄 Charger un fichier texte (Nom, Prénom, Matricule, Groupe, Login)",
+             "📋 Coller la liste (même format)",
+             "⏭️  Continuer sans ces étudiants"]
+        )
+        if "Continuer" in mode:
+            return []
+        if "Coller" in mode:
+            students = load_students_interactive()
+        else:
+            path = clean_path(Prompt.ask("Chemin du fichier"))
+            if not os.path.isfile(path):
+                console.print(f"[red]✘ Fichier introuvable : {escape(path)}[/]")
+                continue
+            students = load_students_from_file(path)
+        if students:
+            return students
+        console.print("[yellow]⚠ Aucun étudiant chargé.[/]")
+
+
 # ── Login Store (~/.ghtcls) ────────────────────────────────────────────────────
 
 def load_login_store() -> dict:
@@ -1637,23 +1661,13 @@ class GitClassroomApp:
             if Confirm.ask("Les inviter ?", default=True):
                 to_send += [(name, login, None) for name, login in remembered]
 
-        if unknown and Confirm.ask(
-            f"Inviter les {len(unknown)} repo(s) sans invitation ni login connu à partir de la liste d'étudiants ?",
-            default=False
-        ):
-            by_matricule = {s["matricule"]: s for s in prompt_and_load_students() if s["login"]}
-            found = {}
-            for name in unknown:
-                parsed = parse_repo_name(name)
-                student = by_matricule.get(parsed["matricule"]) if parsed and parsed["matricule"] else None
-                if not student:
-                    console.print(f"[yellow]  ⚠ {name}: matricule absent de la liste ou sans login.[/]")
-                elif not github_user_exists(student["login"]):
-                    console.print(f"[red]  ✘ {name}: login GitHub introuvable ({escape(student['login'])}).[/]")
-                else:
-                    found[name] = student["login"]
-                    to_send.append((name, student["login"], None))
-            remember_logins(org, found)
+        if unknown:
+            console.print(f"[yellow]⚠ {len(unknown)} repo(s) sans invitation ni login connu :[/]")
+            for name in sorted(unknown):
+                console.print(f"  [dim]{name}[/]")
+            students = prompt_missing_logins(len(unknown))
+            if students:
+                to_send += self.completer_logins(org, unknown, students)
 
         if not to_send:
             console.print("[dim]Aucune invitation à envoyer.[/]")
@@ -1670,6 +1684,41 @@ class GitClassroomApp:
                 if rc != 0:
                     console.print(f"  [yellow]⚠ Ancienne invitation non supprimée : {escape(stderr.strip())}[/]")
             self.invite_collaborateur(org, name, login)
+
+    def completer_logins(self, org: str, names: list, students: list) -> list:
+        """Match repos with a student list by student ID, remember the valid logins.
+
+        Return the invitations to send: [(repo name, login, None)].
+        """
+        by_matricule = {s["matricule"]: s["login"] for s in students}
+        candidates, problems = {}, []
+        for name in sorted(names):
+            parsed = parse_repo_name(name)
+            matricule = parsed["matricule"] if parsed else ""
+            if not matricule:
+                problems.append((name, "pas de matricule dans le nom du repo"))
+            elif matricule not in by_matricule:
+                problems.append((name, "matricule absent de la liste"))
+            elif not by_matricule[matricule]:
+                problems.append((name, "sans login dans la liste"))
+            else:
+                candidates[name] = by_matricule[matricule]
+
+        console.print("[dim]Vérification des logins GitHub...[/]")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            exists = dict(zip(candidates, executor.map(github_user_exists, candidates.values())))
+        found = {name: login for name, login in candidates.items() if exists[name]}
+        problems += [(name, f"login GitHub introuvable ({login})")
+                     for name, login in candidates.items() if not exists[name]]
+
+        for name, login in found.items():
+            console.print(f"  [green]✔[/] [dim]{name}[/] → {escape(login)}")
+        for name, reason in sorted(problems):
+            console.print(f"  [yellow]⚠ {name} : {escape(reason)}[/]")
+        console.print(f"[green]{len(found)} login(s) complété(s)[/] · "
+                      f"[yellow]{len(problems)} toujours manquant(s)[/]")
+        remember_logins(org, found)
+        return [(name, login, None) for name, login in found.items()]
 
     def cloner_repos(self, org: str, repos: list):
         """Clone repos into a folder, then put each one on its last commit before the due date.
