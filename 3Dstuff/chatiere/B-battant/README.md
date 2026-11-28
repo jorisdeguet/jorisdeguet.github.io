@@ -4,7 +4,7 @@ Module imprimé de chatière à **battant pivotant sur un axe vertical**. Il se 
 
 ![Fermé, vu de la pièce](apercu_ferme_piece.png) ![Ouvert, vu de la pièce](apercu_ouvert_piece.png) ![Ouvert, vu du sas](apercu_ouvert_sas.png)
 
-Un battant de 226 × 141 × 6 mm aux coins bien arrondis (R 38) tourne autour d'un axe vertical, au milieu. L'ouverture fait 210 × 125 mm, juste assez haute pour un chat adulte (`ouv_h_r`). Le module fait 243 × 177 × 23,6 mm (253 × 182 avec les collerettes) ; encoche dans le contreplaqué : 244 × 178 mm depuis le bas.
+Un battant de 226 × 166 × 6 mm aux coins bien arrondis (R 38) tourne autour d'un axe vertical, au milieu. L'ouverture fait 210 × 150 mm (`ouv_h_r`, 125 au minimum pour un chat adulte). Le module fait 243 × 202 × 23,6 mm (253 × 207 avec les collerettes). Avec `socle_r` (45 pour la fenêtre du concept C), le cadre et le couvercle s'allongent vers le bas : 253 × 252.
 
 **Arrondis.** L'ouverture (R 30), le battant (R 38) et la cavité où il tourne suivent le même arrondi (`r_coin_r` règle le tout). Le cadre et les collerettes restent des rectangles. Là où passe le chat, les bords sont arrondis en quart de rond. Les faces d'appui des butées restent plates pour le feutre.
 
@@ -37,13 +37,19 @@ On ne remplit qu'une paire ou deux, et on choisit la distance. Plus l'aimant est
 
 **Ouverture maximale.** Vers 100°, la moitié qui s'ouvre vers la pièce bute sur le couvercle, près de l'axe. La came est calculée jusque-là (`angle_max`).
 
-## Battant à triangles imprimés
+## Battant nervuré côté sas
 
-![Battant, face côté pièce : triangles imprimés et poches d'aimants](apercu_battant.png)
+![Battant tel qu'imprimé : face côté pièce sur le plateau, nervures dessus](apercu_battant.png)
 
-Un grand panneau plat de 6 mm risque de se voiler avec le temps, et l'étanchéité en souffrirait. Le battant garde donc une **bande d'appui plate** tout autour (sans arrondi sur la face qui touche la butée : la face avant pour la moitié droite, la face arrière pour la gauche). Le battant reste une plaque plate de 6 mm. À l'intérieur de l'ouverture, des **triangles y sont imprimés en damier depuis chaque face** : les triangles pointe en haut sont creusés côté sas, les triangles pointe en bas côté pièce, sur 4,8 mm, avec 1,2 mm de fond. Il reste un **treillis triangulé dans l'épaisseur** (parois de 2 mm sur toute l'épaisseur, triangles de 30 mm), qui raidit dans toutes les directions et en torsion, avec un fond alterné sur chaque face. Les deux faces montrent le motif, et rien ne dépasse de la plaque : le battant passe partout où passait la plaque pleine. Il pèse 111 g au lieu de 237 g plein. Il est un peu moins raide qu'une plaque pleine de 6 mm, mais nettement plus raide pour son poids.
+Un grand panneau plat de 6 mm risque de se voiler avec le temps, et l'étanchéité en souffrirait. Le battant garde donc une **bande d'appui plate** de 6 mm tout autour (la face avant de la moitié droite s'appuie sur la peau du cadre, la face arrière de la moitié gauche sur la butée du couvercle).
 
-À l'impression, face côté sas dessous, le fond des triangles creusés par-dessous est un pont d'environ 26 mm, que les trancheurs font bien en PLA ou en PETG. Si c'est trop, baisser `nerv_maille_r`. Options : `nervures = false` (plaque pleine), `nerv_maille_r`, `nerv_fond_r`, et `nerv_h_r` (surépaisseur côté pièce dans l'ouverture si le battant manque de raideur, par exemple 5 mm pour une zone de 11 mm).
+- **Face côté pièce entièrement plane**, sans arrondi : c'est le dessous à l'impression, et le battant s'imprime **sans aucun support**.
+- **Côté sas**, à l'intérieur de l'ouverture (3 mm en retrait de son bord), la plaque est amincie à 2 mm et porte **6 anneaux concentriques** de 1,6 mm de large, tous les 11 mm, qui suivent la forme arrondie du battant.
+- **Le long de l'axe**, une bande pleine de 8,8 mm de large sur toute l'épaisseur (6 mm) : le carré de l'axe y passe en monobloc.
+- Les nervures font 7 mm de haut et dépassent de 3 mm la face côté sas de la bande d'appui. Porte fermée, elles se logent dans le trou de la peau du cadre (4,3 mm de place). En tournant, elles ne touchent rien (vérifié tous les 5° de 0 à 100°, cadre en deux pièces et monobloc). Le cadre déjà imprimé ne change pas.
+- 167 g au lieu de 237 g plein.
+
+Options : `nervures = false` (plaque pleine), `nerv_n` (nombre d'anneaux), `nerv_l_r` (largeur des nervures), `nerv_plaque_r` (épaisseur de la plaque), `nerv_saillie_r` (saillie côté sas, limitée automatiquement à la place dans le trou de la peau).
 
 **Axe.** En bas, un tourillon octogonal du battant ; en haut, le tourillon rond de la came. Ils tournent dans des paliers du cadre ouverts vers l'arrière, que deux taquets du couvercle referment. Le battant repose sur le bout du tourillon du bas.
 
@@ -55,7 +61,7 @@ Un grand panneau plat de 6 mm risque de se voiler avec le temps, et l'étanchéi
 |---|---|---|
 | `cadre` | 1 | Face côté sas sur le plateau ; paliers, chambre de la came, poteaux et tiges filetées vers le haut. |
 | `couvercle` | 1 | Face côté pièce sur le plateau ; butée et taquets vers le haut. |
-| `battant` | 1 | À plat, face côté sas dessous ; le fond des triangles creusés par-dessous est un pont. |
+| `battant` | 1 | À plat, face côté pièce dessous, nervures vers le haut : sans support. |
 | `molette` | 4 | À plat, chanfrein d'entrée en bas. |
 | `came` | 1 | Came sur le plateau, tenon vers le haut. |
 
@@ -80,11 +86,44 @@ Montage :
 
 - **Rappel** : choisir l'élastique et le poteau. Si le battant ne revient pas jusqu'aux aimants, reculer d'un poteau ou réimprimer une came plus grande ou moins dégressive (`ratio_couple` plus près de 1).
 - **Aimants** : leur force n'est pas connue ; commencer à 15 mm de l'axe.
-- **Triangles imprimés** : vérifier la qualité des ponts au fond des triangles creusés côté sas.
 - **Molettes** : le filet a 0,35 mm de jeu (`jeu_f`) ; l'augmenter si elles serrent trop.
 - **Butées** : le battant doit être bloqué dans le mauvais sens et tourner librement de 0 à 90° dans le bon (vérifié sur le modèle aux deux échelles).
 
 ## Fichiers
 
-* `battant.scad` : le module. Options : `echelle`, `angle` (angle d'ouverture du battant dans l'aperçu, de -5 à 90°), `coupe`, `part` (`assembled`, `eclate`, une pièce, `planche`), `part_gauche`, la came (`came_r0_r`, `pretension_r`, `ratio_couple`, `poteau`, `k_elast`), les aimants (`aim_d_r`, `aim_e_r`, `aim_dist_r`), les triangles imprimés (`nervures`, `nerv_maille_r`, `nerv_fond_r`, `nerv_h_r`), et pour la conception `arrondis = false` (sans arrondis des bords) et `rapide = true` (sans arrondis, filets lisses, moins de facettes ; pas pour imprimer). La console affiche les cotes, les passages, le profil de la came, les poussées et les leviers des aimants.
+* `battant.scad` : le module. Options : `echelle`, `angle` (angle d'ouverture du battant dans l'aperçu, de -5 à 90°), `coupe`, `part` (`assembled`, `eclate`, une pièce, `planche`), `part_gauche`, la came (`came_r0_r`, `pretension_r`, `ratio_couple`, `poteau`, `k_elast`), les aimants (`aim_d_r`, `aim_e_r`, `aim_dist_r`), les nervures (`nervures`, `nerv_n`, `nerv_l_r`, `nerv_plaque_r`, `nerv_saillie_r`), et pour la conception `arrondis = false` (sans arrondis des bords) et `rapide = true` (sans arrondis, filets lisses, moins de facettes ; pas pour imprimer). La console affiche les cotes, les passages, le profil de la came, les poussées et les leviers des aimants.
 * `apercu_ferme_piece.png`, `apercu_ouvert_piece.png`, `apercu_ouvert_sas.png`, `apercu_eclate.png`, `apercu_came.png`, `apercu_battant.png`, `apercu_maquette.png`.
+
+## Panneau vissé sur un 2×4 (chatière d'hiver, panneau gauche)
+
+`battant.scad -D ouv_l_r=190 -D bordure_s_r=3 -D aile_r=44` : ouverture de 190 × 150 et module de 257 × 207. Les montants du cadre font 3 mm, et il n'y a pas de collerette au bout côté fenêtre. Une **aile pleine** de 44 mm, à l'autre bout, se pose sur la face de 3½ po d'un 2×4. Quatre vis n° 8 × 2 po la traversent en quinconce, têtes fraisées côté couvercle.
+
+- La face du cadre (plate) va contre le 2×4.
+- Ajouter `-D aile_gauche=true` si, vue du côté des têtes de vis, la fenêtre est à gauche. Tout le module est alors imprimé en miroir.
+- La moitié du battant du côté de l'aile tourne toujours vers le couvercle, donc jamais vers le 2×4.
+
+### Cadre d'une seule pièce (`monobloc = true`)
+
+Le cadre et le couvercle sont fusionnés en une seule pièce : plus de tiges ni de molettes. On monte le battant de face, ouvert à 90°, puis on enfile un axe traversant par le haut. Fichier tout réglé : `panneau_gauche.scad`. STL : `stl_panneau_gauche/` (`cadre`, `battant`, `axe`).
+
+- **Axe** (une pièce, 183 mm) :
+  - rond Ø4 en bas, dans le palier du bas ;
+  - carré de 4 dans le battant, avec un coin chanfreiné : il n'entre que dans un sens, donc la came est toujours bien orientée ;
+  - rond Ø6 dans le palier du haut ;
+  - came en tête : sa collerette pose sur le fond de la chambre, et c'est elle qui retient l'axe.
+- **Battant** : un trou carré sur toute sa hauteur, le long de l'axe. Il repose sur un petit grain autour du palier du bas.
+- **Chambre de la came** : ouverte en haut (on y descend l'axe) et côté couvercle (on y accroche l'élastique aux poteaux).
+- **Poteaux d'élastique** : Ø5, avec un pied élargi et une tête qui retient la boucle. Leur section en goutte pointe vers la face côté sas, ce qui évite les supports quand le cadre est imprimé à plat.
+- **Impression** :
+  - le cadre à plat, face côté sas sur le plateau, avec des supports « depuis le plateau » sous la butée en U ;
+  - le battant à plat ;
+  - l'axe couché sur son méplat.
+- **Montage** :
+  1. enfoncer les aimants par l'arrière de leurs poches, qui s'ouvrent du côté opposé à l'appui (0,6 mm de paroi devant l'aimant), puis les coller ; dans la butée en U, la poche fait 11 mm de profondeur, et on pousse l'aimant au fond avec une tige ;
+  2. glisser le battant de face, ouvert à 90° ;
+  3. descendre l'axe par la chambre : il traverse le palier du haut et le battant, puis entre dans le palier du bas ;
+  4. accrocher l'élastique entre la came et un poteau.
+- Contrôlé dans le modèle :
+  - le battant entre de face sans rien toucher, et l'axe descend sans rien toucher ;
+  - le battant et l'axe tournent de 0 à 100° ;
+  - seules la collerette de la came et le grain du bas portent.
